@@ -1,0 +1,33 @@
+name: iOS capturas
+
+# Capturas de la app en el simulador de iPhone y iPad contra un servidor de prueba (ios/ci).
+# Tarda varios minutos (arrancar los simuladores), así que sólo corre cuando lo lanzas a mano:
+# Actions > iOS capturas > Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capturas:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar para el simulador
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build -quiet -project Kairo.xcodeproj -scheme Kairo \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -50
+      - name: Capturas
+        working-directory: ios
+        run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/capturas
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-ios
+          path: ios/build/capturas
+          if-no-files-found: ignore

@@ -113,8 +113,10 @@ registra su token en `POST /api/push/apns/register` y en Ajustes > Avisos ves si
 - `cd ios/KairoKit && swift test`: pruebas de los modelos (con respuestas reales anonimizadas del servidor),
   fechas, voz, SSE y avisos. Corren en macOS y en Linux.
 - El workflow [`ios.yml`](../.github/workflows/ios.yml) compila la app, los widgets, la extensión y el reloj
-  con Xcode 27 en cada cambio, y toma capturas en el simulador de iPhone y iPad contra un servidor de prueba
-  (`ios/ci/mock_server.py`). Las capturas quedan en *Actions > iOS > capturas-ios*.
+  con Xcode 27 en cada cambio (unos 3 minutos).
+- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml), que se lanza a mano (*Actions > iOS capturas >
+  Run workflow*), toma capturas en el simulador de iPhone y iPad contra un servidor de prueba
+  (`ios/ci/mock_server.py`) y las deja en el artefacto *capturas-ios*.
 
 ## Limitaciones conocidas
 

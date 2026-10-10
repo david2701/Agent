@@ -71,6 +71,8 @@ xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20
 PHONE=$(pick "iPhone 17 Pro" "iPhone 17" "iPhone 16 Pro" "iPhone")
 PAD=$(pick "iPad Pro 13" "iPad Pro" "iPad Air" "iPad")
 
+# El iPad arranca en segundo plano mientras se toman las del iPhone
+[ -n "$PAD" ] && { xcrun simctl boot "${PAD%%|*}" 2>/dev/null & }
 [ -n "$PHONE" ] && run_device "$PHONE" iphone today:light today:dark tasks:light calendar:dark lists:light family:dark chat:light settings:dark
 [ -n "$PAD" ] && run_device "$PAD" ipad today:light tasks:dark calendar:light notes:light
 ls "$OUT"
