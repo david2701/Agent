@@ -6,3 +6,4 @@ KairoKit/.build/
 KairoKit/.swiftpm/
 Kairo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 build-*.log
+__pycache__/

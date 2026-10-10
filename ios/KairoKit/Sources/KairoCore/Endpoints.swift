@@ -1,9 +1,9 @@
 import Foundation
 
-/// Todos los recursos del API (docs/API.md), igual que el cliente de Android.
+/// All the API resources (docs/API.md), same as the Android client.
 public extension KairoAPI {
 
-    // MARK: Perfil, hoy y voz
+    // MARK: Profile, today and voice
 
     func me() async throws -> User { try await (send("GET", "/api/me") as UserEnvelope).user }
 
@@ -26,7 +26,7 @@ public extension KairoAPI {
 
     func briefing() async throws -> String { try await (send("POST", "/api/briefing") as BriefingResponse).text }
 
-    /// Audio MP3 con la voz de Kairo (Kokoro en Nan).
+    /// MP3 audio with Kairo's voice (Kokoro on Nan).
     func speak(_ text: String, voice: String? = nil, speed: Double? = nil) async throws -> Data {
         var b: JSONObject = ["text": .string(text)]
         if let voice { b["voice"] = .string(voice) }
@@ -36,13 +36,13 @@ public extension KairoAPI {
 
     func voices() async throws -> [VoiceOption] { try await (send("GET", "/api/voice/voices") as VoicesResponse).voices }
 
-    // MARK: Conversaciones
+    // MARK: Conversations
 
     func conversations() async throws -> [Conversation] { try await send("GET", "/api/conversations") }
     func messages(_ conversationId: String) async throws -> [StoredMessage] { try await send("GET", "/api/conversations/\(conversationId)/messages") }
     func deleteConversation(_ id: String) async throws { try await call("DELETE", "/api/conversations/\(id)") }
 
-    // MARK: Notas
+    // MARK: Notes
 
     func notes(query: String? = nil, tag: String? = nil) async throws -> [Note] {
         try await send("GET", "/api/notes" + Self.query(["q": query, "tag": tag]))
@@ -56,7 +56,7 @@ public extension KairoAPI {
     func deleteNote(_ id: String) async throws { try await call("DELETE", "/api/notes/\(id)") }
     func noteTags() async throws -> [String] { try await (send("GET", "/api/notes/tags") as TagsResponse).tags }
 
-    // MARK: Tareas y proyectos
+    // MARK: Tasks and projects
 
     func tasks(includeDone: Bool = true, assignee: String? = nil) async throws -> [KTask] {
         try await send("GET", "/api/tasks" + Self.query(["includeDone": String(includeDone), "assignee": assignee]))
@@ -67,7 +67,7 @@ public extension KairoAPI {
     func projects() async throws -> [Project] { try await send("GET", "/api/projects") }
     func createProject(_ name: String) async throws -> Project { try await send("POST", "/api/projects", ["name": .string(name)]) }
 
-    // MARK: Recordatorios y lugares
+    // MARK: Reminders and places
 
     func reminders(statuses: [String]? = nil) async throws -> [Reminder] {
         try await send("GET", "/api/reminders" + Self.query(["status": statuses?.joined(separator: ",")]))
@@ -88,7 +88,7 @@ public extension KairoAPI {
     func sharePlace(_ id: String, shared: Bool) async throws -> Place { try await send("PATCH", "/api/places/\(id)", ["shared": .bool(shared)]) }
     func deletePlace(_ id: String) async throws { try await call("DELETE", "/api/places/\(id)") }
 
-    // MARK: Listas
+    // MARK: Lists
 
     func lists() async throws -> [ShoppingList] { try await send("GET", "/api/lists") }
     func createList(_ name: String, shared: Bool = false) async throws -> ShoppingList { try await send("POST", "/api/lists", ["name": .string(name), "shared": .bool(shared)]) }
@@ -104,7 +104,7 @@ public extension KairoAPI {
     func deleteItem(_ listId: String, _ itemId: String) async throws -> ShoppingList { try await send("DELETE", "/api/lists/\(listId)/items/\(itemId)") }
     func clearChecked(_ listId: String) async throws -> ShoppingList { try await send("POST", "/api/lists/\(listId)/clear-checked") }
 
-    // MARK: Calendario
+    // MARK: Calendar
 
     func events(from: Date, to: Date) async throws -> [Event] {
         try await send("GET", "/api/events" + Self.query(["from": KairoDate.iso(from), "to": KairoDate.iso(to)]))
@@ -113,7 +113,7 @@ public extension KairoAPI {
     func updateEvent(_ id: String, _ patch: JSONObject) async throws -> Event { try await send("PATCH", "/api/events/\(id)", patch) }
     func deleteEvent(_ id: String) async throws { try await call("DELETE", "/api/events/\(id)") }
 
-    // MARK: Memoria
+    // MARK: Memory
 
     func memories() async throws -> [Memory] { try await send("GET", "/api/memories") }
     func createMemory(_ content: String, category: String) async throws -> Memory { try await send("POST", "/api/memories", ["content": .string(content), "category": .string(category)]) }
@@ -122,14 +122,14 @@ public extension KairoAPI {
     }
     func deleteMemory(_ id: String) async throws { try await call("DELETE", "/api/memories/\(id)") }
 
-    // MARK: Grabaciones
+    // MARK: Recordings
 
     func recordings() async throws -> [Recording] { try await send("GET", "/api/recordings") }
     func recording(_ id: String) async throws -> Recording { try await send("GET", "/api/recordings/\(id)") }
     func createRecording(title: String = "") async throws -> Recording { try await send("POST", "/api/recordings", ["title": .string(title)]) }
     func uploadSegment(_ id: String, seq: Int, durationS: Int, audio: Data, mime: String = "audio/mp4") async throws -> Recording {
         try await upload("/api/recordings/\(id)/segments", fields: [("seq", String(seq)), ("duration", String(durationS))],
-                         file: FilePart(filename: "segmento-\(seq).m4a", mime: mime, data: audio))
+                         file: FilePart(filename: "segment-\(seq).m4a", mime: mime, data: audio))
     }
     func finishRecording(_ id: String, title: String? = nil) async throws {
         try await call("POST", "/api/recordings/\(id)/finish", title.map { ["title": .string($0)] } ?? [:])
@@ -137,7 +137,7 @@ public extension KairoAPI {
     func recordingTasks(_ id: String) async throws -> Int { try await (send("POST", "/api/recordings/\(id)/tasks") as CreatedCount).created }
     func deleteRecording(_ id: String) async throws { try await call("DELETE", "/api/recordings/\(id)") }
 
-    // MARK: Actividad, ajustes y dispositivos
+    // MARK: Activity, settings and devices
 
     func activity(limit: Int = 60) async throws -> [ActivityEntry] { try await send("GET", "/api/activity?limit=\(limit)") }
     func undo(_ activityId: String) async throws { try await call("POST", "/api/activity/\(activityId)/undo") }
@@ -148,7 +148,7 @@ public extension KairoAPI {
     func revokeDevice(_ id: String) async throws { try await call("DELETE", "/api/devices/\(id)") }
     func deviceSync() async throws -> DeviceSync { try await send("GET", "/api/sync/device") }
 
-    // MARK: Familia y avisos
+    // MARK: Family and notices
 
     func family() async throws -> FamilyInfo { try await send("GET", "/api/family") }
     func renameFamily(_ name: String) async throws -> Household { try await send("PATCH", "/api/family", ["name": .string(name)]) }
@@ -172,7 +172,7 @@ public extension KairoAPI {
         try await call("POST", "/api/notices/read", ids.map { ["ids": .strings($0)] } ?? [:])
     }
 
-    // MARK: Push nativo de Apple (APNs)
+    // MARK: Native Apple push (APNs)
 
     func apnsStatus() async throws -> ApnsStatus { try await send("GET", "/api/push/apns") }
     func registerApns(token: String, environment: String, kind: String = "device", activityId: String? = nil) async throws {
@@ -183,14 +183,14 @@ public extension KairoAPI {
     func unregisterApns() async throws { try await call("DELETE", "/api/push/apns/register") }
     func testPush() async throws -> Int { try await (send("POST", "/api/push/test") as Delivered).delivered }
 
-    // MARK: Utilidades
+    // MARK: Utilities
 
-    /// "?q=hola&tag=x" omitiendo los nulos, con codificación correcta.
+    /// "?q=hello&tag=x" omitting nulls, with correct encoding.
     nonisolated static func query(_ params: [String: String?]) -> String {
         var c = URLComponents()
         c.queryItems = params.sorted { $0.key < $1.key }.compactMap { k, v in v.map { URLQueryItem(name: k, value: $0) } }
         guard let items = c.queryItems, !items.isEmpty else { return "" }
-        // "+" en una consulta se interpreta como espacio en algunos servidores
+        // "+" in a query is read as a space by some servers
         return "?" + (c.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
     }
 }

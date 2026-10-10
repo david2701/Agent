@@ -3,8 +3,8 @@ import AVFoundation
 import ActivityKit
 import KairoCore
 
-/// Grabación larga (reuniones, notas de voz): sube segmentos de 5 minutos mientras graba y al final
-/// el servidor transcribe, resume y propone tareas. Sigue grabando con la pantalla bloqueada.
+/// Long recording (meetings, voice notes): uploads 5-minute segments while recording and at the end
+/// the server transcribes, summarizes and suggests tasks. It keeps recording with the screen locked.
 @MainActor @Observable
 final class MeetingRecorder {
     private(set) var isRecording = false
@@ -27,7 +27,7 @@ final class MeetingRecorder {
 
     func start(title: String = "") async {
         guard !isRecording else { return }
-        guard await Microphone.requestPermission() else { lastError = "Kairo necesita el micrófono"; return }
+        guard await Microphone.requestPermission() else { lastError = String(localized: "Kairo needs the microphone"); return }
         do {
             let rec = try await api.createRecording(title: title)
             recordingId = rec.id
@@ -38,7 +38,7 @@ final class MeetingRecorder {
             try beginSegment()
             isRecording = true
             lastError = nil
-            startActivity(title: title.isEmpty ? "Grabación" : title)
+            startActivity(title: title.isEmpty ? String(localized: "Recording") : title)
             rotateTask = Task { [weak self] in
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(self?.segmentSeconds ?? 300))
@@ -60,7 +60,7 @@ final class MeetingRecorder {
         }
     }
 
-    /// Termina, sube lo que falte y pide el resumen.
+    /// Finishes, uploads what is left and asks for the summary.
     func stop(title: String? = nil) async {
         guard isRecording, let id = recordingId else { return }
         rotateTask?.cancel()
@@ -125,7 +125,7 @@ final class MeetingRecorder {
     private func updateActivity(processing: Bool) {
         guard let activity, let startedAt else { return }
         let state = RecordingActivityAttributes.ContentState(startedAt: startedAt, segments: segments, paused: false, processing: processing)
-        // Activity no es Sendable en el SDK; sus métodos son seguros desde cualquier hilo.
+        // Activity is not Sendable in the SDK; its methods are safe from any thread.
         nonisolated(unsafe) let live = activity
         Task { await live.update(.init(state: state, staleDate: nil)) }
     }

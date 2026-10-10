@@ -14,7 +14,7 @@ struct WatchRoot: View {
     }
 }
 
-/// Páginas verticales: hablar, hoy y listas (como las apps del sistema en watchOS).
+/// Vertical pages: talk, today and lists (like the system apps on watchOS).
 struct WatchHome: View {
     @Environment(WatchModel.self) private var model
     @State private var page = 0
@@ -45,11 +45,11 @@ private struct TalkPage: View {
                     KairoOrb(state: voice.orbState, level: voice.level).frame(width: 96, height: 96)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(voice.phase == .idle ? "Hablar con Kairo" : "Detener")
+                .accessibilityLabel(voice.phase == .idle ? "Talk to Kairo" : "Stop")
                 .handGestureShortcut(.primaryAction)
-                Text(voice.status).font(.kairo(14, .medium)).foregroundStyle(KairoColor.muted).contentTransition(.opacity)
+                Text(verbatim: voice.status).font(.kairo(14, .medium)).foregroundStyle(KairoColor.muted).contentTransition(.opacity)
                 if let t = voice.turn.transcript, !t.isEmpty {
-                    Text("“\(t)”").font(.kairo(13)).foregroundStyle(KairoColor.text).multilineTextAlignment(.center)
+                    Text(verbatim: "“\(t)”").font(.kairo(13)).foregroundStyle(KairoColor.text).multilineTextAlignment(.center)
                 }
                 ForEach(voice.turn.actions) { a in
                     Label(a.summary, systemImage: KairoSymbol.entity(a.entity?.type ?? ""))
@@ -74,8 +74,8 @@ private struct TodayPage: View {
     var body: some View {
         let s = model.snapshot
         List {
-            Section("Agenda") {
-                if s.events.isEmpty { Text("Sin eventos").foregroundStyle(KairoColor.muted) }
+            Section("Schedule") {
+                if s.events.isEmpty { Text("No events").foregroundStyle(KairoColor.muted) }
                 ForEach(s.events) { e in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
@@ -86,9 +86,9 @@ private struct TodayPage: View {
                     }
                 }
             }
-            Section("Pendientes") {
+            Section("Pending") {
                 let open = s.tasks.filter { !$0.done }
-                if open.isEmpty { Text("Nada pendiente").foregroundStyle(KairoColor.muted) }
+                if open.isEmpty { Text("Nothing pending").foregroundStyle(KairoColor.muted) }
                 ForEach(open) { t in
                     Button { Task { await model.complete(task: t.id) } } label: {
                         HStack {
@@ -99,14 +99,14 @@ private struct TodayPage: View {
                 }
             }
             if !s.reminders.isEmpty {
-                Section("Recordatorios") {
+                Section("Reminders") {
                     ForEach(s.reminders) { r in
                         Label { Text(r.title).font(.kairo(14)) } icon: { Text(r.subtitle).font(.kairoMono(11)).foregroundStyle(KairoColor.accent) }
                     }
                 }
             }
         }
-        .navigationTitle(s.greeting.isEmpty ? "Hoy" : s.greeting)
+        .navigationTitle(s.greeting.isEmpty ? String(localized: "Today") : s.greeting)
         .refreshable { await model.refresh() }
     }
 }
@@ -116,7 +116,7 @@ private struct ListsPage: View {
 
     var body: some View {
         List {
-            if model.snapshot.lists.isEmpty { Text("Sin listas").foregroundStyle(KairoColor.muted) }
+            if model.snapshot.lists.isEmpty { Text("No lists").foregroundStyle(KairoColor.muted) }
             ForEach(model.snapshot.lists) { l in
                 NavigationLink {
                     ListItemsView(listId: l.id)
@@ -125,15 +125,15 @@ private struct ListsPage: View {
                         Text(l.name).font(.kairo(15, .semibold))
                         if l.shared { Image(systemName: "house").font(.system(size: 10)).foregroundStyle(KairoColor.muted) }
                         Spacer()
-                        Text("\(l.items.filter { !$0.done }.count)").font(.kairoMono(13)).foregroundStyle(KairoColor.accent)
+                        Text(verbatim: "\(l.items.filter { !$0.done }.count)").font(.kairoMono(13)).foregroundStyle(KairoColor.accent)
                     }
                 }
             }
             Section {
-                Button("Cerrar sesión", role: .destructive) { Task { await model.signOut() } }.font(.kairo(13))
+                Button("Sign out", role: .destructive) { Task { await model.signOut() } }.font(.kairo(13))
             }
         }
-        .navigationTitle("Listas")
+        .navigationTitle("Lists")
     }
 }
 
@@ -156,11 +156,11 @@ private struct ListItemsView: View {
                 .sensoryFeedback(.success, trigger: i.done)
             }
         }
-        .navigationTitle(list?.name ?? "Lista")
+        .navigationTitle(list?.name ?? String(localized: "List"))
     }
 }
 
-/// Vinculación: automática con el iPhone cerca, o con el código de Ajustes > Apple Watch.
+/// Pairing: automatic with the iPhone nearby, or with the code from Settings > Apple Watch.
 private struct PairingView: View {
     @Environment(WatchModel.self) private var model
     @State private var server = AppConfig.defaultServer
@@ -174,13 +174,13 @@ private struct PairingView: View {
                 Text("Kairo").font(.kairo(18, .semibold))
                 Button {
                     Task { await model.pairWithPhone() }
-                } label: { Label("Vincular con el iPhone", systemImage: "iphone") }
+                } label: { Label("Pair with iPhone", systemImage: "iphone") }
                 .disabled(model.pairing)
                 if let e = model.pairError { Text(e).font(.kairo(12)).foregroundStyle(KairoColor.muted).multilineTextAlignment(.center) }
                 Divider().padding(.vertical, 4)
-                TextField("Servidor", text: $server).textContentType(.URL)
-                TextField("Código", text: $code)
-                Button("Vincular con código") {
+                TextField("Server", text: $server).textContentType(.URL)
+                TextField("Code", text: $code)
+                Button("Pair with code") {
                     Task {
                         busy = true
                         defer { busy = false }
@@ -188,7 +188,7 @@ private struct PairingView: View {
                     }
                 }
                 .disabled(code.count < 4 || busy)
-                Text("El código está en Kairo, en Ajustes > Apple Watch.").font(.kairo(11)).foregroundStyle(KairoColor.faint).multilineTextAlignment(.center)
+                Text("The code is in Kairo, under Settings > Apple Watch.").font(.kairo(11)).foregroundStyle(KairoColor.faint).multilineTextAlignment(.center)
             }
         }
     }

@@ -1,15 +1,20 @@
-# Proyecto de Xcode de Kairo para iPhone, iPad (y iPhone Duo) y Apple Watch.
-# Kairo.xcodeproj se genera desde este archivo con XcodeGen y ya viene incluido en el repo:
-#   brew install xcodegen && cd ios && xcodegen        (sólo si cambias este archivo)
+# Kairo Xcode project for iPhone, iPad (and iPhone Duo) and Apple Watch.
+# Kairo.xcodeproj is generated from this file with XcodeGen and is already included in the repo:
+#   brew install xcodegen && cd ios && xcodegen        (only if you change this file)
 #
-# Antes de compilar en tu Mac, pon tu equipo y tus identificadores en Config/Signing.xcconfig.
+# Before building on your Mac, put your team and identifiers in Config/Signing.xcconfig.
+#
+# Languages: English is the development language and Spanish (es) is a full translation. Strings live in
+# String Catalogs (*.xcstrings) next to each target's sources; XcodeGen adds them to the target's Resources
+# automatically (use a recent XcodeGen, which recognizes .xcstrings). If you regenerate the project,
+# check that `knownRegions` in the project contains en, es and Base.
 
 name: Kairo
 options:
   deploymentTarget:
     iOS: "27.0"
     watchOS: "27.0"
-  developmentLanguage: es
+  developmentLanguage: en
   createIntermediateGroups: true
   groupSortPosition: top
   xcodeVersion: "27.0"
@@ -39,7 +44,7 @@ packages:
 
 targets:
 
-  # ---------------------------------------------------------------- iPhone y iPad
+  # ---------------------------------------------------------------- iPhone and iPad
   Kairo:
     type: application
     platform: iOS
@@ -76,7 +81,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Kairo
-        CFBundleDevelopmentRegion: es
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, es]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
@@ -108,11 +114,12 @@ targets:
           - $(KAIRO_BUNDLE_ID).sync
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
-        NSMicrophoneUsageDescription: Kairo te escucha cuando le hablas y graba las reuniones que le pides.
-        NSSpeechRecognitionUsageDescription: Para reconocer "Oye Kairo" dentro del teléfono, sin enviar audio hasta que lo dices.
-        NSLocationWhenInUseUsageDescription: Para guardar lugares y darte el clima de donde estás.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Para avisarte al llegar o salir de los lugares de tus recordatorios.
-        NSAlarmKitUsageDescription: Kairo pone las alarmas y los temporizadores que le pides.
+        # English base values; the Spanish ones live in App/Resources/InfoPlist.xcstrings
+        NSMicrophoneUsageDescription: Kairo listens when you talk to it and records the meetings you ask it to.
+        NSSpeechRecognitionUsageDescription: To recognize "Hey Kairo" on the phone itself, without sending audio until you say it.
+        NSLocationWhenInUseUsageDescription: To save places and give you the weather where you are.
+        NSLocationAlwaysAndWhenInUseUsageDescription: To notify you when you arrive at or leave the places in your reminders.
+        NSAlarmKitUsageDescription: Kairo sets the alarms and timers you ask it for.
         NSUserActivityTypes:
           - $(KAIRO_BUNDLE_ID).talk
         NSAppTransportSecurity:
@@ -121,7 +128,7 @@ targets:
           - CFBundleURLName: $(KAIRO_BUNDLE_ID)
             CFBundleURLSchemes: [kairo]
 
-  # ---------------------------------------------------------------- Widgets, Live Activities y controles
+  # ---------------------------------------------------------------- Widgets, Live Activities and controls
   KairoWidgets:
     type: app-extension
     platform: iOS
@@ -154,6 +161,7 @@ targets:
       path: Widgets/Info.plist
       properties:
         CFBundleDisplayName: Kairo
+        CFBundleLocalizations: [en, es]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         KairoAppGroup: $(KAIRO_APP_GROUP)
@@ -162,7 +170,7 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
-  # ---------------------------------------------------------------- Compartir con Kairo
+  # ---------------------------------------------------------------- Save to Kairo (share extension)
   KairoShare:
     type: app-extension
     platform: iOS
@@ -190,7 +198,8 @@ targets:
     info:
       path: Share/Info.plist
       properties:
-        CFBundleDisplayName: Guardar en Kairo
+        CFBundleDisplayName: Save to Kairo
+        CFBundleLocalizations: [en, es]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         KairoAppGroup: $(KAIRO_APP_GROUP)
@@ -233,6 +242,7 @@ targets:
       path: Watch/Info.plist
       properties:
         CFBundleDisplayName: Kairo
+        CFBundleLocalizations: [en, es]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
@@ -240,7 +250,7 @@ targets:
         WKRunsIndependentlyOfCompanionApp: true
         KairoAppGroup: $(KAIRO_WATCH_APP_GROUP)
         KairoDefaultServer: $(KAIRO_DEFAULT_SERVER)
-        NSMicrophoneUsageDescription: Kairo te escucha cuando le hablas desde el reloj.
+        NSMicrophoneUsageDescription: Kairo listens when you talk to it from your watch.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
 
@@ -271,6 +281,7 @@ targets:
       path: WatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Kairo
+        CFBundleLocalizations: [en, es]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         KairoAppGroup: $(KAIRO_WATCH_APP_GROUP)

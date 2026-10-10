@@ -2,22 +2,22 @@ import Foundation
 import Testing
 @testable import KairoCore
 
-/// Pruebas contra un backend real. Sólo corren si se definen KAIRO_TEST_SERVER, KAIRO_TEST_EMAIL y
-/// KAIRO_TEST_PASSWORD (por ejemplo, el backend local de desarrollo). Inician sesión una sola vez.
+/// Tests against a real backend. They only run if KAIRO_TEST_SERVER, KAIRO_TEST_EMAIL and
+/// KAIRO_TEST_PASSWORD are set (for example, the local development backend). They sign in only once.
 private let env = ProcessInfo.processInfo.environment
 private let liveEnabled = env["KAIRO_TEST_SERVER"] != nil && env["KAIRO_TEST_EMAIL"] != nil && env["KAIRO_TEST_PASSWORD"] != nil
 
-@Suite("Servidor real", .enabled(if: liveEnabled), .serialized)
+@Suite("Real server", .enabled(if: liveEnabled), .serialized)
 struct LiveServerTests {
-    @Test func flujoCompleto() async throws {
+    @Test func fullFlow() async throws {
         let api = KairoAPI(
             sessions: SessionStore(store: MemoryStore()),
-            client: ClientInfo(kind: "ios", deviceName: "Pruebas de KairoKit", platform: "ios", capabilities: ["timer", "alarm"])
+            client: ClientInfo(kind: "ios", deviceName: "KairoKit tests", platform: "ios", capabilities: ["timer", "alarm"])
         )
         let user = try await api.login(server: env["KAIRO_TEST_SERVER"]!, email: env["KAIRO_TEST_EMAIL"]!, password: env["KAIRO_TEST_PASSWORD"]!)
         #expect(!user.displayName.isEmpty)
 
-        // Cada recurso se decodifica con los modelos de la app
+        // Every resource decodes with the app's models
         let today = try await api.today()
         #expect(!today.dateLabel.isEmpty)
         let family = try await api.family()
@@ -33,16 +33,16 @@ struct LiveServerTests {
         _ = try await api.settings()
         _ = try await api.activity(limit: 10)
 
-        // Un turno del agente en streaming (Nan)
+        // One streaming agent turn (Nan)
         var turn = AgentTurn()
-        for try await ev in api.chat("Responde sólo con la palabra listo.", channel: "chat") { turn.apply(ev) }
+        for try await ev in api.chat("Reply with just the word ready.", channel: "chat") { turn.apply(ev) }
         #expect(turn.finished)
         #expect(turn.error == nil)
         #expect(!turn.text.isEmpty)
         if let cid = turn.conversationId { try await api.deleteConversation(cid) }
 
-        // Crear y borrar una nota personal
-        let note = try await api.createNote(title: "Prueba de iOS", content: "Creada por las pruebas de KairoKit")
+        // Create and delete a personal note
+        let note = try await api.createNote(title: "iOS test", content: "Created by the KairoKit tests")
         #expect(note.ownerId == user.id)
         #expect(!note.shared)
         try await api.deleteNote(note.id)

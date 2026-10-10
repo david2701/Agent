@@ -2,9 +2,9 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-// Filas comunes a Hoy, Tareas, Calendario y Recordatorios.
+// Rows shared by Today, Tasks, Calendar and Reminders.
 
-/// Círculo para completar, con relleno animado y vibración.
+/// Circle to complete, with animated fill and haptics.
 struct CheckCircle: View {
     var done: Bool
     var tint: Color = KairoColor.accent
@@ -21,11 +21,11 @@ struct CheckCircle: View {
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.success, trigger: done) { _, new in new }
-        .accessibilityLabel(done ? "Marcar como pendiente" : "Completar")
+        .accessibilityLabel(done ? "Mark as not done" : "Complete")
     }
 }
 
-/// Prioridad como bandera (sólo alta y urgente, para no llenar de ruido).
+/// Priority as a flag (only high and urgent, to avoid noise).
 struct PriorityFlag: View {
     var priority: String
 
@@ -33,10 +33,10 @@ struct PriorityFlag: View {
         switch priority {
         case "urgent":
             Image(systemName: "exclamationmark.2").font(.system(size: 12, weight: .bold)).foregroundStyle(KairoColor.danger)
-                .accessibilityLabel("Urgente")
+                .accessibilityLabel("Urgent")
         case "high":
             Image(systemName: "flag.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(KairoColor.accentStrong)
-                .accessibilityLabel("Prioridad alta")
+                .accessibilityLabel("High priority")
         default:
             EmptyView()
         }
@@ -89,11 +89,11 @@ struct TaskRow: View {
 
     private var metaLine: String {
         var parts: [String] = []
-        if overdue && !task.isDone { parts.append("Vencida") } else if task.status == "doing" { parts.append("En curso") }
+        if overdue && !task.isDone { parts.append(String(localized: "Overdue")) } else if task.status == "doing" { parts.append(String(localized: "In progress")) }
         if let dueText, !(overdue && !task.isDone) { parts.append(dueText) }
         if let p = task.projectName, !p.isEmpty { parts.append(p) }
-        if let a = task.assigneeId, a != model.user?.id, let m = model.family?.member(a) { parts.append("Para \(m.firstName)") }
-        if task.assigneeId == model.user?.id, task.ownerId != model.user?.id, let o = model.ownerName(task.ownerId) { parts.append("Te la asignó \(o)") }
+        if let a = task.assigneeId, a != model.user?.id, let m = model.family?.member(a) { parts.append(String(localized: "For \(m.firstName)")) }
+        if task.assigneeId == model.user?.id, task.ownerId != model.user?.id, let o = model.ownerName(task.ownerId) { parts.append(String(localized: "Assigned to you by \(o)")) }
         return parts.joined(separator: " · ")
     }
 }
@@ -107,13 +107,13 @@ struct EventRow: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 if event.allDay {
-                    Text("Todo el día").font(.kMonoSmall).foregroundStyle(KairoColor.accentStrong)
+                    Text("All day").font(.kMonoSmall).foregroundStyle(KairoColor.accentStrong)
                 } else if let s = event.start {
-                    Text(KairoDate.time(s)).font(.kairoMono(15, .medium)).foregroundStyle(KairoColor.accentStrong)
-                    if let e = event.end { Text(KairoDate.time(e)).font(.kMonoSmall).foregroundStyle(KairoColor.faint) }
+                    Text(KairoDate.time(s)).font(.kairoMono(15, .medium)).foregroundStyle(KairoColor.accentStrong).lineLimit(1).minimumScaleFactor(0.7)
+                    if let e = event.end { Text(KairoDate.time(e)).font(.kMonoSmall).foregroundStyle(KairoColor.faint).lineLimit(1).minimumScaleFactor(0.7) }
                 }
             }
-            .frame(width: 64, alignment: .leading)
+            .frame(width: 76, alignment: .leading)
             RoundedRectangle(cornerRadius: 2)
                 .fill(event.color.flatMap(Color.init(hexString:)) ?? (event.shared ? KairoColor.accent : KairoColor.border))
                 .frame(width: 3)
@@ -160,14 +160,14 @@ struct ReminderRow: View {
             if let onSnooze {
                 Button(action: onSnooze) { Image(systemName: "zzz").frame(width: 36, height: 36) }
                     .buttonStyle(.plain).foregroundStyle(KairoColor.muted)
-                    .accessibilityLabel("Posponer 10 minutos")
+                    .accessibilityLabel("Snooze 10 minutes")
             }
             if let onDone {
                 Button(action: onDone) { Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).frame(width: 36, height: 36) }
                     .buttonStyle(.plain)
                     .foregroundStyle(KairoColor.onAccent)
                     .background(KairoColor.accent, in: Circle())
-                    .accessibilityLabel("Hecho")
+                    .accessibilityLabel("Done")
             }
         }
         .padding(.vertical, 6)
@@ -177,51 +177,26 @@ struct ReminderRow: View {
     private var subtitle: String {
         var parts: [String] = []
         if let p = reminder.placeName {
-            parts.append((reminder.placeTrigger == "leave" ? "Al salir de " : "Al llegar a ") + p)
+            parts.append(reminder.placeTrigger == "leave" ? String(localized: "When leaving \(p)") : String(localized: "When arriving at \(p)"))
         } else if let at = KairoDate.parse(reminder.nextFireAt ?? reminder.dueAt) {
             parts.append(KairoDate.humanDateTime(at).capitalizedFirst)
         }
         if let r = reminder.rrule, !r.isEmpty { parts.append(RecurrenceText.describe(r)) }
         if let me = model.user?.id {
-            if let owner = reminder.ownerId, owner != me, let m = model.family?.member(owner) { parts.append("Para \(m.firstName)") }
-            if let by = reminder.createdBy, by != me, reminder.ownerId == me, let m = model.family?.member(by) { parts.append("De \(m.firstName)") }
+            if let owner = reminder.ownerId, owner != me, let m = model.family?.member(owner) { parts.append(String(localized: "For \(m.firstName)")) }
+            if let by = reminder.createdBy, by != me, reminder.ownerId == me, let m = model.family?.member(by) { parts.append(String(localized: "From \(m.firstName)")) }
         }
         return parts.joined(separator: " · ")
     }
 }
 
-/// "Cada día", "Cada lunes y jueves", "Cada mes"… a partir de una RRULE sencilla.
-enum RecurrenceText {
-    static let days = ["MO": "lunes", "TU": "martes", "WE": "miércoles", "TH": "jueves", "FR": "viernes", "SA": "sábado", "SU": "domingo"]
-
-    static func describe(_ rrule: String) -> String {
-        var parts: [String: String] = [:]
-        for p in rrule.replacingOccurrences(of: "RRULE:", with: "").split(separator: ";") {
-            let kv = p.split(separator: "=", maxSplits: 1)
-            if kv.count == 2 { parts[String(kv[0])] = String(kv[1]) }
-        }
-        let interval = Int(parts["INTERVAL"] ?? "1") ?? 1
-        switch parts["FREQ"] {
-        case "DAILY": return interval == 1 ? "Cada día" : "Cada \(interval) días"
-        case "WEEKLY":
-            let list = (parts["BYDAY"] ?? "").split(separator: ",").compactMap { days[String($0)] }
-            if list.count == 5, !list.contains("sábado"), !list.contains("domingo") { return "Entre semana" }
-            if list.isEmpty { return interval == 1 ? "Cada semana" : "Cada \(interval) semanas" }
-            return "Cada " + ListFormatter.localizedString(byJoining: list)
-        case "MONTHLY": return interval == 1 ? "Cada mes" : "Cada \(interval) meses"
-        case "YEARLY": return "Cada año"
-        default: return "Se repite"
-        }
-    }
-}
-
 extension String {
-    /// "hoy" → "Hoy".
+    /// "today" → "Today".
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
 extension Color {
-    /// "#E0901F" o "E0901F".
+    /// "#E0901F" or "E0901F".
     init?(hexString: String) {
         let s = hexString.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "")
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
@@ -229,11 +204,11 @@ extension Color {
     }
 }
 
-/// Encabezado de bloque con acción opcional ("Agenda · Calendario ›").
+/// Block header with an optional action ("Agenda · Calendar ›").
 struct BlockHeader: View {
-    var title: String
+    var title: LocalizedStringKey
     var count: Int?
-    var action: String?
+    var action: LocalizedStringKey?
     var onAction: (() -> Void)?
 
     var body: some View {

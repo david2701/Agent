@@ -21,8 +21,8 @@ struct RootView: View {
     }
 }
 
-/// iPhone y pantalla exterior del iPhone Duo: pestañas. iPad y pantalla interior del Duo: barra lateral.
-/// Se decide por size class (no por el modelo de dispositivo), como recomienda Apple para el Duo.
+/// iPhone and the outer screen of the iPhone Duo: tabs. iPad and the inner screen of the Duo: sidebar.
+/// Decided by size class (not by device model), as Apple recommends for the Duo.
 struct MainView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -43,7 +43,7 @@ struct MainView: View {
     }
 }
 
-// MARK: - Pestañas (compacto)
+// MARK: - Tabs (compact)
 
 private enum CompactTab: Hashable { case today, chat, tasks, calendar, more }
 
@@ -54,19 +54,19 @@ private struct TabLayout: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            Tab("Hoy", systemImage: AppSection.today.symbol, value: CompactTab.today) {
+            Tab("Today", systemImage: AppSection.today.symbol, value: CompactTab.today) {
                 NavigationStack { SectionScreen(section: .today) }
             }
             Tab("Chat", systemImage: AppSection.chat.symbol, value: CompactTab.chat) {
                 NavigationStack { SectionScreen(section: .chat) }
             }
-            Tab("Tareas", systemImage: AppSection.tasks.symbol, value: CompactTab.tasks) {
+            Tab("Tasks", systemImage: AppSection.tasks.symbol, value: CompactTab.tasks) {
                 NavigationStack { SectionScreen(section: .tasks) }
             }
-            Tab("Calendario", systemImage: AppSection.calendar.symbol, value: CompactTab.calendar) {
+            Tab("Calendar", systemImage: AppSection.calendar.symbol, value: CompactTab.calendar) {
                 NavigationStack { SectionScreen(section: .calendar) }
             }
-            Tab("Más", systemImage: "square.grid.2x2", value: CompactTab.more) {
+            Tab("More", systemImage: "square.grid.2x2", value: CompactTab.more) {
                 NavigationStack(path: $morePath) {
                     MoreScreen()
                         .navigationDestination(for: AppSection.self) { SectionScreen(section: $0) }
@@ -75,12 +75,12 @@ private struct TabLayout: View {
             .badge(model.unreadNotices > 0 ? Text("\(min(model.unreadNotices, 99))") : nil)
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        // En Chat ya hay un campo para escribir y hablar: ahí no se repite la barra
+        // Chat already has a field to type and talk: the bar is not repeated there
         .tabViewBottomAccessory(isEnabled: tab != .chat) {
             TalkAccessory()
         }
         .onChange(of: tab) { _, t in
-            // Mantiene la sección actual al tocar una pestaña (para que los atajos vuelvan a funcionar)
+            // Keeps the current section when a tab is tapped (so shortcuts work again)
             let s: AppSection? = switch t {
             case .today: .today
             case .chat: .chat
@@ -104,7 +104,7 @@ private struct TabLayout: View {
     }
 }
 
-/// Barra "Pregúntale a Kairo" sobre las pestañas (Liquid Glass).
+/// "Ask Kairo" bar above the tabs (Liquid Glass).
 private struct TalkAccessory: View {
     @Environment(AppModel.self) private var model
 
@@ -114,7 +114,7 @@ private struct TalkAccessory: View {
         } label: {
             HStack(spacing: 10) {
                 KairoOrb(state: model.voice.orbState, level: model.voice.level).frame(width: 26, height: 26)
-                Text(model.voice.phase == .idle ? "Pregúntale a Kairo" : model.voice.statusText)
+                label
                     .font(.kairo(15, .medium))
                     .foregroundStyle(KairoColor.text)
                     .lineLimit(1)
@@ -124,11 +124,15 @@ private struct TalkAccessory: View {
             .padding(.horizontal, 14)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Hablar con Kairo")
+        .accessibilityLabel("Talk to Kairo")
+    }
+
+    private var label: Text {
+        model.voice.phase == .idle ? Text("Ask Kairo") : Text(verbatim: model.voice.statusText)
     }
 }
 
-// MARK: - Barra lateral (regular)
+// MARK: - Sidebar (regular)
 
 private struct SplitLayout: View {
     @Environment(AppModel.self) private var model
@@ -151,9 +155,9 @@ private struct SplitLayout: View {
                 Button { model.startTalking() } label: {
                     HStack(spacing: 10) {
                         KairoOrb(state: model.voice.orbState, level: model.voice.level).frame(width: 28, height: 28)
-                        Text("Hablar con Kairo").font(.kairo(15, .semibold))
+                        Text("Talk to Kairo").font(.kairo(15, .semibold))
                         Spacer()
-                        Text("⌘K").font(.kMonoSmall).foregroundStyle(KairoColor.faint)
+                        Text(verbatim: "⌘K").font(.kMonoSmall).foregroundStyle(KairoColor.faint)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 50)
@@ -180,7 +184,7 @@ private struct SplitLayout: View {
     }
 }
 
-// MARK: - "Más" (compacto)
+// MARK: - "More" (compact)
 
 private struct MoreScreen: View {
     @Environment(AppModel.self) private var model
@@ -207,13 +211,13 @@ private struct MoreScreen: View {
                 }
             }
         }
-        .navigationTitle("Más")
+        .navigationTitle("More")
         .scrollContentBackground(.hidden)
         .kairoBackground()
     }
 }
 
-/// Pantalla de cada sección.
+/// Screen for each section.
 struct SectionScreen: View {
     let section: AppSection
 
@@ -235,7 +239,7 @@ struct SectionScreen: View {
     }
 }
 
-// MARK: - Avisos breves
+// MARK: - Brief notices
 
 private struct ToastOverlay: View {
     @Environment(AppModel.self) private var model

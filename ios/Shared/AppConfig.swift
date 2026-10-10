@@ -1,8 +1,8 @@
 import Foundation
 import KairoCore
 
-/// Configuración común a la app, los widgets, la extensión de compartir y el reloj.
-/// Los valores vienen del Info.plist de cada target (ver Config/Signing.xcconfig).
+/// Configuration shared by the app, the widgets, the share extension and the watch.
+/// The values come from each target's Info.plist (see Config/Signing.xcconfig).
 nonisolated enum AppConfig {
     static func info(_ key: String) -> String? {
         (Bundle.main.object(forInfoDictionaryKey: key) as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -12,7 +12,7 @@ nonisolated enum AppConfig {
     static var keychainGroup: String? { info("KairoKeychainGroup") }
     static var defaultServer: String { info("KairoDefaultServer") ?? "https://" }
 
-    /// Carpeta compartida (App Group). Sin App Group configurado, la de la propia app.
+    /// Shared folder (App Group). Without an App Group configured, the app's own folder.
     static var sharedDirectory: URL {
         if let g = appGroup, let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: g) {
             return url.appendingPathComponent("Kairo", isDirectory: true)
@@ -24,22 +24,22 @@ nonisolated enum AppConfig {
 
     static var snapshots: SnapshotStore { SnapshotStore(directory: sharedDirectory) }
 
-    /// Llavero de la app (sólo la app lo lee).
+    /// The app's Keychain (only the app reads it).
     static var appKeychain: SecretStore { KeychainStore(service: "app.kairo", accessGroup: nil) }
 
-    /// Llavero compartido con los widgets y la extensión de compartir. Tienen su propia sesión
-    /// (con su propio refresh token), así nunca se pisan las renovaciones con la app.
+    /// Keychain shared with the widgets and the share extension. They have their own session
+    /// (with their own refresh token), so refreshes never collide with the app's.
     static var sharedKeychain: SecretStore { KeychainStore(service: "app.kairo.extensions", accessGroup: keychainGroup) }
 
     static let syncTaskId = (Bundle.main.bundleIdentifier ?? "app.kairo") + ".sync"
     static let talkActivityType = (Bundle.main.bundleIdentifier ?? "app.kairo") + ".talk"
 }
 
-/// Acceso al API desde las extensiones (widgets interactivos, controles, compartir).
+/// API access from the extensions (interactive widgets, controls, share).
 nonisolated enum ExtensionAPI {
     static let shared: KairoAPI = KairoAPI(
         sessions: SessionStore(store: AppConfig.sharedKeychain, key: "session.extensions"),
-        client: ClientInfo(kind: "ios", deviceName: "Widgets y compartir", platform: "ios")
+        client: ClientInfo(kind: "ios", deviceName: String(localized: "Widgets & Share"), platform: "ios")
     )
 
     static func isReady() async -> Bool { await shared.sessions.current() != nil }

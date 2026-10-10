@@ -2,7 +2,7 @@ import Foundation
 import WatchConnectivity
 import KairoCore
 
-/// Lado del iPhone de la conexión con el Apple Watch.
+/// The iPhone side of the connection with the Apple Watch.
 nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sendable {
     static let shared = WatchBridge()
 
@@ -12,7 +12,7 @@ nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sen
         WCSession.default.activate()
     }
 
-    /// Resumen del día para el reloj (llega aunque la app del reloj esté cerrada).
+    /// Day summary for the watch (it arrives even if the watch app is closed).
     func send(snapshot: SharedSnapshot) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated, WCSession.default.isWatchAppInstalled else { return }
         let enc = JSONEncoder()
@@ -25,14 +25,14 @@ nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sen
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { WCSession.default.activate() }
 
-    /// El reloj pide vincularse: el iPhone genera un código de un solo uso y se lo devuelve.
+    /// The watch asks to pair: the iPhone generates a one-time code and sends it back.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
         guard message[WatchLink.kind] as? String == WatchLink.pairRequest else { replyHandler([:]); return }
         let reply = UncheckedReply(replyHandler)
         Task { @MainActor in
             let api = AppModel.shared.api
             guard let server = await api.serverURL() else {
-                reply([WatchLink.error: "Inicia sesión en Kairo en el iPhone primero"])
+                reply([WatchLink.error: String(localized: "Sign in to Kairo on your iPhone first")])
                 return
             }
             do {
@@ -45,7 +45,7 @@ nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sen
     }
 }
 
-/// El replyHandler de WatchConnectivity no es Sendable; se llama una sola vez.
+/// WatchConnectivity's replyHandler is not Sendable; it is called only once.
 nonisolated private struct UncheckedReply: @unchecked Sendable {
     let f: ([String: Any]) -> Void
     init(_ f: @escaping ([String: Any]) -> Void) { self.f = f }

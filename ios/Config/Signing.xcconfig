@@ -1,19 +1,19 @@
-// Ajusta estos valores una sola vez antes de compilar en tu Mac.
-// Necesitas una cuenta del Apple Developer Program para push, App Groups, Live Activities y el reloj.
+// Set these values once before building on your Mac.
+// You need an Apple Developer Program account for push, App Groups, Live Activities and the watch.
 
-// Tu Team ID (Xcode > Settings > Accounts, o developer.apple.com > Membership)
+// Your Team ID (Xcode > Settings > Accounts, or developer.apple.com > Membership)
 DEVELOPMENT_TEAM =
 
-// Identificador de la app. Debe ser único en tu cuenta (los widgets, compartir y el reloj cuelgan de él).
+// App identifier. It must be unique in your account (the widgets, share extension and watch app hang from it).
 KAIRO_BUNDLE_ID = app.kairo.ios
 
-// Contenedor compartido entre la app, los widgets y la extensión de compartir (Signing & Capabilities > App Groups)
+// Container shared by the app, the widgets and the share extension (Signing & Capabilities > App Groups)
 KAIRO_APP_GROUP = group.app.kairo.ios
 KAIRO_WATCH_APP_GROUP = group.app.kairo.ios
 
-// Llavero compartido (la sesión de los widgets y de compartir)
+// Shared Keychain (the session of the widgets and the share extension)
 KAIRO_KEYCHAIN_GROUP = app.kairo.ios.shared
 
-// Servidor que aparece escrito en la pantalla de inicio de sesión (se puede cambiar ahí).
-// Ejemplo: https:/$()/kairo.tudominio.com  (el "$()" evita que "//" se lea como comentario)
+// Server shown pre-filled on the sign-in screen (it can be changed there).
+// Example: https:/$()/kairo.example.com  (the "$()" keeps "//" from being read as a comment)
 KAIRO_DEFAULT_SERVER =

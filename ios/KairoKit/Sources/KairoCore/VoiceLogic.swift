@@ -1,9 +1,9 @@
 import Foundation
 
-/// Formato de audio que se envía a Whisper: PCM 16 bits mono a 16 kHz (igual que Android).
+/// Audio format sent to Whisper: 16-bit mono PCM at 16 kHz (same as Android).
 public enum AudioSpec {
     public static let sampleRate = 16_000
-    /// 32 ms por bloque.
+    /// 32 ms per block.
     public static let frame = 512
 }
 
@@ -17,14 +17,14 @@ public enum AudioMath {
 
     public static func rms(_ samples: [Int16]) -> Double { samples.withUnsafeBufferPointer { rms($0) } }
 
-    /// Nivel 0...1 para la animación del orbe, en escala aproximadamente logarítmica.
+    /// Level 0...1 for the orb animation, on a roughly logarithmic scale.
     public static func level(_ rms: Double) -> Double {
         if rms <= 30 { return 0 }
         let db = 20 * log10(rms / 32768.0)
         return min(1, max(0, (db + 55) / 45))
     }
 
-    /// WAV PCM 16 bits mono (Whisper lo acepta directamente).
+    /// 16-bit mono PCM WAV (Whisper accepts it directly).
     public static func wav(_ pcm: [Int16], sampleRate: Int = AudioSpec.sampleRate) -> Data {
         var d = Data(capacity: 44 + pcm.count * 2)
         func u32(_ v: UInt32) { var x = v.littleEndian; withUnsafeBytes(of: &x) { d.append(contentsOf: $0) } }
@@ -41,8 +41,8 @@ public enum AudioMath {
     }
 }
 
-/// Detección de fin de frase por energía con umbral adaptativo al ruido de fondo.
-/// Termina tras ~0,9 s de silencio una vez que hubo voz, o a los 15 s. Mismos parámetros que Android.
+/// End-of-speech detection by energy, with a threshold that adapts to the background noise.
+/// Finishes after ~0.9 s of silence once speech was heard, or after 15 s. Same parameters as Android.
 public struct EndOfSpeech: Sendable {
     public enum Verdict: Sendable { case `continue`, done, noSpeech }
 
@@ -83,15 +83,16 @@ public struct EndOfSpeech: Sendable {
     }
 }
 
-/// Frase de activación ("Oye Kairo"). Los reconocedores suelen escribir "Cairo": se aceptan ambas.
+/// Wake phrase ("Hey Kairo" in English, "Oye Kairo" in Spanish). Both are always accepted, whatever the
+/// configured phrase is, and recognizers often write "Cairo": both spellings are accepted too.
 public enum WakePhrase {
     public static func normalize(_ s: String) -> String {
-        let folded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: KairoDate.spanish)
+        let folded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
         let cleaned = folded.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
         return String(cleaned).split(separator: " ").joined(separator: " ")
     }
 
-    /// Variantes aceptadas para la frase configurada ("oye kairo" -> "oye cairo", "hey cairo"...).
+    /// Accepted variants for the configured phrase ("hey kairo" -> "hey cairo", "oye kairo"...).
     public static func variants(_ phrase: String) -> [String] {
         let p = normalize(phrase)
         guard let name = p.split(separator: " ").last.map(String.init), !name.isEmpty else { return [] }
@@ -103,7 +104,7 @@ public enum WakePhrase {
         return out
     }
 
-    /// true si el texto reconocido contiene la frase. Devuelve además lo que se dijo después ("oye kairo, ¿qué tengo hoy?").
+    /// true if the recognized text contains the phrase. Also returns what was said after it ("hey kairo, what's on today?").
     public static func match(_ transcript: String, phrase: String) -> (hit: Bool, rest: String) {
         let t = normalize(transcript)
         for v in variants(phrase) {

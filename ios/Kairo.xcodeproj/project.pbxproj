@@ -15,15 +15,19 @@
 		1B9B162022F98F2CA33981BD /* TodayScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1679E4951BB72CAF5529474E /* TodayScreen.swift */; };
 		1E856F6C810B6F72F9FCB3F6 /* FamilyScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77144B41F9E3F7564F77397 /* FamilyScreen.swift */; };
 		1ECA95E0AF7B7F3803E5BFD6 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = ED9C53F6EB9DD823B1B82795 /* KairoCore */; };
+		1F088521ABE12A255D040D75 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 74AAAF3AE802AD4B20E68208 /* Localizable.xcstrings */; };
 		1F995A1BFC40C8A78E0B88D2 /* RemindersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D562162860B13CEB6A7FC6 /* RemindersScreen.swift */; };
+		23AC83DDF8CE03C663183AB0 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 03AAECE7C609586F8255412C /* Localizable.xcstrings */; };
 		23E68E7CF05BEE67E352F3C5 /* KairoWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FF533D0653FE2A4FA01BAB68 /* KairoWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		265295A9A28712D50E6BA669 /* ActivityTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */; };
+		26F4EFBFB9C52A3432B19D74 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7BEA8E480E99DAB595667A6D /* Localizable.xcstrings */; };
 		274DCCA8975390FF6D229CB1 /* TodayWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B4C1741C3580B70EDFCD6C6 /* TodayWidget.swift */; };
 		28812C125EE4F57F38F997AE /* WatchVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A11441CDB168E4A180E6255 /* WatchVoice.swift */; };
 		2A6E63707DE7CB125C294562 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */; };
 		2DCD26ACFF71FD49C406BCA9 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 58BB9260C3A32D0B26B45E8E /* KairoUI */; };
 		2EB8B7A042CF00215C5BEB0C /* KairoWatchWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BC264B672520EFA64455B6 /* KairoWatchWidgets.swift */; };
 		3C273BF7EB3280EB1E7E06E8 /* KairoShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0F7F8E5DD2B2339EBB5164C6 /* KairoShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		459051068952C88FA340305D /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 57EF4A7FD68401D940116785 /* Localizable.xcstrings */; };
 		49D962722B3413C8CD9F4C94 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B560A4B3CF5764C3495A4E /* ChatScreen.swift */; };
 		4D7CF4DBD2641E627C322CCB /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E31B1DAFA869872A6C83069 /* Intents.swift */; };
 		4F19CCD0ACB9FC0AFB96FDDE /* TalkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 707F7FF55F1FD406C59510DE /* TalkView.swift */; };
@@ -37,6 +41,7 @@
 		71ED114A11FB6F7B40B558C8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */; };
 		737D90BD6BA615193F2BB3C7 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2942963F12C233F957C5DC3 /* Provider.swift */; };
 		77262498E2159F9DAE69273A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31F77D751C778C8B40645715 /* WidgetKit.framework */; };
+		7B5F2A2F1E779DB0FBC7195E /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DE0F34F1B89B311CEBB6D0AF /* Localizable.xcstrings */; };
 		7DF1562C34697CF19C2EF037 /* FamilyFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */; };
 		8089AD23BC3276F493CA06B9 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3213C03D9AE59BB20116D82C /* KairoUI */; };
 		835E727D711179DE3640B375 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 7C47A7D022BD5AC45C87D97A /* KairoUI */; };
@@ -45,7 +50,10 @@
 		8DCF45AD02809D1B0FE154E3 /* KairoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 48EE6490929F9923A9D5E880 /* KairoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		9E8BDE6783C1075D47EA6669 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C52B064193093A2890A35DA /* Shortcuts.swift */; };
 		A1B2D93F93A8A9B709980371 /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E31B1DAFA869872A6C83069 /* Intents.swift */; };
+		A345210FA645F31A1EB4C5FA /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 573318FF733EC979A7056A38 /* InfoPlist.xcstrings */; };
+		A3AFEB241FC913ADECECDD21 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FE03537F7CEA71579B624484 /* InfoPlist.xcstrings */; };
 		A53834D73882B6630C6F62F8 /* Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979B193DF41BFF42244BBBF9 /* Rows.swift */; };
+		A5A9F34001B555F51AE6620E /* AppShortcuts.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 02DEE453FB30521322D46C9C /* AppShortcuts.xcstrings */; };
 		A84F7500D9F0FF75C87CC0E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3568EE34CF8AEAB25B548074 /* Assets.xcassets */; };
 		A9E3B51B3BB610170F9B39A7 /* NotesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EE4C28B55B879007F5D6C3 /* NotesScreen.swift */; };
 		AB72E4DEB4E77EA3ACF1D994 /* MoreScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963DF1176B1DEB3C50D90517 /* MoreScreens.swift */; };
@@ -63,6 +71,7 @@
 		C6BD8E282EAB9C68652BBAE8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1456F487CE57B1E5230BDD9C /* RootView.swift */; };
 		C8490504BE6FC6B75E81E348 /* ActivityTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */; };
 		C89275E93D4E94EABF00AC2F /* DeviceActionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816DC79E95EE8F281DF214C9 /* DeviceActionService.swift */; };
+		C8D576E07C5962EF5286E97A /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F625E998AC3817AC1C9DE121 /* InfoPlist.xcstrings */; };
 		C90D2457E5EE199693FB01C4 /* WatchLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F82D1DF35F72639DAEB61DDB /* WatchLink.swift */; };
 		C94B113C92D1EB554745D418 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = E8DCFC5066F47DCAA3E125AD /* KairoUI */; };
 		C9AC3A239D61DD317D0AACCC /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4AA4FFAB89E8B6F9D5B955 /* SyncService.swift */; };
@@ -147,6 +156,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		02DEE453FB30521322D46C9C /* AppShortcuts.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = AppShortcuts.xcstrings; sourceTree = "<group>"; };
+		03AAECE7C609586F8255412C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		0EC5A16FA69237666CC5AD80 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		0F7F8E5DD2B2339EBB5164C6 /* KairoShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = KairoShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1456F487CE57B1E5230BDD9C /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -165,6 +176,8 @@
 		4FBCC43C160C59777C656610 /* KairoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoWatchApp.swift; sourceTree = "<group>"; };
 		50047D865C40A2A2F8B4FD03 /* Loadable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Loadable.swift; sourceTree = "<group>"; };
 		556F6860B7C3E208A85E22F8 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
+		573318FF733EC979A7056A38 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		57EF4A7FD68401D940116785 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		60A2B20F6677E3024D3781EF /* WakeWordService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeWordService.swift; sourceTree = "<group>"; };
 		60BCCFEDA071603941082962 /* KairoWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoWidgetsBundle.swift; sourceTree = "<group>"; };
 		629068826122CD2E66A3BC8D /* KairoShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoShare.entitlements; sourceTree = "<group>"; };
@@ -174,9 +187,11 @@
 		702C7DBAB826675208D85909 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		707F7FF55F1FD406C59510DE /* TalkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkView.swift; sourceTree = "<group>"; };
 		7177D61B1C241DEDE6D70FA9 /* Kairo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kairo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		74AAAF3AE802AD4B20E68208 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		77E3422C5B5E9414D46A5842 /* KairoWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoWidgets.entitlements; sourceTree = "<group>"; };
 		79B560A4B3CF5764C3495A4E /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
 		7A4AA4FFAB89E8B6F9D5B955 /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		7BEA8E480E99DAB595667A6D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		816DC79E95EE8F281DF214C9 /* DeviceActionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActionService.swift; sourceTree = "<group>"; };
 		857A38C946ECE0C1BEBD3EEF /* KairoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoApp.swift; sourceTree = "<group>"; };
 		85B0C68165A8AA5D97B890BC /* AlarmIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmIntents.swift; sourceTree = "<group>"; };
@@ -204,10 +219,13 @@
 		D8C5F50F341D9DD24A43DA3A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D98CB64AC5991B094A32CD0B /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		D9EE22774C519185646F8B15 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DE0F34F1B89B311CEBB6D0AF /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		EAF7F266BCEE559FC939115A /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		F1BC264B672520EFA64455B6 /* KairoWatchWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoWatchWidgets.swift; sourceTree = "<group>"; };
 		F568FDAA84EC50943EFFE47A /* VoiceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceEngine.swift; sourceTree = "<group>"; };
+		F625E998AC3817AC1C9DE121 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		F82D1DF35F72639DAEB61DDB /* WatchLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLink.swift; sourceTree = "<group>"; };
+		FE03537F7CEA71579B624484 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		FF533D0653FE2A4FA01BAB68 /* KairoWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = KairoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -284,6 +302,8 @@
 		21BCEE79DB0760F00CAE83DB /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				7BEA8E480E99DAB595667A6D /* Localizable.xcstrings */,
+				F625E998AC3817AC1C9DE121 /* InfoPlist.xcstrings */,
 				2A6482FFB102540B39956023 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -359,6 +379,9 @@
 		5AD57615DA8D66686D7E4421 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				DE0F34F1B89B311CEBB6D0AF /* Localizable.xcstrings */,
+				FE03537F7CEA71579B624484 /* InfoPlist.xcstrings */,
+				02DEE453FB30521322D46C9C /* AppShortcuts.xcstrings */,
 				D9EE22774C519185646F8B15 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -399,6 +422,8 @@
 		68CB5AA28CB2B6BAC4897C01 /* Share */ = {
 			isa = PBXGroup;
 			children = (
+				03AAECE7C609586F8255412C /* Localizable.xcstrings */,
+				573318FF733EC979A7056A38 /* InfoPlist.xcstrings */,
 				D377BBB3302A878B36B161E3 /* Info.plist */,
 				629068826122CD2E66A3BC8D /* KairoShare.entitlements */,
 				D98CB64AC5991B094A32CD0B /* ShareViewController.swift */,
@@ -435,6 +460,7 @@
 		B4B3CFCCC4476AAE3030001F /* WatchWidgets */ = {
 			isa = PBXGroup;
 			children = (
+				57EF4A7FD68401D940116785 /* Localizable.xcstrings */,
 				702C7DBAB826675208D85909 /* Info.plist */,
 				B40D1C8672319D772CC62B91 /* KairoWatchWidgets.entitlements */,
 				F1BC264B672520EFA64455B6 /* KairoWatchWidgets.swift */,
@@ -457,6 +483,7 @@
 		F9809DB11730DEC0117E5F74 /* Widgets */ = {
 			isa = PBXGroup;
 			children = (
+				74AAAF3AE802AD4B20E68208 /* Localizable.xcstrings */,
 				3568EE34CF8AEAB25B548074 /* Assets.xcassets */,
 				D8C5F50F341D9DD24A43DA3A /* Info.plist */,
 				77E3422C5B5E9414D46A5842 /* KairoWidgets.entitlements */,
@@ -499,6 +526,7 @@
 			buildConfigurationList = E22EA05BAC670E9186B5077D /* Build configuration list for PBXNativeTarget "KairoWatchWidgets" */;
 			buildPhases = (
 				0FD5C5E9BD494BC62162E3B4 /* Sources */,
+				435B997B4F16BFC3169268EF /* Resources */,
 				95464FFE7CEA2225CFEE8576 /* Frameworks */,
 			);
 			buildRules = (
@@ -519,6 +547,7 @@
 			buildConfigurationList = 2966CB71F296E13BCE321C84 /* Build configuration list for PBXNativeTarget "KairoShare" */;
 			buildPhases = (
 				C70280242558FF04E61573AB /* Sources */,
+				1F434DF6983E3FB916DDFB3D /* Resources */,
 				EA74699EE1D07E035498BD9C /* Frameworks */,
 			);
 			buildRules = (
@@ -613,9 +642,10 @@
 				};
 			};
 			buildConfigurationList = AC1ED10F3BC8AC0020A66B51 /* Build configuration list for PBXProject "Kairo" */;
-			developmentRegion = es;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				en,
 				Base,
 				es,
 			);
@@ -639,10 +669,29 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1F434DF6983E3FB916DDFB3D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				23AC83DDF8CE03C663183AB0 /* Localizable.xcstrings in Resources */,
+				A345210FA645F31A1EB4C5FA /* InfoPlist.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		435B997B4F16BFC3169268EF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				459051068952C88FA340305D /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		76C21AE61F8DD75AF6B48F97 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				26F4EFBFB9C52A3432B19D74 /* Localizable.xcstrings in Resources */,
+				C8D576E07C5962EF5286E97A /* InfoPlist.xcstrings in Resources */,
 				66A438B8FC676DCCB3C3B337 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -651,6 +700,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B5F2A2F1E779DB0FBC7195E /* Localizable.xcstrings in Resources */,
+				A3AFEB241FC913ADECECDD21 /* InfoPlist.xcstrings in Resources */,
+				A5A9F34001B555F51AE6620E /* AppShortcuts.xcstrings in Resources */,
 				B8F80F52A5AF6BEC24A5F516 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -659,6 +711,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F088521ABE12A255D040D75 /* Localizable.xcstrings in Resources */,
 				A84F7500D9F0FF75C87CC0E4 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

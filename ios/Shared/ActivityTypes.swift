@@ -3,7 +3,7 @@ import ActivityKit
 import AlarmKit
 import SwiftUI
 
-/// Live Activity mientras hablas con Kairo: Isla Dinámica y pantalla bloqueada.
+/// Live Activity while you talk to Kairo: Dynamic Island and lock screen.
 nonisolated struct VoiceActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable, Sendable {
         /// listening | thinking | speaking | done | error
@@ -16,7 +16,7 @@ nonisolated struct VoiceActivityAttributes: ActivityAttributes {
     var startedAt: Date
 }
 
-/// Live Activity de una grabación de reunión en curso.
+/// Live Activity for a meeting recording in progress.
 nonisolated struct RecordingActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable, Sendable {
         var startedAt: Date
@@ -28,7 +28,7 @@ nonisolated struct RecordingActivityAttributes: ActivityAttributes {
     var title: String
 }
 
-/// Próximo evento (cuenta regresiva). La inicia la app o el servidor por push.
+/// Next event (countdown). Started by the app or by the server through push.
 nonisolated struct EventActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable, Sendable {
         var startAt: Date
@@ -41,7 +41,7 @@ nonisolated struct EventActivityAttributes: ActivityAttributes {
     var shared: Bool
 }
 
-/// Datos de los temporizadores y alarmas que Kairo programa con AlarmKit (los usa su Live Activity).
+/// Data of the timers and alarms Kairo schedules with AlarmKit (used by its Live Activity).
 nonisolated struct KairoAlarmMetadata: AlarmMetadata {
     var label: String
     var kind: String

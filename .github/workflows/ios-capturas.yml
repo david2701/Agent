@@ -1,42 +1,49 @@
-name: iOS capturas
+name: iOS screenshots
 
-# Capturas de la app en el simulador de iPhone y iPad contra un servidor de prueba (ios/ci).
-# No corre en cada cambio: se lanza a mano (Actions > iOS capturas > Run workflow) o al cambiar el
-# propio script de capturas. Por defecto sólo iPhone (unos 8 minutos); el iPad tarda bastante más.
+# Screenshots of the app in the iPhone and iPad simulators against a mock server (ios/ci).
+# It does not run on every change: start it by hand (Actions > iOS screenshots > Run workflow) or by
+# changing the screenshots script itself. By default only the iPhone (about 8 minutes); the iPad takes much longer.
+# The file keeps its original name (ios-capturas.yml) so existing links to it keep working.
 on:
   push:
     paths: ["ios/ci/screenshots.sh"]
   workflow_dispatch:
     inputs:
       ipad:
-        description: "También capturas de iPad (más lento)"
+        description: "Also capture the iPad (slower)"
         type: boolean
         default: false
+      language:
+        description: "App language of the screenshots"
+        type: choice
+        options: [en, es]
+        default: en
 
 permissions:
   contents: read
 
 jobs:
-  capturas:
+  screenshots:
     runs-on: xcode-27
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Compilar para el simulador
+      - name: Build for the simulator
         working-directory: ios
         run: |
           set -o pipefail
           xcodebuild build -quiet -project Kairo.xcodeproj -scheme Kairo \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -50
-      - name: Capturas
+      - name: Screenshots
         working-directory: ios
         env:
           KAIRO_SHOTS_IPAD: ${{ inputs.ipad && '1' || '' }}
-        run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/capturas
+          KAIRO_LANG: ${{ inputs.language || 'en' }}
+        run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/screenshots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: capturas-ios
-          path: ios/build/capturas
+          name: ios-screenshots
+          path: ios/build/screenshots
           if-no-files-found: ignore

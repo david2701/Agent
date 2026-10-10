@@ -22,7 +22,7 @@ struct KairoWatchApp: App {
     }
 }
 
-/// Estado del reloj: sesión propia con tu servidor, resumen del día y vínculo con el iPhone.
+/// Watch state: own session with your server, day summary and link with the iPhone.
 @MainActor @Observable
 final class WatchModel {
     static let shared = WatchModel()
@@ -66,10 +66,10 @@ final class WatchModel {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// Pide al iPhone un código de un solo uso y abre la sesión del reloj con él.
+    /// Asks the iPhone for a one-time code and opens the watch session with it.
     func pairWithPhone() async {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated, WCSession.default.isReachable else {
-            pairError = "Abre Kairo en el iPhone o escribe un código"
+            pairError = String(localized: "Open Kairo on the iPhone or enter a code")
             return
         }
         pairing = true
@@ -77,10 +77,10 @@ final class WatchModel {
         do {
             let reply = try await WatchSessionDelegate.shared.requestPairing()
             if let e = reply.error { pairError = e; return }
-            guard let server = reply.server, let code = reply.code else { pairError = "El iPhone no respondió"; return }
+            guard let server = reply.server, let code = reply.code else { pairError = String(localized: "The iPhone didn't respond"); return }
             try await pair(server: server, code: code)
         } catch {
-            pairError = "Abre Kairo en el iPhone o escribe un código"
+            pairError = String(localized: "Open Kairo on the iPhone or enter a code")
         }
     }
 
@@ -112,14 +112,14 @@ final class WatchModel {
     }
 }
 
-/// Respuesta del iPhone al pedir vinculación.
+/// The iPhone's answer to a pairing request.
 nonisolated struct PairReply: Sendable {
     var server: String?
     var code: String?
     var error: String?
 }
 
-/// WatchConnectivity del lado del reloj: recibe el resumen del día y pide códigos de vinculación.
+/// WatchConnectivity on the watch side: receives the day summary and asks for pairing codes.
 nonisolated final class WatchSessionDelegate: NSObject, WCSessionDelegate, @unchecked Sendable {
     static let shared = WatchSessionDelegate()
 
@@ -150,7 +150,7 @@ nonisolated final class WatchSessionDelegate: NSObject, WCSessionDelegate, @unch
         dec.dateDecodingStrategy = .iso8601
         guard let s = try? dec.decode(SharedSnapshot.self, from: data) else { return }
         Task { @MainActor in
-            // El resumen del iPhone sirve mientras el reloj no tenga uno propio más reciente
+            // The iPhone's summary is used as long as the watch has no more recent one of its own
             if s.updatedAt > WatchModel.shared.snapshot.updatedAt { WatchModel.shared.update(s) }
         }
     }

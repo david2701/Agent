@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 import KairoCore
 import KairoUI
 
-/// "Guardar en Kairo" desde la hoja de compartir: textos, enlaces e imágenes.
-/// Kairo decide qué hacer (nota, tarea, evento, lista…) y muestra lo que hizo.
+/// "Save to Kairo" from the share sheet: texts, links and images.
+/// Kairo decides what to do (note, task, event, list…) and shows what it did.
 final class ShareViewController: UIViewController {
     private let model = ShareModel()
 
@@ -55,7 +55,7 @@ final class ShareModel {
         phase = .sending
         turn = AgentTurn()
         let combined = [text, note].filter { !$0.isEmpty }.joined(separator: "\n\n")
-        let part = image.map { KairoAPI.FilePart(filename: "compartido.jpg", mime: "image/jpeg", data: $0) }
+        let part = image.map { KairoAPI.FilePart(filename: "shared.jpg", mime: "image/jpeg", data: $0) }
         do {
             for try await ev in ExtensionAPI.shared.capture(text: combined.isEmpty ? nil : combined, url: url, image: part) {
                 withAnimation(KairoMotion.base) { turn.apply(ev) }
@@ -99,11 +99,11 @@ struct ShareView: View {
                     case .loading:
                         ProgressView().frame(maxWidth: .infinity).padding(40)
                     case .signedOut:
-                        EmptyStateView(symbol: "person.crop.circle.badge.exclamationmark", title: "Inicia sesión en Kairo",
-                                       message: "Abre Kairo en este iPhone e inicia sesión; luego podrás guardar desde aquí.")
+                        EmptyStateView(symbol: "person.crop.circle.badge.exclamationmark", title: "Sign in to Kairo",
+                                       message: "Open Kairo on this iPhone and sign in; then you can save from here.")
                     case .ready, .sending:
                         preview
-                        TextField("Agrega una indicación (opcional): \"agéndalo\", \"para la lista del súper\"…", text: $model.note, axis: .vertical)
+                        TextField("Add a hint (optional): \"schedule it\", \"for the shopping list\"…", text: $model.note, axis: .vertical)
                             .lineLimit(2...5)
                             .padding(14)
                             .background(KairoColor.surface2, in: RoundedRectangle(cornerRadius: KairoRadius.control, style: .continuous))
@@ -116,15 +116,15 @@ struct ShareView: View {
                 .padding(20)
             }
             .background(KairoColor.bg)
-            .navigationTitle("Guardar en Kairo")
+            .navigationTitle("Save to Kairo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(model.phase == .done ? "Listo" : "Cancelar") { model.close() }
+                    Button(model.phase == .done ? "Done" : "Cancel") { model.close() }
                 }
                 if model.phase == .ready {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Guardar") { Task { await model.send() } }
+                        Button("Save") { Task { await model.send() } }
                             .disabled(model.text.isEmpty && model.url == nil && model.image == nil)
                     }
                 }
@@ -146,11 +146,16 @@ struct ShareView: View {
         }
     }
 
+    private var resultTitle: String {
+        if model.phase == .sending { return model.turn.working ?? String(localized: "Kairo is saving it") }
+        return model.turn.error == nil ? String(localized: "Done") : String(localized: "Couldn't save")
+    }
+
     private var result: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 KairoOrb(state: model.phase == .sending ? .thinking : (model.turn.error == nil ? .idle : .error)).frame(width: 34, height: 34)
-                Text(model.phase == .sending ? (model.turn.working ?? "Kairo lo está guardando") : (model.turn.error == nil ? "Listo" : "No se pudo guardar"))
+                Text(verbatim: resultTitle)
                     .font(.kHeadline)
             }
             ForEach(model.turn.actions) { a in

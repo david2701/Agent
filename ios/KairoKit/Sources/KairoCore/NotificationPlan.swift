@@ -1,24 +1,24 @@
 import Foundation
 
-/// Notificación local que el teléfono programa a partir de `/sync/device`, para que suene sin internet.
+/// Local notification the phone schedules from `/sync/device`, so it rings without internet.
 public struct PlannedNotification: Sendable, Hashable, Identifiable {
     public enum Kind: String, Sendable { case reminder, event, briefing }
 
-    /// Identificador estable (el mismo que usa la deduplicación de `RealtimeEvent`).
+    /// Stable identifier (the same one `RealtimeEvent` uses for de-duplication).
     public var id: String
     public var kind: Kind
     public var date: Date
     public var title: String
     public var body: String
-    /// Id del recordatorio o del evento (para las acciones "Hecho" y "Posponer").
+    /// Reminder or event id (for the "Done" and "Snooze" actions).
     public var entityId: String?
-    /// La hora del resumen se repite cada día.
+    /// The briefing time repeats every day.
     public var dailyHour: Int?
     public var dailyMinute: Int?
 }
 
-/// Arma la lista de notificaciones locales. iOS admite 64 pendientes por app: se priorizan las más próximas
-/// y se reserva espacio para el resumen diario. El resto se programa en la siguiente sincronización.
+/// Builds the list of local notifications. iOS allows 64 pending per app: the nearest ones are prioritized
+/// and room is kept for the daily briefing. The rest is scheduled on the next sync.
 public enum NotificationPlan {
     public static let limit = 60
 
@@ -28,17 +28,17 @@ public enum NotificationPlan {
             guard let at = KairoDate.parse(r.nextFireAt), at > now, at.timeIntervalSince(now) < horizon else { continue }
             out.append(PlannedNotification(
                 id: "rem:\(r.id):\(Int(at.timeIntervalSince1970))", kind: .reminder, date: at, title: r.text,
-                body: r.createdBy != nil ? "Recordatorio de la familia" : (r.rrule != nil ? "Recordatorio que se repite" : "Recordatorio"),
+                body: r.createdBy != nil ? L10n.tr("Family reminder") : (r.rrule != nil ? L10n.tr("Repeating reminder") : L10n.tr("Reminder")),
                 entityId: r.id
             ))
         }
         for a in sync.eventAlerts {
             guard let at = KairoDate.parse(a.alertAt), let start = KairoDate.parse(a.startAt), at > now, at.timeIntervalSince(now) < horizon else { continue }
-            let when = a.minutes == 0 ? "Empieza ahora" : "En \(a.minutes) min"
+            let when = a.minutes == 0 ? L10n.tr("Starts now") : L10n.tr("In %lld min", a.minutes)
             let place = (a.location ?? "").isEmpty ? "" : " · \(a.location ?? "")"
             out.append(PlannedNotification(
                 id: "ev:\(a.eventId):\(Int(start.timeIntervalSince1970)):\(a.minutes)", kind: .event, date: at,
-                title: a.title, body: when + place + ((a.shared ?? false) ? " · Familiar" : ""), entityId: a.eventId
+                title: a.title, body: when + place + ((a.shared ?? false) ? " · " + L10n.tr("Family") : ""), entityId: a.eventId
             ))
         }
         out.sort { $0.date < $1.date }
@@ -47,8 +47,8 @@ public enum NotificationPlan {
             let parts = sync.briefingTime.split(separator: ":").compactMap { Int($0) }
             if parts.count == 2 {
                 result.append(PlannedNotification(
-                    id: "brief:daily", kind: .briefing, date: now, title: "Tu resumen del día",
-                    body: "Toca para escucharlo", entityId: nil, dailyHour: parts[0], dailyMinute: parts[1]
+                    id: "brief:daily", kind: .briefing, date: now, title: L10n.tr("Your morning briefing"),
+                    body: L10n.tr("Tap to listen"), entityId: nil, dailyHour: parts[0], dailyMinute: parts[1]
                 ))
             }
         }
@@ -56,7 +56,7 @@ public enum NotificationPlan {
     }
 }
 
-/// Avisos que se ven una sola vez por dispositivo aunque lleguen por varias vías.
+/// Notices that are shown only once per device even if they arrive through several channels.
 public final class SeenLog: @unchecked Sendable {
     private let defaults: UserDefaults
     private let key: String
@@ -67,7 +67,7 @@ public final class SeenLog: @unchecked Sendable {
         self.key = key
     }
 
-    /// true si es la primera vez (y lo marca como visto). Guarda las últimas 400 claves.
+    /// true the first time (and marks it as seen). Keeps the last 400 keys.
     public func markIfNew(_ id: String) -> Bool {
         lock.withLock {
             var list = defaults.stringArray(forKey: key) ?? []

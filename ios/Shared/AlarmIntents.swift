@@ -2,14 +2,14 @@ import AppIntents
 import AlarmKit
 import Foundation
 
-// Botones de la Live Activity de los temporizadores y alarmas de Kairo (AlarmKit).
-// Corren en el proceso de la app aunque se toquen en la Isla Dinámica o la pantalla bloqueada.
+// Buttons of the Live Activity for Kairo's timers and alarms (AlarmKit).
+// They run in the app's process even when tapped in the Dynamic Island or on the lock screen.
 
 struct StopAlarmIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Detener"
+    static let title: LocalizedStringResource = "Stop"
     static let isDiscoverable = false
 
-    @Parameter(title: "Alarma") var alarmId: String
+    @Parameter(title: "Alarm") var alarmId: String
 
     init() {}
     init(alarmId: String) { self.alarmId = alarmId }
@@ -21,10 +21,10 @@ struct StopAlarmIntent: LiveActivityIntent {
 }
 
 struct PauseAlarmIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Pausar"
+    static let title: LocalizedStringResource = "Pause"
     static let isDiscoverable = false
 
-    @Parameter(title: "Alarma") var alarmId: String
+    @Parameter(title: "Alarm") var alarmId: String
 
     init() {}
     init(alarmId: String) { self.alarmId = alarmId }
@@ -36,10 +36,10 @@ struct PauseAlarmIntent: LiveActivityIntent {
 }
 
 struct ResumeAlarmIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Reanudar"
+    static let title: LocalizedStringResource = "Resume"
     static let isDiscoverable = false
 
-    @Parameter(title: "Alarma") var alarmId: String
+    @Parameter(title: "Alarm") var alarmId: String
 
     init() {}
     init(alarmId: String) { self.alarmId = alarmId }

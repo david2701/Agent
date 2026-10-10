@@ -3,13 +3,13 @@ import AlarmKit
 import SwiftUI
 import KairoCore
 
-/// Temporizadores y alarmas que pide el agente ("pon un temporizador de 10 minutos").
-/// Con AlarmKit suenan como las del Reloj de iOS, aunque el teléfono esté en silencio, y muestran
-/// la cuenta regresiva en la Isla Dinámica.
+/// Timers and alarms the agent asks for ("set a 10 minute timer").
+/// With AlarmKit they ring like the iOS Clock ones, even when the phone is silent, and show
+/// the countdown in the Dynamic Island.
 enum DeviceActionService {
-    /// Devuelve un texto para mostrar, o nil si no hizo nada.
+    /// Returns a text to show, or nil if it did nothing.
     static func perform(_ action: DeviceAction) async -> String? {
-        guard await authorized() else { return "Permite a Kairo usar alarmas en Ajustes del iPhone" }
+        guard await authorized() else { return String(localized: "Allow Kairo to use alarms in iPhone Settings") }
         switch action {
         case .timer(let seconds, let label):
             let alert = AlarmPresentation.Alert(
@@ -17,13 +17,13 @@ enum DeviceActionService {
                 secondaryButton: nil,
                 secondaryButtonBehavior: nil
             )
-            // Cuenta regresiva en la Isla Dinámica y la pantalla bloqueada (la dibuja AlarmLiveActivity)
+            // Countdown in the Dynamic Island and on the lock screen (drawn by AlarmLiveActivity)
             let presentation = AlarmPresentation(
                 alert: alert,
                 countdown: AlarmPresentation.Countdown(title: LocalizedStringResource(stringLiteral: label),
-                                                       pauseButton: AlarmButton(text: "Pausar", textColor: .white, systemImageName: "pause.fill")),
-                paused: AlarmPresentation.Paused(title: "En pausa",
-                                                 resumeButton: AlarmButton(text: "Reanudar", textColor: .white, systemImageName: "play.fill"))
+                                                       pauseButton: AlarmButton(text: "Pause", textColor: .white, systemImageName: "pause.fill")),
+                paused: AlarmPresentation.Paused(title: "Paused",
+                                                 resumeButton: AlarmButton(text: "Resume", textColor: .white, systemImageName: "play.fill"))
             )
             let attributes = AlarmAttributes<KairoAlarmMetadata>(
                 presentation: presentation,
@@ -32,9 +32,9 @@ enum DeviceActionService {
             )
             do {
                 _ = try await AlarmManager.shared.schedule(id: UUID(), configuration: .timer(duration: TimeInterval(seconds), attributes: attributes))
-                return "Temporizador: \(KairoDate.duration(seconds))"
+                return String(localized: "Timer: \(KairoDate.duration(seconds))")
             } catch {
-                return "No se pudo poner el temporizador"
+                return String(localized: "Couldn't set the timer")
             }
         case .alarm(let hour, let minute, let label, let days):
             let alert = AlarmPresentation.Alert(
@@ -54,9 +54,11 @@ enum DeviceActionService {
             ))
             do {
                 _ = try await AlarmManager.shared.schedule(id: UUID(), configuration: .alarm(schedule: schedule, attributes: attributes))
-                return String(format: "Alarma: %d:%02d", hour, minute)
+                let at = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: .now)
+                let when = at.map { KairoDate.time($0) } ?? String(format: "%d:%02d", hour, minute)
+                return String(localized: "Alarm: \(when)")
             } catch {
-                return "No se pudo poner la alarma"
+                return String(localized: "Couldn't set the alarm")
             }
         case .unknown:
             return nil
@@ -72,6 +74,7 @@ enum DeviceActionService {
     }
 
     private static func weekday(_ s: String) -> Locale.Weekday? {
+        // The agent sends English day names; Spanish abbreviations are accepted too.
         switch s.prefix(3).lowercased() {
         case "mon", "lun": .monday
         case "tue", "mar": .tuesday

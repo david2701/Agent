@@ -2,29 +2,30 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-// MARK: - Memoria
+// MARK: - Memory
 
-/// Lo que Kairo sabe de ti para ayudarte mejor. Se puede editar o borrar.
+/// What Kairo knows about you to help you better. It can be edited or deleted.
 struct MemoryScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<[Memory]> = .loading
     @State private var editing: MemoryDraft?
 
-    static let categories: [(String, String, String)] = [
-        ("perfil", "Sobre ti", "person"), ("preferencias", "Preferencias", "heart"), ("personas", "Personas", "person.2"),
-        ("salud", "Salud", "cross.case"), ("trabajo", "Trabajo", "briefcase"), ("hogar", "Hogar", "house"), ("general", "General", "sparkles"),
+    /// (API category id, label, symbol). The ids are part of the API and stay as the server defines them.
+    static let categories: [(String, LocalizedStringKey, String)] = [
+        ("perfil", "About you", "person"), ("preferencias", "Preferences", "heart"), ("personas", "People", "person.2"),
+        ("salud", "Health", "cross.case"), ("trabajo", "Work", "briefcase"), ("hogar", "Home", "house"), ("general", "General", "sparkles"),
     ]
 
     var body: some View {
         LoadableView(state: $state, version: model.version("memory"), load: { try await model.api.memories() }) { memories in
             List {
                 Section {
-                    Text("Lo que Kairo sabe de ti para ayudarte mejor. Puedes editarlo o borrarlo cuando quieras.")
+                    Text("What Kairo knows about you to help you better. You can edit or delete it whenever you want.")
                         .font(.kSubheadline).foregroundStyle(KairoColor.muted)
                         .listRowBackground(Color.clear)
                 }
                 if memories.isEmpty {
-                    EmptyStateView(symbol: "brain", title: "Aún no hay recuerdos", message: "Cuéntale a Kairo cosas como \"soy alérgico a la penicilina\" o \"mi hija se llama Sofía\".")
+                    EmptyStateView(symbol: "brain", title: "No memories yet", message: "Tell Kairo things like \"I'm allergic to penicillin\" or \"my daughter's name is Mia\".")
                         .listRowBackground(Color.clear)
                 }
                 ForEach(Self.categories, id: \.0) { cat in
@@ -39,10 +40,10 @@ struct MemoryScreen: View {
                                     .swipeActions {
                                         Button(role: .destructive) {
                                             Task {
-                                                await attempt(model, "Olvidado") { try await model.api.deleteMemory(m.id) }
+                                                await attempt(model, "Forgotten") { try await model.api.deleteMemory(m.id) }
                                                 model.bump("memory")
                                             }
-                                        } label: { Label("Olvidar", systemImage: "trash") }
+                                        } label: { Label("Forget", systemImage: "trash") }
                                     }
                             }
                         } header: {
@@ -55,10 +56,10 @@ struct MemoryScreen: View {
             .scrollContentBackground(.hidden)
             .refreshable { model.bump("memory") }
         }
-        .navigationTitle("Memoria")
+        .navigationTitle("Memory")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { editing = MemoryDraft() } label: { Label("Nuevo recuerdo", systemImage: "plus") }
+                Button { editing = MemoryDraft() } label: { Label("New memory", systemImage: "plus") }
             }
         }
         .sheet(item: $editing) { d in MemoryEditor(draft: d) }
@@ -83,22 +84,22 @@ private struct MemoryEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Dato", text: $draft.content, axis: .vertical).lineLimit(2...6)
-                Picker("Categoría", selection: $draft.category) {
+                TextField("Fact", text: $draft.content, axis: .vertical).lineLimit(2...6)
+                Picker("Category", selection: $draft.category) {
                     ForEach(MemoryScreen.categories, id: \.0) { Label($0.1, systemImage: $0.2).tag($0.0) }
                 }
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle(draft.original == nil ? "Nuevo recuerdo" : "Editar recuerdo")
+            .navigationTitle(draft.original == nil ? "New memory" : "Edit memory")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(draft.original == nil ? "Agregar" : "Guardar") {
+                    Button(draft.original == nil ? "Add" : "Save") {
                         Task {
                             let text = draft.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                            await attempt(model, draft.original == nil ? "Kairo lo recordará" : "Actualizado") {
+                            await attempt(model, draft.original == nil ? "Kairo will remember it" : "Updated") {
                                 if let m = draft.original { _ = try await model.api.updateMemory(m.id, content: text, category: draft.category) }
                                 else { _ = try await model.api.createMemory(text, category: draft.category) }
                             }
@@ -114,9 +115,9 @@ private struct MemoryEditor: View {
     }
 }
 
-// MARK: - Grabaciones
+// MARK: - Recordings
 
-/// Reuniones e ideas largas: Kairo transcribe, resume y propone tareas.
+/// Meetings and long ideas: Kairo transcribes, summarizes and suggests tasks.
 struct RecordingsScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<[Recording]> = .loading
@@ -130,9 +131,9 @@ struct RecordingsScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     recorderCard
                     if recs.isEmpty {
-                        EmptyStateView(symbol: "waveform", title: "Sin grabaciones", message: "Tus reuniones resumidas aparecerán aquí.")
+                        EmptyStateView(symbol: "waveform", title: "No recordings", message: "Your summarized meetings will appear here.")
                     } else {
-                        SectionLabel("Anteriores", count: recs.count)
+                        SectionLabel("Previous", count: recs.count)
                         ForEach(recs) { r in RecordingCard(recording: r) }
                     }
                 }
@@ -141,7 +142,7 @@ struct RecordingsScreen: View {
             }
             .refreshable { model.bump("recording") }
         }
-        .navigationTitle("Grabaciones")
+        .navigationTitle("Recordings")
         .kairoBackground()
     }
 
@@ -153,24 +154,24 @@ struct RecordingsScreen: View {
                         .phaseAnimator([1.0, 0.3]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
                     Text(start, style: .timer).font(.kairoMono(28, .medium)).monospacedDigit()
                     Spacer()
-                    Text("Grabando · \(recorder.segments) partes").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                    Text("Recording · \(recorder.segments) parts").font(.kFootnote).foregroundStyle(KairoColor.muted)
                 }
                 LevelBars(level: recorder.level)
                 Button { Task { await recorder.stop(title: title.isEmpty ? nil : title) ; title = ""; model.bump("recording") } } label: {
-                    Label("Detener", systemImage: "stop.fill").frame(maxWidth: .infinity)
+                    Label("Stop", systemImage: "stop.fill").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(KairoButtonStyle(kind: .danger, fullWidth: true))
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Graba una reunión o una idea larga").font(.kHeadline)
-                    Text("Kairo transcribe, resume y propone tareas. El audio se borra al subirse.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                    Text("Record a meeting or a long idea").font(.kHeadline)
+                    Text("Kairo transcribes, summarizes and suggests tasks. The audio is deleted once uploaded.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                TextField("Título (opcional)", text: $title)
+                TextField("Title (optional)", text: $title)
                     .padding(.horizontal, 14).frame(height: 44)
                     .background(KairoColor.surface2, in: RoundedRectangle(cornerRadius: KairoRadius.control, style: .continuous))
                 Button { Task { await recorder.start(title: title) } } label: {
-                    Label("Grabar", systemImage: "record.circle").frame(maxWidth: .infinity)
+                    Label("Record", systemImage: "record.circle").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(KairoButtonStyle(kind: .primary, fullWidth: true))
                 if let e = recorder.lastError { Text(e).font(.kFootnote).foregroundStyle(KairoColor.danger) }
@@ -183,7 +184,7 @@ struct RecordingsScreen: View {
     }
 }
 
-/// Barras de nivel del micrófono.
+/// Microphone level bars.
 private struct LevelBars: View {
     var level: Double
     @State private var history: [Double] = Array(repeating: 0, count: 36)
@@ -213,7 +214,7 @@ private struct RecordingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(recording.title.isEmpty ? "Grabación" : recording.title).font(.kHeadline)
+                Text(recording.title.isEmpty ? String(localized: "Recording") : recording.title).font(.kHeadline)
                 Spacer()
                 Text(KairoDate.duration(recording.durationS)).font(.kMonoSmall).foregroundStyle(KairoColor.faint)
             }
@@ -222,39 +223,39 @@ private struct RecordingCard: View {
             case "processing", "recording":
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(recording.status == "recording" ? "Transcribiendo por partes · \(recording.segments) subidas" : "Resumiendo...").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                    Text(recording.status == "recording" ? "Transcribing in parts · \(recording.segments) uploaded" : "Summarizing...").font(.kSubheadline).foregroundStyle(KairoColor.muted)
                 }
             case "failed":
-                Label(recording.error ?? "No se pudo procesar", systemImage: "exclamationmark.triangle").font(.kSubheadline).foregroundStyle(KairoColor.danger)
+                Label(recording.error ?? String(localized: "Couldn't process it"), systemImage: "exclamationmark.triangle").font(.kSubheadline).foregroundStyle(KairoColor.danger)
             default:
                 if !recording.summary.isEmpty { MarkdownText(recording.summary, font: .kCallout) }
                 if !recording.keyPoints.isEmpty {
-                    Text("Puntos clave").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.muted)
+                    Text("Key points").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.muted)
                     ForEach(recording.keyPoints, id: \.self) { p in Label(p, systemImage: "circle.fill").labelStyle(BulletLabel()) }
                 }
                 if !recording.actionItems.isEmpty {
-                    Text("Acciones").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.muted)
+                    Text("Actions").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.muted)
                     ForEach(recording.actionItems, id: \.self) { p in Label(p, systemImage: "checkmark.circle").labelStyle(BulletLabel()) }
                 }
                 HStack(spacing: 10) {
                     if !recording.actionItems.isEmpty {
-                        Button("Crear tareas") {
+                        Button("Create tasks") {
                             Task {
                                 do {
                                     let n = try await model.api.recordingTasks(recording.id)
-                                    model.show(Toast(title: "Se crearon \(n) tareas", destination: .tasks))
+                                    model.show(Toast(title: String(localized: "\(n) tasks created"), destination: .tasks))
                                     model.bump("task")
-                                } catch { model.show(Toast(title: "No se pudo completar", message: error.localizedDescription, symbol: "exclamationmark.triangle")) }
+                                } catch { model.show(Toast(title: String(localized: "Couldn't complete that"), message: error.localizedDescription, symbol: "exclamationmark.triangle")) }
                             }
                         }
                         .buttonStyle(KairoButtonStyle(kind: .secondary))
                     }
                     if recording.noteId != nil {
-                        Button("Ver nota") { model.perform("section:notes") }.buttonStyle(KairoButtonStyle(kind: .quiet))
+                        Button("View note") { model.perform("section:notes") }.buttonStyle(KairoButtonStyle(kind: .quiet))
                     }
                     Spacer()
                     if !recording.transcript.isEmpty {
-                        Button(showTranscript ? "Ocultar transcripción" : "Ver transcripción") { withAnimation(KairoMotion.base) { showTranscript.toggle() } }
+                        Button(showTranscript ? "Hide transcript" : "Show transcript") { withAnimation(KairoMotion.base) { showTranscript.toggle() } }
                             .font(.kairo(13, .medium)).foregroundStyle(KairoColor.accentStrong)
                     }
                 }
@@ -269,10 +270,10 @@ private struct RecordingCard: View {
         .contextMenu {
             Button(role: .destructive) {
                 Task {
-                    await attempt(model, "Grabación eliminada") { try await model.api.deleteRecording(recording.id) }
+                    await attempt(model, "Recording deleted") { try await model.api.deleteRecording(recording.id) }
                     model.bump("recording")
                 }
-            } label: { Label("Eliminar", systemImage: "trash") }
+            } label: { Label("Delete", systemImage: "trash") }
         }
     }
 }
@@ -286,9 +287,9 @@ private struct BulletLabel: LabelStyle {
     }
 }
 
-// MARK: - Actividad
+// MARK: - Activity
 
-/// Todo lo que Kairo y tú cambiaron. Las creaciones y borrados se pueden deshacer.
+/// Everything Kairo and you changed. Creations and deletions can be undone.
 struct ActivityScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<[ActivityEntry]> = .loading
@@ -301,11 +302,11 @@ struct ActivityScreen: View {
         LoadableView(state: $state, version: version, load: { try await model.api.activity(limit: 80) }) { entries in
             List {
                 Section {
-                    Text("Todo lo que Kairo y tú cambiaron. Las creaciones y borrados se pueden deshacer.")
+                    Text("Everything Kairo and you changed. Creations and deletions can be undone.")
                         .font(.kSubheadline).foregroundStyle(KairoColor.muted).listRowBackground(Color.clear)
                 }
                 if entries.isEmpty {
-                    EmptyStateView(symbol: "clock.arrow.circlepath", title: "Sin actividad", message: "Aquí verás cada acción de Kairo.").listRowBackground(Color.clear)
+                    EmptyStateView(symbol: "clock.arrow.circlepath", title: "No activity", message: "You'll see every Kairo action here.").listRowBackground(Color.clear)
                 }
                 ForEach(groups(entries), id: \.0) { g in
                     Section {
@@ -317,7 +318,7 @@ struct ActivityScreen: View {
             .scrollContentBackground(.hidden)
             .refreshable { model.bump("activity") }
         }
-        .navigationTitle("Actividad")
+        .navigationTitle("Activity")
         .kairoBackground()
     }
 
@@ -341,17 +342,17 @@ struct ActivityScreen: View {
                 Text(a.summary).font(.kBody).foregroundStyle(a.undoneAt != nil ? KairoColor.muted : KairoColor.text).strikethrough(a.undoneAt != nil)
                 HStack(spacing: 6) {
                     if let d = KairoDate.parse(a.createdAt) { Text(KairoDate.time(d)).font(.kMonoSmall) }
-                    Text(a.source == "agent" || a.source == "voice" ? "Kairo" : "Tú").font(.kCaption)
+                    Text(a.source == "agent" || a.source == "voice" ? "Kairo" : "You").font(.kCaption)
                 }
                 .foregroundStyle(KairoColor.faint)
             }
             Spacer()
             if a.undoneAt != nil {
-                Text("Deshecho").font(.kCaption).foregroundStyle(KairoColor.muted)
+                Text("Undone").font(.kCaption).foregroundStyle(KairoColor.muted)
             } else if a.undoable {
-                Button("Deshacer") {
+                Button("Undo") {
                     Task {
-                        await attempt(model, "Deshecho") { try await model.api.undo(a.id) }
+                        await attempt(model, "Undone") { try await model.api.undo(a.id) }
                         model.bump(a.entityType)
                         model.bump("activity")
                     }

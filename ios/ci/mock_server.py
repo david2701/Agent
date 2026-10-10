@@ -1,41 +1,45 @@
 #!/usr/bin/env python3
-"""Servidor de prueba para las capturas de CI: responde el API de Kairo con los datos de
-KairoKit/Tests/KairoCoreTests/Fixtures (anonimizados). Uso: python3 mock_server.py [puerto]"""
-import json, os, re, sys
+"""Mock server for the CI screenshots: answers the Kairo API with the sample data of "The Rivera family"
+(see demo_data.py), always relative to the current time. Usage: python3 mock_server.py [port]"""
+import json
+import re
+import sys
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "KairoKit", "Tests", "KairoCoreTests", "Fixtures")
+import demo_data
 
-def fixture(name):
-    with open(os.path.join(FIX, name + ".json"), encoding="utf-8") as f:
-        return json.load(f)
 
-AUTH = fixture("auth")
+def demo():
+    return demo_data.Demo(datetime.now(timezone.utc))
+
+
 ROUTES = [
-    (r"^/api/me$", lambda: {"user": AUTH["user"]}),
-    (r"^/api/today$", lambda: fixture("today")),
-    (r"^/api/tasks$", lambda: fixture("tasks")),
-    (r"^/api/projects$", lambda: []),
-    (r"^/api/events$", lambda: fixture("events")),
-    (r"^/api/notes(/search)?$", lambda: fixture("notes")),
-    (r"^/api/notes/tags$", lambda: {"tags": []}),
-    (r"^/api/lists$", lambda: fixture("lists")),
-    (r"^/api/reminders$", lambda: fixture("reminders")),
-    (r"^/api/places$", lambda: fixture("places")),
-    (r"^/api/memories$", lambda: fixture("memories")),
-    (r"^/api/recordings$", lambda: fixture("recordings")),
-    (r"^/api/activity$", lambda: fixture("activity")),
-    (r"^/api/conversations$", lambda: fixture("conversations")),
-    (r"^/api/conversations/[^/]+/messages$", lambda: fixture("messages")),
-    (r"^/api/settings$", lambda: fixture("settings")),
-    (r"^/api/voice/voices$", lambda: {"voices": [{"id": "ef_dora", "name": "Dora", "description": "Español"}]}),
-    (r"^/api/devices$", lambda: fixture("devices")),
-    (r"^/api/family$", lambda: fixture("family")),
-    (r"^/api/family/invites$", lambda: []),
-    (r"^/api/notices$", lambda: fixture("notices")),
-    (r"^/api/sync/device$", lambda: fixture("sync")),
-    (r"^/api/push/apns$", lambda: {"available": False, "registeredDevices": 0}),
+    (r"^/api/me$", lambda d: {"user": d.user()}),
+    (r"^/api/today$", lambda d: d.today_response()),
+    (r"^/api/tasks$", lambda d: d.tasks()),
+    (r"^/api/projects$", lambda d: []),
+    (r"^/api/events$", lambda d: d.events()),
+    (r"^/api/notes(/search)?$", lambda d: d.notes()),
+    (r"^/api/notes/tags$", lambda d: {"tags": ["home", "gifts"]}),
+    (r"^/api/lists$", lambda d: d.lists()),
+    (r"^/api/reminders$", lambda d: d.reminders()),
+    (r"^/api/places$", lambda d: d.places()),
+    (r"^/api/memories$", lambda d: d.memories()),
+    (r"^/api/recordings$", lambda d: d.recordings()),
+    (r"^/api/activity$", lambda d: d.activity()),
+    (r"^/api/conversations$", lambda d: d.conversations()),
+    (r"^/api/conversations/[^/]+/messages$", lambda d: d.messages()),
+    (r"^/api/settings$", lambda d: d.settings()),
+    (r"^/api/voice/voices$", lambda d: d.voices()),
+    (r"^/api/devices$", lambda d: d.devices()),
+    (r"^/api/family$", lambda d: d.family()),
+    (r"^/api/family/invites$", lambda d: []),
+    (r"^/api/notices$", lambda d: d.notices_response()),
+    (r"^/api/sync/device$", lambda d: d.sync()),
+    (r"^/api/push/apns$", lambda d: {"available": False, "registeredDevices": 0}),
 ]
+
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, obj, status=200):
@@ -50,9 +54,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         for pattern, fn in ROUTES:
             if re.match(pattern, path):
-                return self.send_json(fn())
+                return self.send_json(fn(demo()))
         if path == "/ws":
-            return self.send_json({"error": "sin tiempo real en las capturas"}, 404)
+            return self.send_json({"error": "no realtime in the screenshots"}, 404)
         self.send_json([])
 
     def do_POST(self):
@@ -61,9 +65,11 @@ class Handler(BaseHTTPRequestHandler):
             self.rfile.read(length)
         path = self.path.split("?")[0]
         if path in ("/api/auth/login", "/api/auth/refresh", "/api/auth/pair"):
-            return self.send_json(AUTH)
+            return self.send_json(demo().auth())
         if path == "/api/auth/pair-code":
             return self.send_json({"code": "482913", "expiresIn": 300})
+        if path == "/api/briefing":
+            return self.send_json(demo().briefing())
         self.send_json({})
 
     do_PATCH = do_POST
@@ -71,6 +77,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         sys.stderr.write("mock: " + (fmt % args) + "\n")
+
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8099

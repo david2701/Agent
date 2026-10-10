@@ -2,8 +2,8 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Calendario: mes con puntos por día y la agenda del día elegido.
-/// En iPad y en la pantalla interior del iPhone Duo, el mes y la agenda van lado a lado.
+/// Calendar: month with dots per day and the agenda of the chosen day.
+/// On iPad and on the inner screen of the iPhone Duo, the month and the agenda go side by side.
 struct CalendarScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -13,7 +13,12 @@ struct CalendarScreen: View {
     @State private var editing: EventDraft?
     @State private var direction: Edge = .trailing
 
-    private let cal = Calendar.current
+    /// The system calendar (week start, time zone) with the app language for names.
+    private let cal: Calendar = {
+        var c = Calendar.current
+        c.locale = KairoLanguage.locale
+        return c
+    }()
 
     var body: some View {
         LoadableView(state: $state, version: model.version("event") + model.version("family") + monthKey, load: load) { events in
@@ -40,21 +45,21 @@ struct CalendarScreen: View {
                 .refreshable { await reload() }
             }
         }
-        .navigationTitle("Calendario")
+        .navigationTitle("Calendar")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { editing = EventDraft(day: selected) } label: { Label("Nuevo evento", systemImage: "plus") }
+                Button { editing = EventDraft(day: selected) } label: { Label("New event", systemImage: "plus") }
                     .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button("Hoy") { goTo(.now) }
+                Button("Today") { goTo(.now) }
             }
         }
         .sheet(item: $editing) { d in EventEditor(draft: d) { await reload() } }
         .kairoBackground()
     }
 
-    /// Cambia al mover de mes, para recargar ese rango.
+    /// Changes when the month moves, to reload that range.
     private var monthKey: Int { Int(month.timeIntervalSince1970 / 86400) }
 
     private func load() async throws -> [Event] {
@@ -85,21 +90,21 @@ struct CalendarScreen: View {
         }
     }
 
-    // MARK: Mes
+    // MARK: Month
 
     private func monthCard(_ byDay: [Date: [Event]]) -> some View {
         VStack(spacing: 12) {
             HStack {
-                Text(monthTitle(month)).font(.kTitle3).contentTransition(.numericText())
+                Text(verbatim: KairoDate.monthTitle(month, calendar: cal)).font(.kTitle3).contentTransition(.numericText())
                 Spacer()
                 Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left").frame(width: 36, height: 36) }
-                    .accessibilityLabel("Mes anterior")
+                    .accessibilityLabel("Previous month")
                 Button { shiftMonth(1) } label: { Image(systemName: "chevron.right").frame(width: 36, height: 36) }
-                    .accessibilityLabel("Mes siguiente")
+                    .accessibilityLabel("Next month")
             }
             .buttonStyle(.plain)
             .foregroundStyle(KairoColor.text)
-            let symbols = ["L", "M", "X", "J", "V", "S", "D"]
+            let symbols = KairoDate.weekdayInitials(calendar: cal)
             HStack(spacing: 0) {
                 ForEach(symbols.indices, id: \.self) { i in
                     Text(symbols[i]).font(.kCaption).foregroundStyle(KairoColor.faint).frame(maxWidth: .infinity)
@@ -129,31 +134,25 @@ struct CalendarScreen: View {
         .clipped()
     }
 
-    private func monthTitle(_ d: Date) -> String {
-        let months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-        let c = cal.dateComponents([.month, .year], from: d)
-        return "\(months[(c.month ?? 1) - 1]) \(c.year ?? 0)"
-    }
-
-    /// Días del mes con huecos al inicio (la semana empieza el lunes).
+    /// Days of the month with gaps at the start (the week starts on the calendar's first weekday).
     private func gridDays() -> [Date?] {
         let range = cal.range(of: .day, in: .month, for: month)!
-        let weekday = cal.component(.weekday, from: month) // 1 = domingo
-        let lead = (weekday + 5) % 7
+        let weekday = cal.component(.weekday, from: month) // 1 = Sunday
+        let lead = (weekday - cal.firstWeekday + 7) % 7
         var days: [Date?] = Array(repeating: nil, count: lead)
         for d in range { days.append(cal.date(byAdding: .day, value: d - 1, to: month)) }
         while days.count % 7 != 0 { days.append(nil) }
         return days
     }
 
-    // MARK: Día
+    // MARK: Day
 
     private func dayHeader(_ count: Int) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(KairoDate.longDay(selected)).font(.kTitle3)
-            if cal.isDateInToday(selected) { Text("Hoy").font(.kCaption).foregroundStyle(KairoColor.accentStrong) }
+            if cal.isDateInToday(selected) { Text("Today").font(.kCaption).foregroundStyle(KairoColor.accentStrong) }
             Spacer()
-            if count > 0 { Text(count == 1 ? "1 evento" : "\(count) eventos").font(.kFootnote).foregroundStyle(KairoColor.muted) }
+            if count > 0 { Text(verbatim: eventCountText(count)).font(.kFootnote).foregroundStyle(KairoColor.muted) }
         }
     }
 
@@ -161,8 +160,8 @@ struct CalendarScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             dayHeader(events.count)
             if events.isEmpty {
-                EmptyStateView(symbol: "sun.max", title: "Día libre", message: "Dile a Kairo \"agenda el dentista el jueves a las 10\".",
-                               actionTitle: "Nuevo evento") { editing = EventDraft(day: selected) }
+                EmptyStateView(symbol: "sun.max", title: "Free day", message: "Tell Kairo \"schedule the dentist on Thursday at 10\".",
+                               actionTitle: "New event") { editing = EventDraft(day: selected) }
             } else {
                 KairoCard {
                     ForEach(events, id: \.occurrenceId) { e in
@@ -183,8 +182,8 @@ struct CalendarScreen: View {
             VStack(alignment: .leading, spacing: 12) {
                 dayHeader(events.count)
                 if events.isEmpty {
-                    EmptyStateView(symbol: "sun.max", title: "Día libre", message: "Dile a Kairo \"agenda el dentista el jueves a las 10\".",
-                                   actionTitle: "Nuevo evento") { editing = EventDraft(day: selected) }
+                    EmptyStateView(symbol: "sun.max", title: "Free day", message: "Tell Kairo \"schedule the dentist on Thursday at 10\".",
+                                   actionTitle: "New event") { editing = EventDraft(day: selected) }
                 } else {
                     DayTimeline(events: events) { editing = EventDraft($0) }
                 }
@@ -195,17 +194,21 @@ struct CalendarScreen: View {
     }
 
     @ViewBuilder private func eventMenu(_ e: Event) -> some View {
-        Button { editing = EventDraft(e) } label: { Label("Editar", systemImage: "pencil") }
+        Button { editing = EventDraft(e) } label: { Label("Edit", systemImage: "pencil") }
         Button(role: .destructive) {
             Task {
-                await attempt(model, "Evento eliminado. Puedes deshacerlo en Actividad.") { try await model.api.deleteEvent(e.id) }
+                await attempt(model, "Event deleted. You can undo it in Activity.") { try await model.api.deleteEvent(e.id) }
                 await reload()
             }
-        } label: { Label("Eliminar", systemImage: "trash") }
+        } label: { Label("Delete", systemImage: "trash") }
+    }
+
+    private func eventCountText(_ n: Int) -> String {
+        n == 1 ? String(localized: "1 event") : String(localized: "\(n) events")
     }
 }
 
-/// Celda del mes: número y hasta tres puntos (ámbar si es familiar).
+/// Month cell: number and up to three dots (amber if shared with the family).
 private struct DayCell: View {
     var day: Date
     var selected: Bool
@@ -213,10 +216,17 @@ private struct DayCell: View {
     var events: [Event]
     var action: () -> Void
 
+    private var accessibilityText: String {
+        let long = KairoDate.longDay(day)
+        guard !events.isEmpty else { return long }
+        let count = events.count == 1 ? String(localized: "1 event") : String(localized: "\(events.count) events")
+        return "\(long), \(count)"
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Text("\(Calendar.current.component(.day, from: day))")
+                Text(verbatim: "\(Calendar.current.component(.day, from: day))")
                     .font(.kairoMono(15, selected || today ? .medium : .regular))
                     .foregroundStyle(selected ? KairoColor.onAccent : (today ? KairoColor.accentStrong : KairoColor.text))
                     .frame(width: 34, height: 34)
@@ -236,11 +246,11 @@ private struct DayCell: View {
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: selected) { _, new in new }
-        .accessibilityLabel("\(KairoDate.longDay(day))\(events.isEmpty ? "" : ", \(events.count) eventos")")
+        .accessibilityLabel(accessibilityText)
     }
 }
 
-/// Agenda por horas (iPad): bloques proporcionales a la duración.
+/// Hourly agenda (iPad): blocks proportional to the duration.
 private struct DayTimeline: View {
     @Environment(AppModel.self) private var model
     var events: [Event]
@@ -259,7 +269,7 @@ private struct DayTimeline: View {
                 VStack(spacing: 0) {
                     ForEach(firstHour..<24, id: \.self) { h in
                         HStack(alignment: .top, spacing: 8) {
-                            Text(String(format: "%02d:00", h)).font(.kMonoSmall).foregroundStyle(KairoColor.faint).frame(width: 44, alignment: .leading)
+                            Text(verbatim: hourLabel(h)).font(.kMonoSmall).foregroundStyle(KairoColor.faint).lineLimit(1).minimumScaleFactor(0.6).frame(width: 44, alignment: .leading)
                             Rectangle().fill(KairoColor.border).frame(height: 1).padding(.top, 7)
                         }
                         .frame(height: hourHeight, alignment: .top)
@@ -297,6 +307,12 @@ private struct DayTimeline: View {
                 }
             }
         }
+    }
+
+    /// "9 AM" or "09", following the locale's clock style.
+    private func hourLabel(_ h: Int) -> String {
+        let d = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: .now) ?? .now
+        return d.formatted(.dateTime.hour().locale(KairoLanguage.locale))
     }
 
     private func frame(_ e: Event, from firstHour: Int) -> (CGFloat, CGFloat) {
@@ -357,52 +373,52 @@ struct EventEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Título", text: $draft.title).font(.kairo(18, .medium))
-                    TextField("Lugar", text: $draft.location)
+                    TextField("Title", text: $draft.title).font(.kairo(18, .medium))
+                    TextField("Place", text: $draft.location)
                 }
                 if !draft.isRecurring {
                     Section {
-                        Toggle("Todo el día", isOn: $draft.allDay.animation(KairoMotion.base)).tint(KairoColor.accent)
-                        DatePicker("Empieza", selection: $draft.start, displayedComponents: draft.allDay ? .date : [.date, .hourAndMinute])
+                        Toggle("All day", isOn: $draft.allDay.animation(KairoMotion.base)).tint(KairoColor.accent)
+                        DatePicker("Starts", selection: $draft.start, displayedComponents: draft.allDay ? .date : [.date, .hourAndMinute])
                             .onChange(of: draft.start) { old, new in
                                 if draft.end <= new { draft.end = new.addingTimeInterval(max(1800, draft.end.timeIntervalSince(old))) }
                             }
                         if !draft.allDay {
-                            DatePicker("Termina", selection: $draft.end, in: draft.start..., displayedComponents: [.date, .hourAndMinute])
+                            DatePicker("Ends", selection: $draft.end, in: draft.start..., displayedComponents: [.date, .hourAndMinute])
                         }
-                        Picker("Aviso", selection: $draft.reminder) {
-                            Text("Sin aviso").tag(0)
-                            Text("5 min antes").tag(5)
-                            Text("15 min antes").tag(15)
-                            Text("30 min antes").tag(30)
-                            Text("1 hora antes").tag(60)
-                            Text("1 día antes").tag(1440)
+                        Picker("Alert", selection: $draft.reminder) {
+                            Text("No alert").tag(0)
+                            Text("5 min before").tag(5)
+                            Text("15 min before").tag(15)
+                            Text("30 min before").tag(30)
+                            Text("1 hour before").tag(60)
+                            Text("1 day before").tag(1440)
                         }
                     }
                 } else {
                     Section {
-                        Label("Es un evento que se repite: aquí puedes cambiar el título, el lugar y si es familiar.", systemImage: "repeat")
+                        Label("This is a recurring event: here you can change the title, the place and whether it is shared with the family.", systemImage: "repeat")
                             .font(.kFootnote).foregroundStyle(KairoColor.muted)
                     }
                 }
                 Section {
-                    TextField("Notas", text: $draft.description, axis: .vertical).lineLimit(2...6)
+                    TextField("Notes", text: $draft.description, axis: .vertical).lineLimit(2...6)
                 }
                 if model.hasFamily {
                     Section {
                         FamilyShareToggle(shared: $draft.shared, ownerId: draft.original?.ownerId)
                     } footer: {
-                        if draft.shared { Text("Aparece en el calendario de todos y les avisa si lo mueves o lo cancelas.") }
+                        if draft.shared { Text("It appears on everyone's calendar and notifies them if you move or cancel it.") }
                     }
                 }
                 if let e = draft.original {
                     if e.source == "google" {
-                        Section { Label("Sincronizado con Google Calendar", systemImage: "arrow.triangle.2.circlepath").font(.kFootnote).foregroundStyle(KairoColor.muted) }
+                        Section { Label("Synced with Google Calendar", systemImage: "arrow.triangle.2.circlepath").font(.kFootnote).foregroundStyle(KairoColor.muted) }
                     }
                     Section {
-                        Button("Eliminar evento", role: .destructive) {
+                        Button("Delete event", role: .destructive) {
                             Task {
-                                await attempt(model, "Evento eliminado. Puedes deshacerlo en Actividad.") { try await model.api.deleteEvent(e.id) }
+                                await attempt(model, "Event deleted. You can undo it in Activity.") { try await model.api.deleteEvent(e.id) }
                                 await onSaved()
                                 dismiss()
                             }
@@ -412,12 +428,12 @@ struct EventEditor: View {
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle(draft.original == nil ? (draft.shared ? "Evento familiar" : "Nuevo evento") : "Editar evento")
+            .navigationTitle(draft.original == nil ? (draft.shared ? "Family event" : "New event") : "Edit event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(draft.original == nil ? "Crear" : "Guardar") { Task { await save() } }
+                    Button(draft.original == nil ? "Create" : "Save") { Task { await save() } }
                         .disabled(busy || draft.title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
@@ -446,11 +462,11 @@ struct EventEditor: View {
         let isNew = draft.original == nil
         do {
             if let e = draft.original { _ = try await model.api.updateEvent(e.id, b) } else { _ = try await model.api.createEvent(b) }
-            model.show(Toast(title: isNew ? (draft.shared ? "Evento familiar creado" : "Evento creado") : "Evento guardado", symbol: "calendar"))
+            model.show(Toast(title: isNew ? (draft.shared ? String(localized: "Family event created") : String(localized: "Event created")) : String(localized: "Event saved"), symbol: "calendar"))
             await onSaved()
             dismiss()
         } catch {
-            model.show(Toast(title: "No se pudo guardar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't save"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 }

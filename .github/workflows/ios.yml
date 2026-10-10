@@ -16,28 +16,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lógica compartida (modelos, API, fechas, voz): también corre en Linux.
+  # Shared logic (models, API, dates, voice): it also runs on Linux.
   kairokit:
     runs-on: ubuntu-latest
     container: swift:6.3
     steps:
       - uses: actions/checkout@v4
-      - name: Pruebas de KairoCore
+      - name: KairoCore tests
         working-directory: ios/KairoKit
         run: swift test
 
-  # App de iPhone/iPad, widgets, Live Activities, compartir y Apple Watch (Xcode 27, SDK de iOS 27).
+  # iPhone/iPad app, widgets, Live Activities, share extension and Apple Watch (Xcode 27, iOS 27 SDK).
   xcode:
     runs-on: xcode-27
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - name: Versión de Xcode
+      - name: Xcode version
         run: |
           xcodebuild -version
           xcodebuild -showsdks | grep -Ei "ios|watch" || true
           defaults write com.apple.dt.Xcode IDEBuildingContinueBuildingAfterErrors -bool YES
-      - name: Apple Watch (simulador)
+      - name: Apple Watch (simulator)
         id: watch
         continue-on-error: true
         working-directory: ios
@@ -46,7 +46,7 @@ jobs:
           xcodebuild build -quiet -project Kairo.xcodeproj -scheme KairoWatch \
             -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-watch.log
-      - name: iPhone y iPad (simulador)
+      - name: iPhone and iPad (simulator)
         id: ios
         continue-on-error: true
         working-directory: ios
@@ -55,7 +55,7 @@ jobs:
           xcodebuild build -quiet -project Kairo.xcodeproj -scheme Kairo \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-ios.log
-      - name: Resumen de errores
+      - name: Error summary
         if: always()
         working-directory: ios
         run: |

@@ -3,45 +3,46 @@ import ActivityKit
 import Foundation
 import KairoCore
 
-/// Pregúntale algo a Kairo desde Siri o Atajos y escucha la respuesta sin abrir la app.
+/// Ask Kairo something from Siri or Shortcuts and hear the answer without opening the app.
 struct AskKairoIntent: AppIntent {
-    static let title: LocalizedStringResource = "Preguntarle a Kairo"
-    static let description = IntentDescription("Kairo responde y hace lo que le pidas: notas, tareas, recordatorios, tu agenda…")
+    static let title: LocalizedStringResource = "Ask Kairo"
+    static let description = IntentDescription("Kairo answers and does what you ask: notes, tasks, reminders, your calendar…")
 
-    @Parameter(title: "Pregunta", requestValueDialog: "¿Qué le digo a Kairo?")
+    @Parameter(title: "Question", requestValueDialog: "What should I tell Kairo?")
     var question: String
 
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
         guard await AppModel.shared.api.sessions.current() != nil else {
-            return .result(value: "", dialog: "Abre Kairo e inicia sesión primero.")
+            return .result(value: "", dialog: "Open Kairo and sign in first.")
         }
         let turn = try await AppModel.shared.api.ask(question, channel: "voice")
         await MainActor.run { for a in turn.actions { if let e = a.entity { AppModel.shared.bump(e.type) } } }
         let reply = (turn.spoken?.isEmpty == false ? turn.spoken : nil) ?? turn.text
-        return .result(value: turn.text, dialog: IntentDialog(stringLiteral: reply.isEmpty ? "Listo." : reply))
+        if reply.isEmpty { return .result(value: turn.text, dialog: "Done.") }
+        return .result(value: turn.text, dialog: IntentDialog(stringLiteral: reply))
     }
 }
 
-/// Frases de Siri y acciones del botón de Acción y de Atajos.
+/// Siri phrases and actions for the Action button and Shortcuts. Spanish phrases live in AppShortcuts.xcstrings.
 struct KairoShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: TalkToKairoIntent(),
-                    phrases: ["Habla con \(.applicationName)", "Hablar con \(.applicationName)", "Abre \(.applicationName) y escúchame"],
-                    shortTitle: "Hablar con Kairo", systemImageName: "waveform.circle")
+                    phrases: ["Talk to \(.applicationName)", "Chat with \(.applicationName)", "Open \(.applicationName) and listen to me"],
+                    shortTitle: "Talk to Kairo", systemImageName: "waveform.circle")
         AppShortcut(intent: AskKairoIntent(),
-                    phrases: ["Pregúntale a \(.applicationName)", "Dile a \(.applicationName)"],
-                    shortTitle: "Preguntar", systemImageName: "text.bubble")
+                    phrases: ["Ask \(.applicationName)", "Tell \(.applicationName)"],
+                    shortTitle: "Ask", systemImageName: "text.bubble")
         AppShortcut(intent: OpenKairoIntent(),
-                    phrases: ["Abre \(.applicationName) en \(\.$section)", "Mi día en \(.applicationName)"],
-                    shortTitle: "Abrir sección", systemImageName: "square.grid.2x2")
+                    phrases: ["Open \(.applicationName) on \(\.$section)", "My day in \(.applicationName)"],
+                    shortTitle: "Open section", systemImageName: "square.grid.2x2")
     }
 
     static let shortcutTileColor: ShortcutTileColor = .orange
 }
 
-/// Live Activity con la cuenta regresiva del próximo evento (cuando falta menos de 45 minutos).
+/// Live Activity with the countdown to the next event (when less than 45 minutes remain).
 @MainActor
 enum EventActivityController {
     static func refresh(_ snap: SharedSnapshot) {

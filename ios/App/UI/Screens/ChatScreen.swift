@@ -3,7 +3,7 @@ import PhotosUI
 import KairoCore
 import KairoUI
 
-/// Lo que se ve en la conversación: tus mensajes, las acciones de Kairo y sus respuestas.
+/// What shows in the conversation: your messages, Kairo's actions and its answers.
 struct ChatItem: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(String)
@@ -24,7 +24,7 @@ struct ChatItem: Identifiable, Equatable {
                 if let a = meta?["attachment"], case .object(let o) = a, let url = o["url"]?.string, let fid = o["id"]?.string {
                     return ChatItem(id: m.id, kind: .attachment(FileRef(id: fid, url: url, contentType: o["contentType"]?.string)))
                 }
-                let summary = meta?["summary"]?.string ?? m.toolName ?? "Listo"
+                let summary = meta?["summary"]?.string ?? m.toolName ?? String(localized: "Done")
                 return ChatItem(id: m.id, kind: .action(summary: summary, entityType: meta?["entity"]?["type"]?.string, ok: meta?["ok"]?.bool ?? true))
             default: return nil
             }
@@ -32,7 +32,7 @@ struct ChatItem: Identifiable, Equatable {
     }
 }
 
-/// Conversación por texto con Kairo (con historial). En pantallas anchas, el historial va al costado.
+/// Text conversation with Kairo (with history). On wide screens, the history goes on the side.
 struct ChatScreen: View {
     @Environment(AppModel.self) private var model
     @State private var conversations: [Conversation] = []
@@ -56,21 +56,21 @@ struct ChatScreen: View {
                 conversation
             }
         }
-        .navigationTitle(conversations.first(where: { $0.id == currentId })?.title ?? "Conversación")
+        .navigationTitle(conversations.first(where: { $0.id == currentId })?.title ?? String(localized: "Conversation"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { showHistory = true } label: { Label("Conversaciones", systemImage: "clock.arrow.circlepath") }
-                Button { newConversation() } label: { Label("Nueva conversación", systemImage: "square.and.pencil") }
+                Button { showHistory = true } label: { Label("Conversations", systemImage: "clock.arrow.circlepath") }
+                Button { newConversation() } label: { Label("New conversation", systemImage: "square.and.pencil") }
                     .keyboardShortcut("n", modifiers: .command)
             }
         }
         .sheet(isPresented: $showHistory) {
             NavigationStack {
                 history
-                    .navigationTitle("Conversaciones")
+                    .navigationTitle("Conversations")
                     .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showHistory = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { showHistory = false } } }
             }
             .presentationDetents([.medium, .large])
         }
@@ -79,19 +79,19 @@ struct ChatScreen: View {
         .kairoBackground()
     }
 
-    // MARK: Historial
+    // MARK: History
 
     private var history: some View {
         List {
             if conversations.isEmpty {
-                EmptyStateView(symbol: "bubble.left.and.text.bubble.right", title: "Sin conversaciones", message: "Lo que hables con Kairo aparece aquí.")
+                EmptyStateView(symbol: "bubble.left.and.text.bubble.right", title: "No conversations", message: "What you talk about with Kairo shows up here.")
                     .listRowBackground(Color.clear)
             }
             ForEach(conversations) { c in
                 Button { Task { await open(c.id) } } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(c.title.isEmpty ? "Conversación" : c.title).font(.kairo(15, .medium)).foregroundStyle(KairoColor.text).lineLimit(1)
+                            Text(c.title.isEmpty ? String(localized: "Conversation") : c.title).font(.kairo(15, .medium)).foregroundStyle(KairoColor.text).lineLimit(1)
                             Spacer()
                             if let d = KairoDate.parse(c.updatedAt) { Text(KairoDate.relative(d)).font(.kMonoSmall).foregroundStyle(KairoColor.faint) }
                         }
@@ -102,7 +102,7 @@ struct ChatScreen: View {
                 .buttonStyle(.plain)
                 .listRowBackground(c.id == currentId ? KairoColor.accent.opacity(0.12) : KairoColor.surface)
                 .swipeActions {
-                    Button(role: .destructive) { Task { await delete(c) } } label: { Label("Borrar conversación", systemImage: "trash") }
+                    Button(role: .destructive) { Task { await delete(c) } } label: { Label("Delete conversation", systemImage: "trash") }
                 }
             }
         }
@@ -139,7 +139,7 @@ struct ChatScreen: View {
         focused = true
     }
 
-    // MARK: Conversación
+    // MARK: Conversation
 
     private var conversation: some View {
         ScrollViewReader { proxy in
@@ -148,8 +148,8 @@ struct ChatScreen: View {
                     if items.isEmpty && !sending && !loadingHistory {
                         VStack(spacing: 14) {
                             KairoOrb(state: .idle).frame(width: 88, height: 88)
-                            Text("¿En qué te ayudo?").font(.kTitle2)
-                            Text("Notas, tareas, recordatorios, tu agenda o una pregunta.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                            Text("How can I help?").font(.kTitle2)
+                            Text("Notes, tasks, reminders, your calendar or a question.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
                             SuggestionChips { t in text = t; send() }
                         }
                         .frame(maxWidth: .infinity)
@@ -214,7 +214,7 @@ struct ChatScreen: View {
                 if sending && live.working == nil {
                     HStack(spacing: 8) {
                         KairoOrb(state: .thinking).frame(width: 22, height: 22)
-                        Text("Pensando").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                        Text("Thinking").font(.kSubheadline).foregroundStyle(KairoColor.muted)
                     }
                 }
             } else {
@@ -234,9 +234,9 @@ struct ChatScreen: View {
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
-            .accessibilityLabel("Imagen")
+            .accessibilityLabel("Image")
             .disabled(sending)
-            TextField("Escribe a Kairo", text: $text, axis: .vertical)
+            TextField("Type to Kairo", text: $text, axis: .vertical)
                 .font(.kBody)
                 .lineLimit(1...6)
                 .focused($focused)
@@ -257,7 +257,7 @@ struct ChatScreen: View {
             .foregroundStyle(KairoColor.onAccent)
             .background(KairoColor.accent, in: Circle())
             .disabled(sending)
-            .accessibilityLabel(text.isEmpty ? "Hablar" : "Enviar")
+            .accessibilityLabel(text.isEmpty ? "Talk" : "Send")
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
@@ -265,7 +265,7 @@ struct ChatScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: Enviar
+    // MARK: Send
 
     private func send() {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -280,12 +280,12 @@ struct ChatScreen: View {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
         let caption = text.trimmingCharacters(in: .whitespacesAndNewlines)
         text = ""
-        withAnimation(KairoMotion.spring) { items.append(ChatItem(id: UUID().uuidString, kind: .user(caption.isEmpty ? "Imagen" : "Imagen: \(caption)"))) }
+        withAnimation(KairoMotion.spring) { items.append(ChatItem(id: UUID().uuidString, kind: .user(caption.isEmpty ? String(localized: "Image") : String(localized: "Image: \(caption)")))) }
         let image = Self.jpeg(data) ?? data
-        stream(model.api.capture(text: caption.isEmpty ? nil : caption, url: nil, image: KairoAPI.FilePart(filename: "foto.jpg", mime: "image/jpeg", data: image)))
+        stream(model.api.capture(text: caption.isEmpty ? nil : caption, url: nil, image: KairoAPI.FilePart(filename: "photo.jpg", mime: "image/jpeg", data: image)))
     }
 
-    /// Reduce la foto antes de subirla (máximo 2048 px).
+    /// Shrinks the photo before uploading it (2048 px at most).
     private static func jpeg(_ data: Data) -> Data? {
         guard let img = UIImage(data: data) else { return nil }
         let maxSide: CGFloat = 2048

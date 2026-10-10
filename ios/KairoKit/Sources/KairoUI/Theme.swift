@@ -4,7 +4,7 @@ import CoreText
 import UIKit
 #endif
 
-/// Colores de Kairo (design/DESIGN.md): neutros fríos y un solo acento ámbar.
+/// Kairo colors (design/DESIGN.md): cool neutrals and a single amber accent.
 public enum KairoColor {
     public static let bg = dynamic(light: 0xF3F4F5, dark: 0x0E1013)
     public static let surface = dynamic(light: 0xFCFCFD, dark: 0x15181C)
@@ -14,12 +14,12 @@ public enum KairoColor {
     public static let muted = dynamic(light: 0x5B616A, dark: 0x9BA1A9)
     public static let faint = dynamic(light: 0x858B94, dark: 0x6B717A)
     public static let accent = dynamic(light: 0xE0901F, dark: 0xF0A23B)
-    /// Ámbar como texto o enlace (contraste AA en ambos modos).
+    /// Amber as text or link (AA contrast in both modes).
     public static let accentStrong = dynamic(light: 0x8F5300, dark: 0xF5B65E)
     public static let onAccent = Color(hex: 0x1A1206)
     public static let danger = dynamic(light: 0xC2412F, dark: 0xF0705F)
     public static let success = dynamic(light: 0x2E8A57, dark: 0x5BC48A)
-    /// Anillo del orbe (color hueso).
+    /// Orb ring (bone color).
     public static let orbRing = dynamic(light: 0x2A2E34, dark: 0xE9E4DA)
 
     static func dynamic(light: UInt32, dark: UInt32) -> Color {
@@ -47,25 +47,25 @@ extension UIColor {
 }
 #endif
 
-/// Radios (regla única del producto): controles 10, tarjetas 16, píldoras.
+/// Corner radii (single product rule): controls 10, cards 16, pills.
 public enum KairoRadius {
     public static let control: CGFloat = 10
     public static let card: CGFloat = 16
 }
 
-/// Movimiento: la curva base de Kairo y resortes moderados.
+/// Motion: Kairo's base curve and moderate springs.
 public enum KairoMotion {
     public static let base = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.28)
     public static let spring = Animation.spring(response: 0.42, dampingFraction: 0.82)
     public static let snappy = Animation.snappy(duration: 0.24)
 }
 
-// MARK: - Tipografía (Geist y Geist Mono empaquetadas)
+// MARK: - Typography (bundled Geist and Geist Mono)
 
 public enum KairoFonts {
     nonisolated(unsafe) private static var registered = false
 
-    /// Registra las fuentes del paquete. Llamar una vez al iniciar la app, los widgets o el reloj.
+    /// Registers the package fonts. Call once when the app, the widgets or the watch start.
     public static func register() {
         guard !registered else { return }
         registered = true
@@ -78,7 +78,7 @@ public enum KairoFonts {
 }
 
 public extension Font {
-    /// Geist con Dynamic Type: se escala con el tamaño de texto del sistema.
+    /// Geist with Dynamic Type: scales with the system text size.
     static func kairo(_ size: CGFloat, _ weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
         let name = switch weight {
         case .bold, .heavy, .black: "Geist-Bold"
@@ -89,7 +89,7 @@ public extension Font {
         return .custom(name, size: size, relativeTo: style)
     }
 
-    /// Geist Mono para horas, fechas y números.
+    /// Geist Mono for times, dates and numbers.
     static func kairoMono(_ size: CGFloat, _ weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
         .custom(weight == .regular ? "GeistMono-Regular" : "GeistMono-Medium", size: size, relativeTo: style)
     }
