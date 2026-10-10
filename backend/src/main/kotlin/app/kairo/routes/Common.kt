@@ -39,6 +39,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import java.time.Instant
 import java.util.UUID
+import io.ktor.server.plugins.ratelimit.RateLimitName
+import io.ktor.server.plugins.ratelimit.rateLimit
+import io.ktor.server.plugins.origin
+import io.ktor.server.routing.Route
+import app.kairo.auth.rateLimitKey
 
 class ApiException(val status: HttpStatusCode, override val message: String) : RuntimeException(message)
 
@@ -63,6 +68,19 @@ fun ApplicationCall.userId(): UUID = principal<JWTPrincipal>()?.subject?.let(UUI
     ?: throw ApiException(HttpStatusCode.Unauthorized, "No autenticado")
 
 fun ApplicationCall.deviceId(): UUID? = principal<JWTPrincipal>()?.getClaim("did", String::class)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+
+val IA_LIMIT = RateLimitName("ia")
+val IA_HOURLY_LIMIT = RateLimitName("ia-hora")
+val RECORDING_LIMIT = RateLimitName("grabacion")
+
+/** Clave de los límites por persona: el usuario del token, o la IP si la ruta no tiene sesión. */
+fun userLimitKey(call: ApplicationCall): String =
+    call.principal<JWTPrincipal>()?.subject?.let { "u:$it" } ?: ("ip:" + rateLimitKey(call.request.origin.remoteAddress))
+
+/** Rutas que llaman a Nan: tope por minuto y por hora para cada persona. */
+fun Route.iaLimited(build: Route.() -> Unit) {
+    rateLimit(IA_LIMIT) { rateLimit(IA_HOURLY_LIMIT) { build() } }
+}
 
 fun ApplicationCall.uuidParam(name: String = "id"): UUID =
     parameters[name]?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: badRequest("Id inválido")
@@ -131,6 +149,21 @@ fun publicMessage(e: IllegalArgumentException): String? {
     val msg = e.message?.takeIf { it.isNotBlank() } ?: return null
     val origin = e.stackTrace.firstOrNull()?.className ?: return null
     return if (origin.startsWith("app.kairo.")) msg.take(300) else null
+}
+
+/**
+ * Mensaje de un error cualquiera para el cliente: el de un `require`/`error` de Kairo si lo es, si no [fallback].
+ * Los fallos de red, base de datos o librerías nunca salen con su texto (se quedan en el log).
+ */
+fun publicMessage(e: Throwable, fallback: String): String {
+    val own = when (e) {
+        is IllegalArgumentException -> publicMessage(e)
+        is IllegalStateException -> e.message?.takeIf {
+            it.isNotBlank() && e.stackTrace.firstOrNull()?.className?.startsWith("app.kairo.") == true
+        }?.take(300)
+        else -> null
+    }
+    return own ?: fallback
 }
 
 /** Imágenes que se aceptan al subir y se muestran en línea. */

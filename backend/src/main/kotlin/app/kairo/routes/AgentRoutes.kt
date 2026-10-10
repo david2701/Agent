@@ -92,85 +92,87 @@ private val CHANNELS = setOf("chat", "voice", "wear", "dashboard", "share")
 
 fun Route.agentRoutes(s: Services) {
 
-    post("/chat") {
-        val b = call.receiveBody<ChatRequest>()
-        if (b.message.isBlank()) badRequest("Mensaje vacío")
-        val user = s.users.byId(call.userId())!!
-        call.streamAgent(
-            s.agent.run(
-                AgentRequest(
-                    user = user, text = b.message.take(8000), conversationId = b.conversationId,
-                    channel = b.channel.takeIf { it in CHANNELS } ?: "chat",
-                    location = call.clientLocation(), capabilities = call.clientCapabilities(),
+    iaLimited {
+        post("/chat") {
+            val b = call.receiveBody<ChatRequest>()
+            if (b.message.isBlank()) badRequest("Mensaje vacío")
+            val user = s.users.byId(call.userId())!!
+            call.streamAgent(
+                s.agent.run(
+                    AgentRequest(
+                        user = user, text = b.message.take(8000), conversationId = b.conversationId,
+                        channel = b.channel.takeIf { it in CHANNELS } ?: "chat",
+                        location = call.clientLocation(), capabilities = call.clientCapabilities(),
+                    ),
                 ),
-            ),
-        )
-    }
-
-    // ------------------------------------------------------------ Voz
-    post("/voice/transcribe") {
-        val up = call.receiveUpload()
-        val audio = up.file ?: badRequest("Falta el archivo de audio")
-        val t = s.voice.transcribe(call.userId(), audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4")
-        call.respond(TranscriptionResponse(if (s.voice.isNoise(t.text)) "" else t.text, t.language, t.durationSeconds))
-    }
-
-    /** Turno de voz completo: audio -> Whisper -> agente (SSE). El cliente pide luego /voice/speak con el texto. */
-    post("/voice/turn") {
-        val up = call.receiveUpload()
-        val audio = up.file ?: badRequest("Falta el archivo de audio")
-        val userId = call.userId()
-        val user = s.users.byId(userId)!!
-        val conversationId = up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-        val channel = up.fields["channel"]?.takeIf { it in CHANNELS } ?: "voice"
-        val location = call.clientLocation()
-        val caps = call.clientCapabilities()
-        call.streamAgent(flow {
-            val t = runCatching { s.voice.transcribe(userId, audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4") }.getOrElse {
-                // El detalle (respuesta de Nan) sólo va al log; al cliente, un mensaje genérico
-                org.slf4j.LoggerFactory.getLogger("app.kairo.routes.AgentRoutes")
-                    .warn("Transcripción fallida: {}", app.kairo.util.logSafe(it.message ?: it.javaClass.simpleName))
-                emit(AgentEvent.Error("No pude transcribir el audio. Intenta de nuevo."))
-                return@flow
-            }
-            if (s.voice.isNoise(t.text)) {
-                emit(AgentEvent.Error("No te escuché bien. ¿Puedes repetirlo?"))
-                return@flow
-            }
-            emit(AgentEvent.Transcript(t.text))
-            s.agent.run(AgentRequest(user, t.text, conversationId, channel, location, caps)).collect { emit(it) }
-        })
-    }
-
-    post("/voice/speak") {
-        val b = call.receiveBody<SpeakRequest>()
-        val audio = s.voice.speak(call.userId(), b.text, b.voice, b.speed)
-        call.respondBytes(audio, ContentType("audio", "mpeg"))
-    }
-
-    get("/voice/voices") { call.respond(VoicesResponse(SettingsService.VOICES)) }
-
-    // ------------------------------------------------------------ Compartir con Kairo
-    post("/capture") {
-        val user = s.users.byId(call.userId())!!
-        val isMultipart = call.request.contentType().match(ContentType.MultiPart.FormData)
-        val (text, url, image, type, conv) = if (isMultipart) {
-            val up = call.receiveUpload(20L * 1024 * 1024)
-            if (up.file != null && up.contentType?.startsWith("image/") != true) badRequest("Solo se aceptan imágenes")
-            CaptureInput(up.fields["text"], up.fields["url"], up.file, up.contentType, up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() })
-        } else {
-            val b = call.receiveBody<CaptureJson>()
-            CaptureInput(b.text, b.url, null, null, b.conversationId)
+            )
         }
-        if (text.isNullOrBlank() && url.isNullOrBlank() && image == null) badRequest("No hay nada que guardar")
-        // Si el "texto" es solo un enlace, trátalo como enlace
-        val linkInText = text?.trim()?.takeIf { url == null && Regex("^https?://\\S+$").matches(it) }
-        call.streamAgent(
-            s.capture.capture(
-                user, if (linkInText != null) null else text, linkInText ?: url, image, type, conv,
-                call.clientLocation(), call.clientCapabilities(),
-            ),
-        )
+
+        // ------------------------------------------------------------ Voz
+        post("/voice/transcribe") {
+            val up = call.receiveUpload()
+            val audio = up.file ?: badRequest("Falta el archivo de audio")
+            val t = s.voice.transcribe(call.userId(), audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4")
+            call.respond(TranscriptionResponse(if (s.voice.isNoise(t.text)) "" else t.text, t.language, t.durationSeconds))
+        }
+
+        /** Turno de voz completo: audio -> Whisper -> agente (SSE). El cliente pide luego /voice/speak con el texto. */
+        post("/voice/turn") {
+            val up = call.receiveUpload()
+            val audio = up.file ?: badRequest("Falta el archivo de audio")
+            val userId = call.userId()
+            val user = s.users.byId(userId)!!
+            val conversationId = up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+            val channel = up.fields["channel"]?.takeIf { it in CHANNELS } ?: "voice"
+            val location = call.clientLocation()
+            val caps = call.clientCapabilities()
+            call.streamAgent(flow {
+                val t = runCatching { s.voice.transcribe(userId, audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4") }.getOrElse {
+                    // El detalle (respuesta de Nan) sólo va al log; al cliente, un mensaje genérico
+                    org.slf4j.LoggerFactory.getLogger("app.kairo.routes.AgentRoutes")
+                        .warn("Transcripción fallida: {}", app.kairo.util.logSafe(it.message ?: it.javaClass.simpleName))
+                    emit(AgentEvent.Error("No pude transcribir el audio. Intenta de nuevo."))
+                    return@flow
+                }
+                if (s.voice.isNoise(t.text)) {
+                    emit(AgentEvent.Error("No te escuché bien. ¿Puedes repetirlo?"))
+                    return@flow
+                }
+                emit(AgentEvent.Transcript(t.text))
+                s.agent.run(AgentRequest(user, t.text, conversationId, channel, location, caps)).collect { emit(it) }
+            })
+        }
+
+        post("/voice/speak") {
+            val b = call.receiveBody<SpeakRequest>()
+            val audio = s.voice.speak(call.userId(), b.text, b.voice, b.speed)
+            call.respondBytes(audio, ContentType("audio", "mpeg"))
+        }
+
+        get("/voice/voices") { call.respond(VoicesResponse(SettingsService.VOICES)) }
+
+        // ------------------------------------------------------------ Compartir con Kairo
+        post("/capture") {
+            val user = s.users.byId(call.userId())!!
+            val isMultipart = call.request.contentType().match(ContentType.MultiPart.FormData)
+            val (text, url, image, type, conv) = if (isMultipart) {
+                val up = call.receiveUpload(20L * 1024 * 1024)
+                if (up.file != null && up.contentType?.startsWith("image/") != true) badRequest("Solo se aceptan imágenes")
+                CaptureInput(up.fields["text"], up.fields["url"], up.file, up.contentType, up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() })
+            } else {
+                val b = call.receiveBody<CaptureJson>()
+                CaptureInput(b.text, b.url, null, null, b.conversationId)
+            }
+            if (text.isNullOrBlank() && url.isNullOrBlank() && image == null) badRequest("No hay nada que guardar")
+            // Si el "texto" es solo un enlace, trátalo como enlace
+            val linkInText = text?.trim()?.takeIf { url == null && Regex("^https?://\\S+$").matches(it) }
+            call.streamAgent(
+                s.capture.capture(
+                    user, if (linkInText != null) null else text, linkInText ?: url, image, type, conv,
+                    call.clientLocation(), call.clientCapabilities(),
+                ),
+            )
+        }
     }
 
     // ------------------------------------------------------------ Conversaciones
@@ -191,9 +193,11 @@ fun Route.agentRoutes(s: Services) {
         val date = call.request.queryParameters["date"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
         call.respond(s.briefing.today(user, date))
     }
-    post("/briefing") {
-        val user = s.users.byId(call.userId())!!
-        call.respond(BriefingResponse(s.briefing.generate(user)))
+    iaLimited {
+        post("/briefing") {
+            val user = s.users.byId(call.userId())!!
+            call.respond(BriefingResponse(s.briefing.generate(user)))
+        }
     }
 }
 

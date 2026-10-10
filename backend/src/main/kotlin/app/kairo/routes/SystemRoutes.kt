@@ -52,6 +52,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import java.time.Instant
 import java.util.UUID
+import io.ktor.server.plugins.ratelimit.rateLimit
 
 @Serializable data class RecordingCreate(val title: String = "")
 @Serializable data class RecordingFinish(val title: String? = null)
@@ -140,24 +141,28 @@ fun Route.systemRoutes(s: Services) {
             call.respond(HttpStatusCode.Created, s.recordingsRepo.create(call.userId(), b.title, if (call.request.headers["X-Kairo-Client"]?.lowercase() in setOf("android", "wear", "ios", "watch")) "app" else "dashboard"))
         }
         get("/{id}") { call.respond(s.recordingsRepo.get(call.userId(), call.uuidParam()) ?: notFound("Grabación")) }
-        post("/{id}/segments") {
-            val up = call.receiveUpload()
-            val audio = up.file ?: badRequest("Falta el audio")
-            val seq = up.fields["seq"]?.toIntOrNull() ?: badRequest("Falta seq")
-            val user = s.users.byId(call.userId())!!
-            call.respond(s.recordings.addSegment(user, call.uuidParam(), seq, up.fields["duration"]?.toIntOrNull() ?: 0, audio, up.fileName ?: "seg.m4a", up.contentType ?: "audio/mp4"))
+        rateLimit(RECORDING_LIMIT) {
+            post("/{id}/segments") {
+                val up = call.receiveUpload()
+                val audio = up.file ?: badRequest("Falta el audio")
+                val seq = up.fields["seq"]?.toIntOrNull() ?: badRequest("Falta seq")
+                val user = s.users.byId(call.userId())!!
+                call.respond(s.recordings.addSegment(user, call.uuidParam(), seq, up.fields["duration"]?.toIntOrNull() ?: 0, audio, up.fileName ?: "seg.m4a", up.contentType ?: "audio/mp4"))
+            }
         }
-        post("/{id}/finish") {
-            val b = runCatching { call.receiveBody<RecordingFinish>() }.getOrDefault(RecordingFinish())
-            val user = s.users.byId(call.userId())!!
-            val id = call.uuidParam()
-            s.recordingsRepo.get(user.id, id) ?: notFound("Grabación")
-            s.recordings.finish(user, id, b.title)
-            call.respond(HttpStatusCode.Accepted, OkResponse())
-        }
-        post("/{id}/tasks") {
-            val user = s.users.byId(call.userId())!!
-            call.respond(CreatedCount(s.recordings.createTasks(user, call.uuidParam())))
+        iaLimited {
+            post("/{id}/finish") {
+                val b = runCatching { call.receiveBody<RecordingFinish>() }.getOrDefault(RecordingFinish())
+                val user = s.users.byId(call.userId())!!
+                val id = call.uuidParam()
+                s.recordingsRepo.get(user.id, id) ?: notFound("Grabación")
+                s.recordings.finish(user, id, b.title)
+                call.respond(HttpStatusCode.Accepted, OkResponse())
+            }
+            post("/{id}/tasks") {
+                val user = s.users.byId(call.userId())!!
+                call.respond(CreatedCount(s.recordings.createTasks(user, call.uuidParam())))
+            }
         }
         delete("/{id}") { if (!s.recordingsRepo.delete(call.userId(), call.uuidParam())) notFound("Grabación"); call.respond(OkResponse()) }
     }
@@ -166,7 +171,7 @@ fun Route.systemRoutes(s: Services) {
     get("/settings") { call.respond(SettingsResponse(s.settings.get(call.userId()), s.config.googleEnabled, s.ntfy.enabled)) }
     patch("/settings") {
         val patch = call.receiveJsonObject()
-        val updated = runCatching { s.settings.patch(call.userId(), patch) { s.nan.models() } }.getOrElse { badRequest("Ajustes inválidos: ${it.message?.take(120)}") }
+        val updated = runCatching { s.settings.patch(call.userId(), patch) { s.nan.models() } }.getOrElse { badRequest(publicMessage(it, "Ajustes inválidos")) }
         call.respond(SettingsResponse(updated, s.config.googleEnabled, s.ntfy.enabled))
     }
     get("/geocode") {
@@ -212,7 +217,7 @@ fun Route.systemRoutes(s: Services) {
             call.respond(GoogleAuthUrl(s.google.authUrl(call.userId(), nonce)))
         }
         post("/sync") {
-            val r = runCatching { s.google.sync(call.userId()) }.getOrElse { badRequest(it.message ?: "Fallo de sincronización") }
+            val r = runCatching { s.google.sync(call.userId()) }.getOrElse { badRequest(publicMessage(it, "No se pudo sincronizar con Google. Intenta de nuevo.")) }
             call.respond(SyncResult(r.pushed, r.pulled, r.deleted))
         }
         get("/calendars") { call.respond<List<GoogleCalendarInfo>>(s.google.calendars(call.userId())) }
@@ -240,7 +245,7 @@ fun Route.systemRoutes(s: Services) {
             val server = try {
                 s.mcp.create(call.userId(), b.name, b.url, b.headers)
             } catch (e: IllegalArgumentException) {
-                badRequest(e.message ?: "Datos inválidos")
+                badRequest(publicMessage(e, "Datos inválidos"))
             }
             call.respond(HttpStatusCode.Created, server)
         }

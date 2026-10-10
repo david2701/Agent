@@ -6,6 +6,10 @@ import app.kairo.config.AppConfig
 import app.kairo.db.Db
 import app.kairo.nan.NanClient
 import app.kairo.nan.NanException
+import app.kairo.routes.IA_LIMIT
+import app.kairo.routes.IA_HOURLY_LIMIT
+import app.kairo.routes.RECORDING_LIMIT
+import app.kairo.routes.userLimitKey
 import app.kairo.routes.ApiError
 import app.kairo.routes.ApiException
 import app.kairo.routes.agentRoutes
@@ -129,6 +133,20 @@ fun Application.kairoModule(s: Services) {
             rateLimiter(limit = 60, refillPeriod = 1.minutes)
             requestKey { call -> rateLimitKey(call.request.origin.remoteAddress) }
         }
+        // Por persona (no por IP: la familia sale por la misma): tope a lo que gasta en Nan una cuenta
+        // o un token robado. Una persona hablando sin parar no llega a 20 turnos por minuto.
+        register(IA_LIMIT) {
+            rateLimiter(limit = 20, refillPeriod = 1.minutes)
+            requestKey { call -> userLimitKey(call) }
+        }
+        register(IA_HOURLY_LIMIT) {
+            rateLimiter(limit = 300, refillPeriod = 60.minutes)
+            requestKey { call -> userLimitKey(call) }
+        }
+        register(RECORDING_LIMIT) {
+            rateLimiter(limit = 30, refillPeriod = 1.minutes)
+            requestKey { call -> userLimitKey(call) }
+        }
     }
     install(StatusPages) {
         exception<ApiException> { call, e -> call.respond(e.status, ApiError(e.message)) }
@@ -139,6 +157,9 @@ fun Application.kairoModule(s: Services) {
         // Los mensajes de validación propios se muestran; los de librerías (parser, UUID, números) no
         exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiError(publicMessage(e) ?: "Solicitud inválida")) }
         exception<app.kairo.domain.FamilyException> { call, e -> call.respond(HttpStatusCode.fromValue(e.status), ApiError(e.message ?: "No permitido")) }
+        status(HttpStatusCode.TooManyRequests) { call, code ->
+            call.respond(code, ApiError("Demasiadas peticiones seguidas. Espera un momento e intenta de nuevo."))
+        }
         exception<Throwable> { call, e ->
             log.error("Error no controlado en {}", call.request.path(), e)
             call.respond(HttpStatusCode.InternalServerError, ApiError("Error interno del servidor"))

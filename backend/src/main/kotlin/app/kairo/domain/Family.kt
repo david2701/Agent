@@ -116,7 +116,7 @@ class FamilyRepo(private val db: Db) {
 
     suspend fun rename(userId: UUID, name: String): Household {
         requireAdmin(userId)
-        val clean = name.trim().take(60).ifEmpty { throw FamilyException("El nombre no puede estar vacío") }
+        val clean = Text.cleanName(name, 60).ifEmpty { throw FamilyException("El nombre no puede estar vacío") }
         db.tx { exec("update households set name = ? where id = $HOUSEHOLD_OF", clean, userId) }
         return household(userId)
     }
@@ -144,7 +144,7 @@ class FamilyRepo(private val db: Db) {
             one(
                 """insert into invitations(household_id, code_hash, name, role, target_user_id, created_by, expires_at)
                    values (?, ?, ?, ?, ?, ?, ?) returning *""",
-                hh, Crypto.sha256(normalizeCode(code)), name.trim().take(60), if (role == "admin") "admin" else "member",
+                hh, Crypto.sha256(normalizeCode(code)), Text.cleanName(name, 60), if (role == "admin") "admin" else "member",
                 targetUserId, actorId, Instant.now().plusSeconds(ttl),
             ) { mapInvite(it) }!!
         }

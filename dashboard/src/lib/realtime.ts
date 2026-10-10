@@ -244,8 +244,10 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigat
           /* mensaje desconocido */
         }
       }
-      sock.onclose = () => {
+      sock.onclose = (ev) => {
         if (ws === sock) ws = null
+        // 1008: el servidor cerró porque venció el token; el siguiente intento lo renueva primero
+        if (ev.code === 1008) opened = false
         schedule()
       }
     }

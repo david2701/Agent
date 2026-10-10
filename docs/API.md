@@ -7,6 +7,9 @@ fechas en `YYYY-MM-DD`. Los campos nulos se envían como `null`. Errores: `{"err
   siempre, también cuando el cuerpo es `{}` y el refresh token va en la cookie.
 - Tamaño máximo: 16 KB en `/auth/*` y `PATCH /me`, 1 MB en el resto de cuerpos JSON, 30 MB por subida
   multipart (20 MB en `/capture`, 16 partes como mucho). Más grande: 413.
+- Límites por persona (429 con `Retry-After`): las rutas que usan la IA (`/chat`, `/voice/*`, `/capture`,
+  `/briefing`, terminar una grabación y sacar sus tareas) admiten 20 peticiones por minuto y 300 por hora;
+  los segmentos de grabación, 30 por minuto. Los de `/auth/*` son por IP.
 
 ## Autenticación
 

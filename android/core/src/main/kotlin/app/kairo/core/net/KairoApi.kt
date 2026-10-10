@@ -72,6 +72,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
 class ApiException(val status: Int, override val message: String) : RuntimeException(message)
@@ -470,7 +473,9 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         var backoff = 2_000L
         while (true) {
             try {
-                if (session.accessToken == null) refresh()
+                // El servidor cierra el socket cuando vence el token y rechaza el handshake con uno vencido:
+                // se renueva antes de conectar en vez de esperar un 401 (que en el handshake no llega como ApiException)
+                if (session.accessToken?.let { expiresSoon(it) } != false) refresh()
                 val token = session.accessToken ?: throw ApiException(401, "Sin sesión")
                 val wsUrl = base().replaceFirst("http", "ws") + "/api/ws?access_token=" + token.encodeURLParameter()
                 http.webSocket(wsUrl) {
@@ -493,6 +498,16 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     }
 
     companion object {
+        /** true si al JWT le queda menos de un minuto, o si no se puede leer su `exp`. */
+        fun expiresSoon(token: String, nowSeconds: Long = System.currentTimeMillis() / 1000): Boolean {
+            val payload = token.split('.').getOrNull(1) ?: return true
+            val exp = runCatching {
+                val claims = Json.parseToJsonElement(String(java.util.Base64.getUrlDecoder().decode(payload), Charsets.UTF_8))
+                claims.jsonObject["exp"]?.jsonPrimitive?.long
+            }.getOrNull() ?: return true
+            return exp - nowSeconds < 60
+        }
+
         fun normalizeServer(raw: String): String {
             var s = raw.trim().trimEnd('/')
             if (!s.startsWith("http://") && !s.startsWith("https://")) s = "https://$s"

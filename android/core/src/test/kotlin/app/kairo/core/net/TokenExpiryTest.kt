@@ -1,0 +1,30 @@
+package app.kairo.core.net
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.util.Base64
+
+class TokenExpiryTest {
+    private fun jwt(payload: String): String {
+        val enc = Base64.getUrlEncoder().withoutPadding()
+        return enc.encodeToString("""{"alg":"HS256"}""".toByteArray()) + "." + enc.encodeToString(payload.toByteArray()) + ".firma"
+    }
+
+    @Test
+    fun `token vigente no se renueva`() {
+        assertFalse(KairoApi.expiresSoon(jwt("""{"sub":"u","exp":2000}"""), nowSeconds = 1000))
+    }
+
+    @Test
+    fun `token por vencer o vencido se renueva`() {
+        assertTrue(KairoApi.expiresSoon(jwt("""{"sub":"u","exp":1030}"""), nowSeconds = 1000))
+        assertTrue(KairoApi.expiresSoon(jwt("""{"sub":"u","exp":900}"""), nowSeconds = 1000))
+    }
+
+    @Test
+    fun `token ilegible se renueva`() {
+        assertTrue(KairoApi.expiresSoon("no-es-un-jwt"))
+        assertTrue(KairoApi.expiresSoon(jwt("""{"sub":"u"}""")))
+    }
+}

@@ -135,7 +135,7 @@ fun Route.familyRoutes(s: Services) {
         post("/register") {
             val b = call.receiveBody<PushRegister>()
             runCatching { s.push.register(call.userId(), call.deviceId(), b.endpoint, b.p256dh, b.auth) }
-                .getOrElse { badRequest(it.message ?: "Datos de push inválidos") }
+                .getOrElse { badRequest(publicMessage(it, "Datos de push inválidos")) }
             call.respond(PushConfig(s.push.vapidPublicKey(), s.push.registeredDevices(call.userId())))
         }
         delete("/register") {
@@ -172,7 +172,7 @@ fun Route.familyRoutes(s: Services) {
                 try {
                     s.apns.register(call.userId(), call.deviceId(), b.token, b.environment, b.kind, b.activityId)
                 } catch (e: IllegalArgumentException) {
-                    badRequest(e.message ?: "Datos de APNs inválidos")
+                    badRequest(publicMessage(e, "Datos de APNs inválidos"))
                 }
                 call.respond(ApnsStatus(s.apns.available, s.apns.registeredDevices(call.userId())))
             }
