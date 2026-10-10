@@ -1,6 +1,7 @@
 package app.kairo
 
 import app.kairo.auth.AuthService
+import app.kairo.auth.rateLimitKey
 import app.kairo.config.AppConfig
 import app.kairo.db.Db
 import app.kairo.nan.NanClient
@@ -11,6 +12,7 @@ import app.kairo.routes.agentRoutes
 import app.kairo.routes.authRoutes
 import app.kairo.routes.dataRoutes
 import app.kairo.routes.familyRoutes
+import app.kairo.routes.publicMessage
 import app.kairo.routes.publicRoutes
 import app.kairo.routes.systemRoutes
 import app.kairo.util.ApiJson
@@ -58,6 +60,9 @@ import kotlin.time.Duration.Companion.seconds
 
 private val log = LoggerFactory.getLogger("app.kairo")
 
+/** Única ruta que acepta el access token en la URL (?access_token=). */
+const val WS_PATH = "/api/ws"
+
 fun main() {
     val cfg = AppConfig.fromEnv()
     val db = Db.connect(cfg.dbUrl, cfg.dbUser, cfg.dbPassword)
@@ -72,8 +77,11 @@ fun main() {
 fun Application.kairoModule(s: Services) {
     monitor.subscribe(ApplicationStopped) { s.close() }
 
-    install(XForwardedHeaders)
+    // Detrás de Caddy: la IP del cliente es la que añadió el último proxy. La primera de X-Forwarded-For
+    // la escribe el propio cliente, así que con ella cualquiera podría saltarse el límite de intentos.
+    install(XForwardedHeaders) { useLastProxy() }
     install(DefaultHeaders) {
+        if (s.config.publicUrl.startsWith("https://")) header("Strict-Transport-Security", "max-age=31536000")
         header("X-Content-Type-Options", "nosniff")
         header("X-Frame-Options", "DENY")
         header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -112,13 +120,14 @@ fun Application.kairoModule(s: Services) {
         }
     }
     install(RateLimit) {
+        // Por IP (IPv4) o por prefijo /64 (IPv6: cada hogar tiene un /64 entero para rotar direcciones)
         register(RateLimitName("auth")) {
             rateLimiter(limit = 10, refillPeriod = 1.minutes)
-            requestKey { call -> call.request.origin.remoteAddress }
+            requestKey { call -> rateLimitKey(call.request.origin.remoteAddress) }
         }
         register(RateLimitName("refresh")) {
             rateLimiter(limit = 60, refillPeriod = 1.minutes)
-            requestKey { call -> call.request.origin.remoteAddress }
+            requestKey { call -> rateLimitKey(call.request.origin.remoteAddress) }
         }
     }
     install(StatusPages) {
@@ -127,7 +136,8 @@ fun Application.kairoModule(s: Services) {
             log.warn("Nan: {}", e.message)
             call.respond(HttpStatusCode.BadGateway, ApiError("El servicio de IA no respondió (${e.status})"))
         }
-        exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiError(e.message ?: "Solicitud inválida")) }
+        // Los mensajes de validación propios se muestran; los de librerías (parser, UUID, números) no
+        exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiError(publicMessage(e) ?: "Solicitud inválida")) }
         exception<app.kairo.domain.FamilyException> { call, e -> call.respond(HttpStatusCode.fromValue(e.status), ApiError(e.message ?: "No permitido")) }
         exception<Throwable> { call, e ->
             log.error("Error no controlado en {}", call.request.path(), e)
@@ -139,16 +149,20 @@ fun Application.kairoModule(s: Services) {
         jwt("jwt") {
             realm = "kairo"
             verifier(s.auth.verifier)
-            // El WebSocket del navegador no puede enviar cabeceras: se acepta ?access_token=
+            // El WebSocket del navegador no puede enviar cabeceras: sólo ahí se acepta ?access_token=
+            // (en cualquier otra ruta el token acabaría en historiales, registros de proxies y Referer)
             authHeader { call ->
                 call.request.parseAuthorizationHeader()
-                    ?: call.request.queryParameters["access_token"]?.let { HttpAuthHeader.Single("Bearer", it) }
+                    ?: call.request.queryParameters["access_token"]
+                        ?.takeIf { call.request.path() == WS_PATH }
+                        ?.let { HttpAuthHeader.Single("Bearer", it) }
             }
             validate { cred ->
                 val did = cred.payload.getClaim("did").asString() ?: return@validate null
+                val sub = cred.payload.subject ?: return@validate null
                 if (cred.payload.audience?.contains(AuthService.AUDIENCE) != true) return@validate null
-                // Comprueba que el dispositivo no fue revocado (caché corta que se limpia al revocar)
-                if (s.auth.deviceActive(did)) JWTPrincipal(cred.payload) else null
+                // El dispositivo sigue vigente y es de quien dice el token (caché corta que se limpia al revocar)
+                if (s.auth.deviceActive(did, sub)) JWTPrincipal(cred.payload) else null
             }
             challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, ApiError("Sesión inválida o expirada")) }
         }

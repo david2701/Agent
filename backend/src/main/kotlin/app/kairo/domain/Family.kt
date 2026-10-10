@@ -3,6 +3,7 @@
 package app.kairo.domain
 
 import app.kairo.db.Db
+import app.kairo.db.Tx
 import app.kairo.db.instant
 import app.kairo.db.instantOrNull
 import app.kairo.db.str
@@ -59,6 +60,8 @@ data class InviteRecord(
     val role: String,
     val targetUserId: UUID?,
     val expiresAt: Instant,
+    /** Quién generó el código (null si esa cuenta ya no existe). */
+    val createdBy: UUID? = null,
 )
 
 /** Error de una operación familiar; [status] 403 cuando hace falta ser administrador. */
@@ -67,7 +70,8 @@ class FamilyException(message: String, val status: Int = 400) : RuntimeException
 /**
  * Familia: un hogar con varios perfiles. Cada perfil tiene lo suyo (privado) y comparte lo que marca
  * como familiar (eventos, listas, tareas, notas y lugares). El administrador invita, quita miembros y
- * genera códigos de acceso nuevos, pero no ve lo personal de nadie.
+ * genera códigos de acceso nuevos. No ve lo personal de nadie desde su cuenta, pero un código de acceso
+ * permite definir la contraseña de otro miembro: por eso generarlo y usarlo se avisa a toda la familia.
  */
 class FamilyRepo(private val db: Db) {
     private val random = SecureRandom()
@@ -164,15 +168,24 @@ class FamilyRepo(private val db: Db) {
         return db.tx { exec("delete from invitations where id = ? and household_id = $HOUSEHOLD_OF and used_at is null", id, userId) } > 0
     }
 
-    /** Invitación vigente para un código, o null. */
+    /** Invitación vigente para un código, o null. Sólo consulta: para usarla, [claimInvite]. */
     suspend fun findInvite(code: String): InviteRecord? = db.read {
         one(
             "select * from invitations where code_hash = ? and used_at is null and expires_at > now()",
             Crypto.sha256(normalizeCode(code)),
-        ) {
-            InviteRecord(it.uuid("id"), it.uuid("household_id"), it.str("name"), it.str("role"), it.uuidOrNull("target_user_id"), it.instant("expires_at"))
-        }
+        ) { mapRecord(it) }
     }
+
+    /**
+     * Reclama el código de forma atómica dentro de [tx]: lo marca como usado sólo si sigue vigente y nadie lo
+     * usó. Dos peticiones simultáneas con el mismo código: una lo obtiene y la otra recibe null. Si después
+     * falla algo (correo repetido, error de la base), la transacción se deshace y el código sigue valiendo.
+     */
+    fun claimInvite(tx: Tx, code: String): InviteRecord? = tx.one(
+        """update invitations set used_at = now()
+           where code_hash = ? and used_at is null and expires_at > now() returning *""",
+        Crypto.sha256(normalizeCode(code)),
+    ) { mapRecord(it) }
 
     suspend fun preview(code: String): InvitePreview? {
         val inv = findInvite(code) ?: return null
@@ -188,9 +201,9 @@ class FamilyRepo(private val db: Db) {
         }
     }
 
-    suspend fun markUsed(inviteId: UUID, usedBy: UUID) = db.tx {
-        exec("update invitations set used_at = now(), used_by = ? where id = ?", usedBy, inviteId)
-    }
+    /** Anota quién usó un código ya reclamado con [claimInvite] (en la misma transacción). */
+    fun markUsedBy(tx: Tx, inviteId: UUID, usedBy: UUID) =
+        tx.exec("update invitations set used_by = ? where id = ?", usedBy, inviteId)
 
     // --- Miembros ---
 
@@ -237,6 +250,11 @@ class FamilyRepo(private val db: Db) {
         repeat(8) { sb.append(ALPHABET[random.nextInt(ALPHABET.length)]) }
         return sb.substring(0, 4) + "-" + sb.substring(4)
     }
+
+    private fun mapRecord(rs: ResultSet) = InviteRecord(
+        rs.uuid("id"), rs.uuid("household_id"), rs.str("name"), rs.str("role"), rs.uuidOrNull("target_user_id"),
+        rs.instant("expires_at"), rs.uuidOrNull("created_by"),
+    )
 
     private fun mapMember(rs: ResultSet) = Member(rs.uuid("id"), rs.str("display_name"), rs.str("email"), rs.str("role"), rs.instant("created_at"))
 

@@ -36,22 +36,54 @@ import java.util.UUID
 
 class Upload(val fields: Map<String, String>, val file: ByteArray?, val fileName: String?, val contentType: String?)
 
+/**
+ * Lee un formulario multipart con un archivo. Topes: [maxBytes] en total (archivo y campos), 16 partes,
+ * y el archivo se lee sin pasar del tope. Si el archivo es una imagen, su tipo sale de los bytes (no del
+ * cliente) y sólo se aceptan JPEG, PNG, WebP, GIF y HEIC/HEIF: un SVG o un HTML disfrazado se rechaza.
+ */
 suspend fun ApplicationCall.receiveUpload(maxBytes: Long = 30L * 1024 * 1024): Upload {
+    val tooLarge = "El archivo es demasiado grande"
+    // Margen para las cabeceras de cada parte y los campos de texto
+    declaredContentLength()?.let { if (it > maxBytes + 64 * 1024) payloadTooLarge(tooLarge) }
     val fields = HashMap<String, String>()
     var bytes: ByteArray? = null
     var name: String? = null
     var type: String? = null
-    receiveMultipart(formFieldLimit = maxBytes).forEachPart { part ->
-        when (part) {
-            is PartData.FormItem -> part.name?.let { fields[it] = part.value }
-            is PartData.FileItem -> if (bytes == null) {
-                bytes = part.provider().readRemaining().readByteArray()
-                name = part.originalFileName
-                type = part.contentType?.toString()
+    var total = 0L
+    var parts = 0
+    try {
+        receiveMultipart(formFieldLimit = maxBytes).forEachPart { part ->
+            try {
+                if (++parts > 16) payloadTooLarge("Demasiadas partes en el formulario")
+                when (part) {
+                    is PartData.FormItem -> {
+                        total += part.value.length
+                        if (total > maxBytes) payloadTooLarge(tooLarge)
+                        part.name?.let { fields[it] = part.value }
+                    }
+                    is PartData.FileItem -> if (bytes == null) {
+                        val data = part.provider().readAtMost(maxBytes + 1)
+                        total += data.size
+                        if (total > maxBytes) payloadTooLarge(tooLarge)
+                        val declared = part.contentType?.toString()
+                        val sniffed = sniffImageType(data)
+                        if (sniffed == null && declared?.lowercase()?.startsWith("image/") == true) {
+                            unsupportedMediaType("Solo se aceptan imágenes JPEG, PNG, WebP, GIF o HEIC")
+                        }
+                        bytes = data
+                        name = part.originalFileName
+                        type = sniffed ?: declared
+                    }
+                    else -> Unit
+                }
+            } finally {
+                part.dispose()
             }
-            else -> Unit
         }
-        part.dispose()
+    } catch (e: java.io.IOException) {
+        // El parser de Ktor corta las partes que pasan de formFieldLimit
+        if (e.message?.startsWith("Multipart content length exceeds limit") == true) payloadTooLarge(tooLarge)
+        throw e
     }
     return Upload(fields, bytes, name, type)
 }

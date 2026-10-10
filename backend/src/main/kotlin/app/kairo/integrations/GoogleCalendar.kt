@@ -84,9 +84,15 @@ class GoogleCalendarService(
     }
     val redirectUri: String get() = "${cfg.publicUrl}/api/integrations/google/callback"
 
-    fun authUrl(userId: UUID): String {
-        val exp = Instant.now().epochSecond + 600
-        val state = "$userId.$exp.${crypto.sign("google:$userId:$exp")}"
+    /**
+     * URL de autorización de Google. [nonce] es un valor aleatorio que el servidor guarda también en una
+     * cookie HttpOnly del navegador que pidió la URL: va firmado dentro de `state` (sin viajar en claro),
+     * así que el callback sólo vale en ese mismo navegador. Sin esto, alguien podría hacer que otra persona
+     * abra un callback con su propio `code` y conectar su Google a la cuenta de ella (o al revés).
+     */
+    fun authUrl(userId: UUID, nonce: String): String {
+        val exp = Instant.now().epochSecond + OAUTH_STATE_TTL
+        val state = "$userId.$exp.${crypto.sign(stateData(userId.toString(), exp.toString(), nonce))}"
         return URLBuilder("https://accounts.google.com/o/oauth2/v2/auth").apply {
             parameters.append("client_id", cfg.googleClientId ?: "")
             parameters.append("redirect_uri", redirectUri)
@@ -99,15 +105,28 @@ class GoogleCalendarService(
         }.buildString()
     }
 
-    /** Valida `state` y devuelve el usuario. */
-    fun verifyState(state: String): UUID? {
+    /** `state` ya usados (firma -> vencimiento): cada uno vale una sola vez. */
+    private val usedStates = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Valida `state` con el [nonce] de la cookie del navegador y devuelve el usuario. Un solo uso:
+     * un segundo callback con el mismo `state` se rechaza.
+     */
+    fun verifyState(state: String, nonce: String?): UUID? {
+        if (nonce.isNullOrBlank()) return null
         val parts = state.split('.')
         if (parts.size != 3) return null
         val exp = parts[1].toLongOrNull() ?: return null
-        if (exp < Instant.now().epochSecond) return null
-        if (!crypto.verify("google:${parts[0]}:${parts[1]}", parts[2])) return null
-        return runCatching { UUID.fromString(parts[0]) }.getOrNull()
+        val now = Instant.now().epochSecond
+        if (exp < now) return null
+        if (!crypto.verify(stateData(parts[0], parts[1], nonce), parts[2])) return null
+        val userId = runCatching { UUID.fromString(parts[0]) }.getOrNull() ?: return null
+        usedStates.entries.removeIf { it.value < now }
+        if (usedStates.putIfAbsent(parts[2], exp) != null) return null
+        return userId
     }
+
+    private fun stateData(userId: String, exp: String, nonce: String) = "google:$userId:$exp:$nonce"
 
     suspend fun handleCallback(userId: UUID, code: String) {
         val resp = http.submitForm("https://oauth2.googleapis.com/token", Parameters.build {
@@ -341,6 +360,14 @@ class GoogleCalendarService(
 
     companion object {
         private const val API = "https://www.googleapis.com/calendar/v3"
+
+        /** Segundos que vale un `state` de OAuth (y la cookie con su nonce). */
+        const val OAUTH_STATE_TTL = 600L
+
+        /** Cookie HttpOnly con el nonce que ata el callback de OAuth al navegador que lo inició. */
+        const val OAUTH_COOKIE = "kairo_google_oauth"
+        const val OAUTH_COOKIE_PATH = "/api/integrations/google"
+
         val SCOPES = listOf(
             "https://www.googleapis.com/auth/calendar.events",
             "https://www.googleapis.com/auth/calendar.calendarlist.readonly",

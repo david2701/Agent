@@ -28,7 +28,15 @@ personal después ("comparte la lista del viaje con la familia").
 
 ## Privacidad
 
-- Lo personal es privado para todos, **también para el administrador**.
+- Lo personal no aparece en la cuenta de nadie más: ni los demás miembros ni el administrador lo ven
+  desde la suya.
+- **Pero el administrador puede restablecer la contraseña de cualquier miembro** con un código de acceso
+  (ver abajo), y quien use ese código entra a esa cuenta y ve todo lo de esa persona. Por eso no es una
+  puerta trasera silenciosa: **toda la familia recibe un aviso** cuando se genera un código de acceso
+  ("David generó un código de acceso para Valentina") y otro cuando se usa; además, las sesiones del
+  miembro se cierran. Si recibes uno de estos avisos y no lo pediste, habla con quien administra la familia.
+- Quien administra el servidor (tiene la base de datos y el `.env`) técnicamente puede acceder a todo:
+  elige como administrador a alguien de confianza.
 - Lo familiar lo pueden editar todos; sólo quien lo creó puede dejar de compartirlo.
 - La memoria de Kairo ("recuerda que soy alérgico...") es siempre personal.
 - Cada aviso llega sólo a las personas que corresponde, y el push va cifrado de punta a punta.
@@ -40,7 +48,8 @@ Cada miembro recibe un aviso cuando:
 - se mueve o se cancela un evento familiar;
 - le asignan una tarea, o completan una tarea familiar que creó;
 - otro miembro le programa un recordatorio o le envía un aviso;
-- alguien nuevo se une a la familia.
+- alguien nuevo se une a la familia;
+- el administrador genera un código de acceso para alguien, o alguien usa uno.
 
 Los avisos llegan al instante por push (ver [PUSH.md](PUSH.md)) o por la conexión en vivo de la app y el
 dashboard; si no, aparecen en la siguiente sincronización del teléfono. También quedan en *Familia > Novedades*.
@@ -54,11 +63,13 @@ dashboard; si no, aparecen en la siguiente sincronización del teléfono. Tambi�
 ## Si alguien olvida su contraseña
 
 El administrador genera un **código de acceso** para esa persona (*Familia > ⋯ > Generar código de acceso*,
-vale 24 horas). Con él, la persona define una contraseña nueva y se cierran sus sesiones anteriores.
+vale 24 horas y un solo uso; generar otro anula el anterior). Con él, la persona define una contraseña nueva
+y se cierran sus sesiones anteriores. Al generarlo, toda la familia (también esa persona) recibe un aviso;
+cuando se usa, los demás reciben otro. Así nadie puede entrar en silencio a la cuenta de otro.
 
 ## Administradores
 
-- Pueden invitar, generar códigos de acceso, cambiar roles y quitar a alguien de la familia.
+- Pueden invitar, generar códigos de acceso (con aviso a toda la familia), cambiar roles y quitar a alguien de la familia.
 - Siempre queda al menos un administrador.
 - Al quitar a alguien se borra su cuenta y sus datos personales; lo que había compartido pasa al
   administrador que lo quitó, para que nadie pierda la lista del súper ni los eventos familiares.
