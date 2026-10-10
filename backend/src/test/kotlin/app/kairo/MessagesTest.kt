@@ -30,7 +30,7 @@ class MessagesTest {
     @Test
     fun `english texts contain no spanish-only characters`() {
         val spanishOnly = Regex("[áéíóúñ¿¡ÁÉÍÓÚÑ]")
-        // Names in examples (Sofía) are the only accepted exceptions: none of the catalog texts needs them
+        // Names in examples (Mia) are the only accepted exceptions: none of the catalog texts needs them
         for (m in M.entries) assertFalse(spanishOnly.containsMatchIn(m.en), "${m.name}: '${m.en}' looks Spanish")
     }
 
@@ -54,10 +54,10 @@ class MessagesTest {
 
     @Test
     fun `localizable arguments render in the language of the reader`() {
-        val s = say(M.NOTICE_EVENT_ADDED, localized { lang -> if (lang == Lang.ES) "Valentina (es)" else "Valentina (en)" })
-        assertEquals("Valentina (en) added a family event", s.text(Lang.EN))
-        assertEquals("Valentina (es) agregó un evento familiar", s.text(Lang.ES))
-        assertEquals("Valentina added a family event", say(M.NOTICE_EVENT_ADDED, Plain("Valentina")).text(Lang.EN))
+        val s = say(M.NOTICE_EVENT_ADDED, localized { lang -> if (lang == Lang.ES) "Sam (es)" else "Sam (en)" })
+        assertEquals("Sam (en) added a family event", s.text(Lang.EN))
+        assertEquals("Sam (es) agregó un evento familiar", s.text(Lang.ES))
+        assertEquals("Sam added a family event", say(M.NOTICE_EVENT_ADDED, Plain("Sam")).text(Lang.EN))
     }
 
     @Test

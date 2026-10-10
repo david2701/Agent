@@ -336,7 +336,7 @@ struct UtilTests {
     @Test func widgetSummary() throws {
         let today = try decode(TodayData.self, "today")
         let family = try decode(FamilyInfo.self, "family")
-        let snap = SharedSnapshot(today: today, userName: "Valentina", unreadNotices: 3, family: family)
+        let snap = SharedSnapshot(today: today, userName: "Sam", unreadNotices: 3, family: family)
         #expect(snap.events.count == today.events.count)
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kairo-snap-\(UUID().uuidString)")
         let store = SnapshotStore(directory: dir)

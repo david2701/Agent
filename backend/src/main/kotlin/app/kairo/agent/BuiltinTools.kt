@@ -689,7 +689,7 @@ class BuiltinTools(
         tool(
             "remember", M.TL_REMEMBER,
             "Saves a lasting fact about the user to use in the future (preferences, people, health information, work). " +
-                "Word it in the third person and self-contained, e.g. 'Her daughter is called Sofía and was born on May 3'. Do not store passwords here.",
+                "Word it in the third person and self-contained, e.g. 'Her daughter is called Mia and was born on May 3'. Do not store passwords here.",
             params {
                 string("fact", "The fact to remember", required = true)
                 // The category ids are stored values (part of the API), so they keep their names
@@ -762,7 +762,7 @@ class BuiltinTools(
 
         tool(
             "message_family", M.TL_MESSAGE_FAMILY,
-            "Sends a notice to family members on their phone ('tell Valentina I'm running late', 'tell everyone dinner is ready').",
+            "Sends a notice to family members on their phone ('tell Sam I'm running late', 'tell everyone dinner is ready').",
             params {
                 string("text", "The message, worded for whoever receives it", required = true)
                 stringArray("to", "Names of the recipients; empty or ['everyone'] for the whole family")

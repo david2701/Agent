@@ -68,7 +68,7 @@ class ApnsTest {
         assertEquals("active", ApnsPayload.interruptionLevel(brief))
         assertEquals("event", ApnsPayload.threadId(alert))
         assertEquals("family", ApnsPayload.threadId(notice))
-        val n = obj(ApnsPayload.build(notice, "David shared a list", "Groceries"))
+        val n = obj(ApnsPayload.build(notice, "Alex shared a list", "Groceries"))
         assertEquals("lists", n["destination"]!!.jsonPrimitive.content)
         assertEquals("l1", n["entityId"]!!.jsonPrimitive.content)
         assertNull(n["aps"]!!.jsonObject["category"])

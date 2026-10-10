@@ -69,7 +69,7 @@ create index lists_shared_idx  on lists(household_id) where shared and deleted_a
 create index events_shared_idx on events(household_id, start_at) where shared and deleted_at is null;
 create index places_shared_idx on places(household_id) where shared and deleted_at is null;
 
--- Recordatorios que un miembro programa para otro ("recuérdale a Sofía...")
+-- Recordatorios que un miembro programa para otro ("recuérdale a Mia...")
 alter table reminders add column created_by uuid references users(id) on delete set null;
 
 -- Avisos para un miembro: algo compartido, una tarea asignada, un mensaje de la familia

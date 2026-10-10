@@ -92,7 +92,7 @@ eventos, listas, tareas, notas y lugares. Lo personal es privado, también para 
   Quien administra invita (nombre y rol), ve el código en grande con **Compartir invitación** (hoja de compartir de
   Android con el enlace y el código), revoca invitaciones, genera códigos de acceso, cambia roles y quita miembros
   (se borra su cuenta y lo personal; lo que había compartido pasa a quien lo quita).
-- **En cada pantalla**: Notas (filtro Todas, Mías, Familiares e insignia "Familiar" o "de Valentina"), Tareas
+- **En cada pantalla**: Notas (filtro Todas, Mías, Familiares e insignia "Familiar" o "de Sam"), Tareas
   (Familiar, **Responsable** con iniciales en la tarjeta y el tablero, filtro "Asignadas a mí"), Listas, Calendario
   ("Evento familiar" al crear o editar y "agendado por"), Recordatorios (**Para**: tú u otro miembro; "Para X" o "De X")
   y Lugares (en Recordatorios). Solo quien creó algo puede dejar de compartirlo.
@@ -122,7 +122,7 @@ y el teléfono no lo muestra dos veces (sin importar si llegó por push, WebSock
    con la notificación fija "Kairo conectado". Nunca arranca solo: lo activas tú y vuelve tras reiniciar.
    El servicio de "Oye Kairo" también mantiene esta conexión, igual que la app abierta.
 3. **Alarmas locales exactas** para recordatorios (también los recurrentes y los que otro miembro te programó,
-   con "De Valentina") y avisos de eventos, más la **sincronización** con WorkManager: `/sync/device` trae además
+   con "De Sam") y avisos de eventos, más la **sincronización** con WorkManager: `/sync/device` trae además
    los avisos de la familia sin leer de las últimas 48 h, y el teléfono muestra los que aún no vio.
 
 Canales de notificación: Recordatorios, Familia (mensajes, tareas asignadas y cambios en lo compartido), Resumen del

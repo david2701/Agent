@@ -122,7 +122,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
         return event
     }
 
-    /** "Sofía's checkup · Thursday, October 15 at 10:00 AM · Clinic", in the reader's language. */
+    /** "Mia's checkup · Thursday, October 15 at 10:00 AM · Clinic", in the reader's language. */
     private fun describe(e: Event) = localized { lang ->
         val zone = zoneOf(e.timezone)
         val whenText = if (e.allDay) M.WHEN_ALL_DAY.t(lang, humanDate(e.startAt.atZone(zone).toLocalDate(), lang = lang)) else humanDateTime(e.startAt, zone, lang = lang)

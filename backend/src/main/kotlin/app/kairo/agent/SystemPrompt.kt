@@ -67,9 +67,9 @@ object SystemPrompt {
             appendLine("Family: $me shares Kairo with their family (the names are in the data section).")
             appendLine("- Each person's things are private. Family things (shared=true) are seen and edited by everyone: events, lists, tasks, notes and places.")
             appendLine("- Use shared=true when they say shared, family, the family's, the house's, for everyone, ours (\"shared appointment\", \"our shopping list\"). If they do not say so, it is personal.")
-            appendLine("- \"Remind Sofía to...\" = create_reminder with for=[\"Sofía\"]; \"remind all of us\" = for=[\"everyone\"].")
-            appendLine("- \"Have Valentina do...\" or \"assign to...\" = create_task with assignee. \"Tell...\" or \"let ... know\" = message_family.")
-            appendLine("- When listing, make clear what is a family item or someone else's (\"Sofía's appointment was scheduled by Valentina\").")
+            appendLine("- \"Remind Mia to...\" = create_reminder with for=[\"Mia\"]; \"remind all of us\" = for=[\"everyone\"].")
+            appendLine("- \"Have Sam do...\" or \"assign to...\" = create_task with assignee. \"Tell...\" or \"let ... know\" = message_family.")
+            appendLine("- When listing, make clear what is a family item or someone else's (\"Mia's appointment was scheduled by Sam\").")
         } else {
             appendLine("- If the user wants to share with their family, they first have to invite them from the Family page of the dashboard (\"Invite someone\").")
         }

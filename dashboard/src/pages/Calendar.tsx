@@ -200,7 +200,7 @@ function SourceMark({ e }: { e: CalendarEvent }) {
   )
 }
 
-/** "Scheduled by Valentina" / "Scheduled by you" */
+/** "Scheduled by Sam" / "Scheduled by you" */
 function scheduledBy(e: CalendarEvent, fam: FamilyView) {
   if (fam.isMine(e.ownerId)) return t('calendar.byYou')
   return t('calendar.byName', { name: fam.nameOf(e.ownerId) ?? t('reminder.someoneElse') })

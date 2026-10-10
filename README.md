@@ -30,7 +30,7 @@ Le hablas ("Oye Kairo...") o le escribes, y actúa:
 | **Compartir con Kairo** | textos, enlaces o fotos desde cualquier app (una factura se convierte en nota + recordatorio) |
 | **Herramientas externas (MCP)** | conecta servidores MCP y Kairo usa sus herramientas |
 | **Deshacer** | todo lo que hace Kairo queda en *Actividad* y se puede deshacer |
-| **Familia** | cada persona con su cuenta en el mismo servidor; lo familiar lo ven todos: "agenda una cita compartida", "nuestra lista del súper", "recuérdale a Valentina...", "avísale a todos que..." |
+| **Familia** | cada persona con su cuenta en el mismo servidor; lo familiar lo ven todos: "agenda una cita compartida", "nuestra lista del súper", "recuérdale a Sam...", "avísale a todos que..." |
 
 Lo personal es privado (incluso para quien administra) y lo familiar se comparte con todos en casa.
 Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).

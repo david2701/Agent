@@ -80,7 +80,7 @@ class ToolContext(
             ?: t(M.ANOTHER_MEMBER)
     }
 
-    /** Resolves a name the user said ("Vale", "Sofía", "me", "yo"). */
+    /** Resolves a name the user said ("Vale", "Mia", "me", "yo"). */
     fun findMember(name: String): Member? {
         val n = Text.normalize(name)
         if (n in SELF_NAMES) return familyMembers.firstOrNull { it.id == userId }

@@ -79,7 +79,7 @@ public struct ActionCard: View {
 
 // MARK: - Family
 
-/// "Family" (with the little house) or "Valentina's".
+/// "Family" (with the little house) or "Sam's".
 public struct SharedBadge: View {
     public var owner: String?
     public var compact: Bool

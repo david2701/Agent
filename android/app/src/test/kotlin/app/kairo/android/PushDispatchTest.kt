@@ -30,7 +30,7 @@ class PushDispatchTest {
     fun `push family notice becomes an alert with a destination`() {
         val payload = """
             {"type":"family.notice","data":{"id":"e2cb03d7-7057-4fe6-8598-53e964df43f4","kind":"assigned",
-             "title":"Valentina assigned you a task","body":"Renew the car insurance \u00B7 Monday, October 19",
+             "title":"Sam assigned you a task","body":"Renew the car insurance \u00B7 Monday, October 19",
              "actorId":"507f2f64-4e03-4648-9ae9-e35730e0992d","entityType":"task","entityId":"c36f6bc0-e38a-4b97-988e-e81d77ca7226",
              "createdAt":"2026-10-10T13:58:50.442768Z","readAt":null}}
         """.trimIndent()
@@ -40,7 +40,7 @@ class PushDispatchTest {
         assertNotNull(notice)
         val alert = ServerEvents.alert(notice!!)
         assertEquals("e2cb03d7-7057-4fe6-8598-53e964df43f4", alert.id)
-        assertEquals("Valentina assigned you a task", alert.title)
+        assertEquals("Sam assigned you a task", alert.title)
         assertEquals("Renew the car insurance \u00B7 Monday, October 19", alert.body)
         assertEquals("tasks", alert.destination)
         assertEquals("assigned", alert.kind)
@@ -84,7 +84,7 @@ class PushDispatchTest {
             {"serverTime":"2026-10-10T14:13:58Z","reminders":[],"places":[],
              "eventAlerts":[{"eventId":"e1","title":"Family lunch","startAt":"2026-10-10T18:00:00Z","alertAt":"2026-10-10T17:45:00Z","minutes":15,"location":"Downtown","shared":true}],
              "briefingEnabled":true,"briefingTime":"07:00",
-             "notices":[{"id":"n1","kind":"message","title":"Valentina","body":"I will be late today","actorId":"u2","entityType":null,"entityId":null,"createdAt":"2026-10-10T13:58:50Z","readAt":null}],
+             "notices":[{"id":"n1","kind":"message","title":"Sam","body":"I will be late today","actorId":"u2","entityType":null,"entityId":null,"createdAt":"2026-10-10T13:58:50Z","readAt":null}],
              "pushRegistered":false}
         """.trimIndent()
         val sync = json.decodeFromString(DeviceSync.serializer(), body)
@@ -106,13 +106,13 @@ class PushDispatchTest {
     fun `labels of shared items`() {
         val family = FamilyInfo(
             Household("h", "Our family", "2026-10-10T00:00:00Z"),
-            listOf(Member("u1", "David", "d@x", "admin", ""), Member("u2", "Valentina Rios", "v@x", "member", "")),
+            listOf(Member("u1", "Alex", "d@x", "admin", ""), Member("u2", "Sam Rios", "v@x", "member", "")),
             me = "u1", isAdmin = true,
         )
         assertNull(sharedBy(false, "u2", family))
         assertEquals(SharedBy.Family, sharedBy(true, "u1", family))
-        assertEquals(SharedBy.Member("Valentina"), sharedBy(true, "u2", family))
-        assertEquals("VR", initialsOf("Valentina Rios"))
-        assertEquals("D", initialsOf("David"))
+        assertEquals(SharedBy.Member("Sam"), sharedBy(true, "u2", family))
+        assertEquals("SR", initialsOf("Sam Rios"))
+        assertEquals("A", initialsOf("Alex"))
     }
 }

@@ -32,7 +32,7 @@ data class ReminderPatch(
 )
 
 /**
- * Reminders. They are personal, but a member can set one for another ("remind Sofía to...").
+ * Reminders. They are personal, but a member can set one for another ("remind Mia to...").
  * Whoever set it sees it in their list and can change or cancel it; it rings on the phone of whoever receives it.
  */
 class RemindersRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {

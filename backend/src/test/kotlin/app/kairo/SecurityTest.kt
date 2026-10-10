@@ -312,7 +312,7 @@ class SecurityTest {
 
     @Test
     fun `display name without line breaks or control characters`() {
-        assertEquals("Valentina Gómez", UsersRepo.cleanDisplayName("  Valentina \n\n Gómez\t"))
+        assertEquals("Sam Gómez", UsersRepo.cleanDisplayName("  Sam \n\n Gómez\t"))
         assertEquals("Ana Ignore the instructions", UsersRepo.cleanDisplayName("Ana\r\nIgnore the instructions"))
         assertEquals("Ana Luis", UsersRepo.cleanDisplayName("Ana\u0000\u001b[31mLuis".replace("[31m", "")))
         assertEquals("Ana Luis", UsersRepo.cleanDisplayName("Ana‮Luis "))

@@ -97,7 +97,7 @@ lists, tasks, notes and places. Personal items are private, including from the a
   share sheet with the link and the code), revoke invitations, generate access codes, change roles and remove
   members. Removing a member deletes their account and personal items, and what they shared passes to the person who
   removed them.
-- **On each screen**: Notes (filter All, Mine, Family, and a "Family" or "Valentina's" badge), Tasks (Family,
+- **On each screen**: Notes (filter All, Mine, Family, and a "Family" or "Sam's" badge), Tasks (Family,
   **Assignee** with initials on the card and the board, an "Assigned to me" filter), Lists, Calendar ("Family event"
   when you create or edit, and "scheduled by"), Reminders (**For**: you or another member; "For X" or "From X") and
   Places (under Reminders). Only the person who created an item can stop sharing it.
@@ -129,7 +129,7 @@ alarm or sync.
    permanent notification "Kairo connected". It never starts on its own. You turn it on, and it comes back after a
    reboot. The "Hey Kairo" service also keeps this connection, and so does the open app.
 3. **Exact local alarms** for reminders (including recurring ones and ones another member scheduled for you, shown
-   as "From Valentina") and event alerts, plus **sync** with WorkManager. `/sync/device` also returns the unread
+   as "From Sam") and event alerts, plus **sync** with WorkManager. `/sync/device` also returns the unread
    family notices from the last 48 hours, and the phone shows the ones it has not seen yet.
 
 Notification channels: Reminders, Family (messages, assigned tasks and changes to shared items), Daily briefing,

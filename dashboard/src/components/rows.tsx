@@ -108,7 +108,7 @@ export function ReminderIcon({ r, className }: { r: Reminder; className?: string
   return <Icon className={cn('size-[18px]', r.status === 'fired' ? 'text-accent-strong' : 'text-faint', className)} />
 }
 
-/** "For Valentina" (I scheduled it for someone else) or "From Valentina" (someone scheduled it for me). */
+/** "For Sam" (I scheduled it for someone else) or "From Sam" (someone scheduled it for me). */
 export function ReminderPerson({ r }: { r: Reminder }) {
   const fam = useFamilyInfo()
   const forOther = r.ownerId && fam.me && r.ownerId !== fam.me

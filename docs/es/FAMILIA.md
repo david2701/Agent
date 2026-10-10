@@ -10,9 +10,9 @@ editan todos en casa.
 
 | Se puede compartir | Ejemplo |
 |---|---|
-| **Eventos** | "Agenda una cita compartida con el pediatra para Sofía el jueves a las 10" |
+| **Eventos** | "Agenda una cita compartida con el pediatra para Mia el jueves a las 10" |
 | **Listas** | "Agrega huevos y arepas a nuestra lista del súper" |
-| **Tareas** (con responsable) | "Que Valentina compre el regalo de la profesora antes del viernes" |
+| **Tareas** (con responsable) | "Que Sam compre el regalo de la profesora antes del viernes" |
 | **Notas** | "Guarda como nota familiar la clave del wifi de la casa" |
 | **Lugares** | "Casa" familiar sirve para recordatorios por ubicación de todos |
 
@@ -20,9 +20,9 @@ Y entre personas:
 
 | Acción | Ejemplo |
 |---|---|
-| **Recordatorio para otro** | "Recuérdale a Valentina el martes a las 2 llevar el carnet de salud" (suena en su teléfono) |
+| **Recordatorio para otro** | "Recuérdale a Sam el martes a las 2 llevar el carnet de salud" (suena en su teléfono) |
 | **Recordatorio para todos** | "Recuérdanos a todos el domingo a las 8 sacar el reciclaje" |
-| **Aviso** | "Avísale a Valentina que llego a las 8" · "Diles a todos que la cena está lista" |
+| **Aviso** | "Avísale a Sam que llego a las 8" · "Diles a todos que la cena está lista" |
 
 Kairo entiende "compartido", "familiar", "de la familia", "de la casa", "para todos", "nuestro" y
 "nuestra". Si no lo dices, lo que creas es personal. Cualquier cosa se puede compartir o volver
@@ -35,7 +35,7 @@ personal después ("comparte la lista del viaje con la familia").
 - **Pero el administrador puede restablecer la contraseña de cualquier miembro** con un código de acceso
   (ver abajo), y quien use ese código entra a esa cuenta y ve todo lo de esa persona. Por eso no es una
   puerta trasera silenciosa: **toda la familia recibe un aviso** cuando se genera un código de acceso
-  ("David generó un código de acceso para Valentina") y otro cuando se usa; además, las sesiones del
+  ("Alex generó un código de acceso para Sam") y otro cuando se usa; además, las sesiones del
   miembro se cierran. Si recibes uno de estos avisos y no lo pediste, habla con quien administra la familia.
 - Quien administra el servidor (tiene la base de datos y el `.env`) técnicamente puede acceder a todo:
   elige como administrador a alguien de confianza.

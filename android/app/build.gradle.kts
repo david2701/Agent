@@ -28,7 +28,7 @@ val releaseSigning: Map<String, String>? = run {
 // Change it with KAIRO_SERVER_URL=https://kairo.example.com or kairo.serverUrl in gradle.properties.
 val kairoServerUrl: String = System.getenv("KAIRO_SERVER_URL")
     ?: (findProperty("kairo.serverUrl") as String?)
-    ?: "https://kairo.dvxlabs.online"
+    ?: ""
 
 android {
     namespace = "app.kairo.android"

@@ -31,7 +31,7 @@ public struct User: Codable, Sendable, Hashable, Identifiable {
         color = try c.decodeIfPresent(String.self, forKey: .color)
     }
 
-    /// "Valentina" instead of "Valentina Gómez".
+    /// "Sam" instead of "Sam Gómez".
     public var firstName: String { displayName.split(separator: " ").first.map(String.init) ?? displayName }
 }
 

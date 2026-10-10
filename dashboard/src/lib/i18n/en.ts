@@ -841,7 +841,7 @@ export const en = {
   'family.createInvite': 'Create invite',
   'family.inviteNote': 'Works once. When used, they create their account and show up in the members list.',
   'family.inviteNameHint': "They'll see it when they open the invite and it becomes their name in Kairo.",
-  'family.inviteNamePlaceholder': 'Valentina',
+  'family.inviteNamePlaceholder': 'Sam',
   'family.role': 'Role',
   'family.roleMemberHint': 'Sees and edits family items. Their own items are private, even from you.',
   'family.roleAdminHint': 'Besides family items, can invite, remove members and generate access codes.',

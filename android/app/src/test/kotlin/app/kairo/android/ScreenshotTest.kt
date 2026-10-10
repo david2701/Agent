@@ -131,7 +131,7 @@ class ScreenshotTest {
     @Test fun remindersPhone() = app("reminders", false, PHONE, { str(R.string.home_went_off) }, "reminders-phone-light")
     @Test fun calendarFoldOpen() = app("calendar", true, FOLD_OPEN, { LocalDate.now().year.toString() }, "calendar-fold-open")
     @Test fun listsPhone() = app("lists", true, PHONE, { "Groceries" }, "lists-phone")
-    @Test fun memoryPhone() = app("memory", true, PHONE, { "Sofia" }, "memory-phone")
+    @Test fun memoryPhone() = app("memory", true, PHONE, { "Mia" }, "memory-phone")
     @Test fun settingsPhone() = app("settings", true, PHONE, { str(R.string.set_always_group) }, "settings-phone")
     @Test fun activityPhone() = app("activity", false, PHONE, { str(R.string.act_undo) }, "activity-phone-light")
 
@@ -156,8 +156,8 @@ class ScreenshotTest {
     }
 
     @Test
-    fun taskAssigneePhone() = app("tasks", true, PHONE, { "Pick up Sofia" }, "task-assignee-phone") {
-        compose.onNodeWithText("Pick up Sofia from school").performClick()
+    fun taskAssigneePhone() = app("tasks", true, PHONE, { "Pick up Mia" }, "task-assignee-phone") {
+        compose.onNodeWithText("Pick up Mia from school").performClick()
         waitText(str(R.string.tasks_f_assignee))
         settle()
     }
@@ -167,7 +167,7 @@ class ScreenshotTest {
     fun inviteCodePhone() = app("family", true, PHONE, { str(R.string.fam_news) }, "family-invite-phone") {
         compose.onAllNodesWithText(str(R.string.fam_invite_button)).onFirst().performClick()
         waitText(str(R.string.fam_invite_title))
-        compose.onNodeWithTag("invite-name").performTextInput("Sofia")
+        compose.onNodeWithTag("invite-name").performTextInput("Mia")
         compose.onNodeWithText(str(R.string.fam_create_invite)).performClick()
         waitText(str(R.string.fam_share_invite))
         settle()
@@ -227,7 +227,7 @@ class ScreenshotTest {
             reply = "Done, I'll remind you tomorrow at 9 AM.",
             actions = listOf(AgentEvent.ToolEnd("1", "create_reminder", true, "Reminder: Call the dentist · tomorrow at 9:00 AM", EntityRef("reminder", "x", "Call the dentist"))),
         )
-        compose.setContent { KairoTheme(dark = true) { Surface { TabletopHome(voice, "David", null, {}, {}, {}, {}) } } }
+        compose.setContent { KairoTheme(dark = true) { Surface { TabletopHome(voice, "Alex", null, {}, {}, {}, {}) } } }
         compose.mainClock.advanceTimeBy(600)
         compose.onRoot().captureRoboImage("$out/tabletop-mode.png")
     }

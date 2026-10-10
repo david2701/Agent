@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
-    /** [from] translates `createdBy` to a name for the "From Valentina" subtitle of what someone else scheduled for you. */
+    /** [from] translates `createdBy` to a name for the "From Sam" subtitle of what someone else scheduled for you. */
     suspend fun apply(reminders: List<Reminder>, eventAlerts: List<app.kairo.core.model.EventAlert> = emptyList(), from: (String?) -> String? = { null }) {
         val now = System.currentTimeMillis()
         val horizon = now + 35L * 86_400_000

@@ -358,7 +358,7 @@
     <string name="mem_forgot">Forgotten</string>
     <string name="mem_intro">What Kairo knows about you to help you better. You can edit or delete it anytime.</string>
     <string name="mem_empty_title">No memories yet</string>
-    <string name="mem_empty_body">Tell Kairo things like \"I\'m allergic to penicillin\" or \"my daughter\'s name is Sofia\".</string>
+    <string name="mem_empty_body">Tell Kairo things like \"I\'m allergic to penicillin\" or \"my daughter\'s name is Mia\".</string>
     <string name="mem_forget_cd">Forget</string>
     <string name="mem_new">New memory</string>
     <string name="mem_edit">Edit memory</string>
@@ -627,7 +627,7 @@
     <string name="fam_news_empty_body">Here you\'ll see what the family shares with you, the tasks assigned to you and the notices sent to you.</string>
     <string name="fam_privacy">What you don\'t mark as family is private, even from whoever manages the family.</string>
     <string name="fam_invite_title">Invite to the family</string>
-    <string name="fam_name_hint">Sofia</string>
+    <string name="fam_name_hint">Mia</string>
     <string name="fam_f_role">Role</string>
     <string name="fam_role_admin">Administrator</string>
     <string name="fam_role_admin_note">They can invite, change roles and remove members. Everyone\'s personal items stay private.</string>

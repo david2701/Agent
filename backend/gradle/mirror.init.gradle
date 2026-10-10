@@ -1,5 +1,5 @@
-// Sólo se usa al construir la imagen con --build-arg MAVEN_MIRROR=<url>: pone ese espejo de Maven Central
-// delante de los repositorios de plugins y dependencias (útil si repo.maven.apache.org responde 429).
+// Only used when building the image with --build-arg MAVEN_MIRROR=<url>: puts that Maven Central mirror
+// in front of the plugin and dependency repositories (useful if repo.maven.apache.org answers 429).
 def mirror = System.getenv("MAVEN_MIRROR")
 if (mirror) {
     settingsEvaluated { s ->

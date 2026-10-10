@@ -57,7 +57,7 @@ fun sharedBy(shared: Boolean, ownerId: String?, family: FamilyInfo?): SharedBy? 
     return family.member(ownerId)?.displayName?.let { SharedBy.Member(FamilyStore.firstNameOf(it)) } ?: SharedBy.Family
 }
 
-/** Label of a family item: "Family" or "from Valentina"; null if it is personal. */
+/** Label of a family item: "Family" or "from Sam"; null if it is personal. */
 @Composable
 fun sharedLabel(shared: Boolean, ownerId: String?, family: FamilyInfo?): String? = when (val by = sharedBy(shared, ownerId, family)) {
     null -> null
@@ -86,7 +86,7 @@ fun SharedBadge(label: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Circle with a member's initials; [description] announces it to TalkBack ("Assignee: Valentina"). */
+/** Circle with a member's initials; [description] announces it to TalkBack ("Assignee: Sam"). */
 @Composable
 fun MemberAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp, description: String? = null) {
     Box(

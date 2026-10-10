@@ -10,9 +10,9 @@ Other languages: [Spanish version](es/FAMILIA.md).
 
 | You can share | Example |
 |---|---|
-| **Events** | "Schedule a shared doctor's appointment for Sofia on Thursday at 10" |
+| **Events** | "Schedule a shared doctor's appointment for Mia on Thursday at 10" |
 | **Lists** | "Add eggs and bread to our shopping list" |
-| **Tasks** (with an assignee) | "Have Valentina buy the teacher's gift before Friday" |
+| **Tasks** (with an assignee) | "Have Sam buy the teacher's gift before Friday" |
 | **Notes** | "Save the house wifi password as a family note" |
 | **Places** | A shared "Home" place works for everyone's location reminders |
 
@@ -20,9 +20,9 @@ Between people:
 
 | Action | Example |
 |---|---|
-| **Reminder for someone else** | "Remind Valentina on Tuesday at 2 to bring her health card" (it rings on her phone) |
+| **Reminder for someone else** | "Remind Sam on Tuesday at 2 to bring her health card" (it rings on her phone) |
 | **Reminder for everyone** | "Remind all of us on Sunday at 8 to take out the recycling" |
-| **Family notice** | "Tell Valentina I'll be there at 8" · "Tell everyone dinner is ready" |
+| **Family notice** | "Tell Sam I'll be there at 8" · "Tell everyone dinner is ready" |
 
 Kairo understands "shared", "family", "the family's", "household", "for everyone", "our" and "ours". Spanish
 equivalents such as "compartido", "familiar" and "nuestra" work too. If you do not say it, what you create is
@@ -34,8 +34,8 @@ personal. You can share anything, or make it personal again, later: "share the t
   administrator.
 - **However, an administrator can reset any member's password** with an access code (see below). Whoever uses that
   code signs in to that account and sees everything that person has. So this is not a silent back door:
-  **the whole family gets a notice** when an access code is generated ("David generated an access code for
-  Valentina") and another when it is used. The member's sessions are also signed out. If you get one of these
+  **the whole family gets a notice** when an access code is generated ("Alex generated an access code for
+  Sam") and another when it is used. The member's sessions are also signed out. If you get one of these
   notices and you did not ask for it, talk to the person who runs the family.
 - Whoever runs the server (who has the database and the `.env` file) can technically reach everything. Choose
   an administrator you trust.

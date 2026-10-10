@@ -72,7 +72,7 @@ class Notifier(
 
     /**
      * Notifies [recipients] (not including whoever did the action) and stores the notice for whoever is not connected.
-     * The text is rendered per recipient, in their language ("Valentina added a family event").
+     * The text is rendered per recipient, in their language ("Sam added a family event").
      */
     suspend fun family(actorId: UUID, recipients: Collection<UUID>, kind: String, text: NoticeText, entityType: String? = null, entityId: UUID? = null) {
         for (r in recipients.toSet() - actorId) {
@@ -101,7 +101,7 @@ class Notifier(
     /** Every member of the user's household, the user included. */
     suspend fun members(userId: UUID): List<UUID> = family.memberIds(userId)
 
-    /** Short name for notices ("Valentina" instead of "Valentina Gómez"), or null if the user is gone. */
+    /** Short name for notices ("Sam" instead of "Sam Gómez"), or null if the user is gone. */
     suspend fun firstName(userId: UUID): String? =
         users.byId(userId)?.displayName?.trim()?.split(' ')?.firstOrNull()?.takeIf { it.isNotBlank() }
 

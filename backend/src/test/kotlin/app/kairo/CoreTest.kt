@@ -133,7 +133,7 @@ class CoreTest {
         assertEquals("personas", MemoriesRepo.normalizeCategory("people"))
         assertEquals("hogar", MemoriesRepo.normalizeCategory("home"))
         assertEquals(listOf("work", "ideas"), NotesRepo.normalizeTags(listOf("#Work", "ideas", "work")))
-        assertEquals("Buy a gift for Sofía", NotesRepo.deriveTitle("\n# Buy a gift for Sofía\nsomething else"))
+        assertEquals("Buy a gift for Mia", NotesRepo.deriveTitle("\n# Buy a gift for Mia\nsomething else"))
         assertEquals("Note", NotesRepo.deriveTitle("   "))
         assertEquals("Nota", NotesRepo.deriveTitle("   ", Lang.ES))
     }

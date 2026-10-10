@@ -40,7 +40,7 @@ class WebPushTest {
         val ua = WebPushCrypto.generateKeyPair()
         val uaPub = WebPushCrypto.encodePublic(ua.public as ECPublicKey)
         val secret = ByteArray(16) { it.toByte() }
-        val msg = """{"type":"family.notice","data":{"title":"Valentina added a family event","body":"Sofía's checkup · Thu 10:00 AM"}}"""
+        val msg = """{"type":"family.notice","data":{"title":"Sam added a family event","body":"Mia's checkup · Thu 10:00 AM"}}"""
         val body = WebPushCrypto.encrypt(msg.toByteArray(), uaPub, secret)
         val back = WebPushCrypto.decrypt(body, ua.private as java.security.interfaces.ECPrivateKey, uaPub, secret)
         assertEquals(msg, String(back))
