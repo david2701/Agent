@@ -1,5 +1,8 @@
 package app.kairo.android.ui.common
 
+import android.content.Context
+import androidx.annotation.StringRes
+import app.kairo.android.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.kairo.android.AppGraph
@@ -15,17 +18,29 @@ import kotlinx.coroutines.launch
 
 data class Loadable<T>(val data: T? = null, val loading: Boolean = true, val error: String? = null)
 
-fun Throwable.friendly(): String = when (this) {
-    is ApiException -> if (status == 429) "Demasiados intentos seguidos. Espera un minuto y vuelve a probar." else message
-    is java.net.UnknownHostException -> "No hay conexión con el servidor"
-    is java.net.ConnectException -> "No hay conexión con el servidor"
-    is java.net.SocketTimeoutException -> "El servidor tardó demasiado"
-    else -> message ?: "Algo salió mal"
+/** User-facing text for an error, in the app language. Server-written messages are shown as they come. */
+fun Throwable.friendly(context: Context): String = when (this) {
+    is ApiException -> when {
+        status == 429 -> context.getString(R.string.error_too_many_attempts)
+        else -> when (kind) {
+            ApiException.Kind.Server -> message
+            ApiException.Kind.Http -> context.getString(R.string.error_http, status)
+            ApiException.Kind.NoServer -> context.getString(R.string.error_no_server)
+            ApiException.Kind.NoSession -> context.getString(R.string.error_no_session)
+            ApiException.Kind.SessionExpired -> context.getString(R.string.error_session_expired)
+            ApiException.Kind.InviteNotFound -> context.getString(R.string.error_invite_not_found)
+            ApiException.Kind.MissingRefreshToken -> context.getString(R.string.error_no_refresh_token)
+            ApiException.Kind.SpeechFailed -> context.getString(R.string.error_speech_failed)
+        }
+    }
+    is java.net.UnknownHostException, is java.net.ConnectException -> context.getString(R.string.error_no_connection)
+    is java.net.SocketTimeoutException -> context.getString(R.string.error_timeout)
+    else -> message ?: context.getString(R.string.error_generic)
 }
 
 /**
- * ViewModel de una colección del servidor. Se recarga solo cuando llega `entity.changed`
- * por WebSocket para cualquiera de [entities].
+ * ViewModel for a server collection. It reloads by itself when `entity.changed` arrives
+ * over the WebSocket for any of [entities].
  */
 abstract class ResourceViewModel<T>(protected val graph: AppGraph, entities: Set<String>) : ViewModel() {
     private val _state = MutableStateFlow(Loadable<T>())
@@ -48,12 +63,12 @@ abstract class ResourceViewModel<T>(protected val graph: AppGraph, entities: Set
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.friendly()) }
+                _state.update { it.copy(loading = false, error = e.friendly(graph.app)) }
             }
         }
     }
 
-    /** Ejecuta un cambio y recarga; si falla, avisa con un mensaje. */
+    /** Runs a change and reloads; if it fails, shows a message. */
     protected fun mutate(success: String? = null, block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
@@ -63,7 +78,7 @@ abstract class ResourceViewModel<T>(protected val graph: AppGraph, entities: Set
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _messages.tryEmit(e.friendly())
+                _messages.tryEmit(e.friendly(graph.app))
             }
         }
     }
@@ -71,4 +86,11 @@ abstract class ResourceViewModel<T>(protected val graph: AppGraph, entities: Set
     protected fun updateData(transform: (T) -> T) = _state.update { s -> s.data?.let { s.copy(data = transform(it)) } ?: s }
 
     protected fun say(message: String) { _messages.tryEmit(message) }
+
+    /** Text from string resources in the current app language. */
+    protected fun str(@StringRes id: Int, vararg args: Any): String = graph.app.getString(id, *args)
+
+    protected fun say(@StringRes id: Int, vararg args: Any) = say(str(id, *args))
+
+    protected fun Throwable.friendly(): String = friendly(graph.app)
 }

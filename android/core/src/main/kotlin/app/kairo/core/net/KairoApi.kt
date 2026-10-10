@@ -77,16 +77,22 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
-class ApiException(val status: Int, override val message: String) : RuntimeException(message)
+/**
+ * What went wrong, so the UI can show a localized message. [Kind.Server] carries text written by the
+ * server (already in the user's language); every other kind has a message resource in the app.
+ */
+class ApiException(val status: Int, override val message: String, val kind: Kind = Kind.Server) : RuntimeException(message) {
+    enum class Kind { Server, Http, NoServer, NoSession, SessionExpired, InviteNotFound, MissingRefreshToken, SpeechFailed }
+}
 
-/** Información que el cliente envía en cada petición (capacidades y ubicación). */
+/** Information the client sends with every request (capabilities and location). */
 interface ClientContext {
     val clientKind: String
     val capabilities: Set<String>
     suspend fun location(): Pair<Double, Double>?
 }
 
-/** Cliente de la API de Kairo (ver docs/API.md). */
+/** Kairo API client (see docs/API.md). */
 class KairoApi(private val session: SessionStore, private val ctx: ClientContext) {
 
     val json = Json {
@@ -109,7 +115,10 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
 
     private val refreshMutex = Mutex()
 
-    // ------------------------------------------------------------ Autenticación
+    /** Device language, so the server can pick the account language at sign-up (`es*` -> Spanish, else English). */
+    private fun HttpRequestBuilder.language() = header(HttpHeaders.AcceptLanguage, java.util.Locale.getDefault().toLanguageTag())
+
+    // ------------------------------------------------------------ Authentication
 
     suspend fun login(serverUrl: String, email: String, password: String, deviceName: String): User {
         val base = normalizeServer(serverUrl)
@@ -117,6 +126,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             method = HttpMethod.Post
             contentType(ContentType.Application.Json)
             header("X-Kairo-Client", ctx.clientKind)
+            language()
             setBody(buildJsonObject {
                 put("email", email.trim())
                 put("password", password)
@@ -126,24 +136,24 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             }.toString())
         }
         val auth: AuthResponse = decode(resp)
-        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: error("El servidor no devolvió refresh token"), auth.accessToken)
+        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: throw ApiException(0, "The server returned no refresh token", ApiException.Kind.MissingRefreshToken), auth.accessToken)
         return auth.user
     }
 
-    /** Qué abre un código de familia (público): invitación nueva o código de acceso de un miembro. */
+    /** What a family code opens (public): a new invitation or an existing member's access code. */
     suspend fun invitePreview(serverUrl: String, code: String): InvitePreview {
         val base = normalizeServer(serverUrl)
         val resp = http.request("$base/api/auth/invite/${normalizeCode(code).encodeURLParameter()}") {
             method = HttpMethod.Get
             header("X-Kairo-Client", ctx.clientKind)
         }
-        if (resp.status.value == 404) throw ApiException(404, "Ese código no existe o ya venció")
+        if (resp.status.value == 404) throw ApiException(404, "That code does not exist or has expired", ApiException.Kind.InviteNotFound)
         return decode(resp)
     }
 
     /**
-     * Usa un código de familia: con una invitación crea la cuenta del miembro nuevo (pide [email]);
-     * con un código de acceso define una contraseña nueva. Guarda la sesión como un login normal.
+     * Redeems a family code: with an invitation it creates the new member's account (needs [email]);
+     * with an access code it sets a new password. Stores the session like a normal login.
      */
     suspend fun join(serverUrl: String, code: String, email: String?, password: String, displayName: String?, deviceName: String): User {
         val base = normalizeServer(serverUrl)
@@ -151,6 +161,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             method = HttpMethod.Post
             contentType(ContentType.Application.Json)
             header("X-Kairo-Client", ctx.clientKind)
+            language()
             setBody(buildJsonObject {
                 put("code", normalizeCode(code))
                 email?.trim()?.takeIf { it.isNotEmpty() }?.let { put("email", it) }
@@ -162,11 +173,11 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             }.toString())
         }
         val auth: AuthResponse = decode(resp)
-        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: error("El servidor no devolvió refresh token"), auth.accessToken)
+        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: throw ApiException(0, "The server returned no refresh token", ApiException.Kind.MissingRefreshToken), auth.accessToken)
         return auth.user
     }
 
-    /** Vincula este dispositivo (reloj) con un código generado en el teléfono o el dashboard. */
+    /** Pairs this device (watch) with a code generated on the phone or the dashboard. */
     suspend fun pair(serverUrl: String, code: String, deviceName: String): User {
         val base = normalizeServer(serverUrl)
         val resp = http.request("$base/api/auth/pair") {
@@ -176,7 +187,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             setBody(buildJsonObject { put("code", code.trim()); put("deviceName", deviceName); put("platform", ctx.clientKind) }.toString())
         }
         val auth: AuthResponse = decode(resp)
-        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: error("Sin refresh token"), auth.accessToken)
+        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: throw ApiException(0, "The server returned no refresh token", ApiException.Kind.MissingRefreshToken), auth.accessToken)
         return auth.user
     }
 
@@ -207,21 +218,22 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         true
     }
 
-    // ------------------------------------------------------------ Núcleo HTTP
+    // ------------------------------------------------------------ HTTP core
 
-    private suspend fun base(): String = session.serverUrl() ?: throw ApiException(0, "Sin servidor configurado")
+    private suspend fun base(): String = session.serverUrl() ?: throw ApiException(0, "No server configured", ApiException.Kind.NoServer)
 
     private suspend fun HttpRequestBuilder.common() {
         session.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
         header("X-Kairo-Client", ctx.clientKind)
+        language()
         if (ctx.capabilities.isNotEmpty()) header("X-Kairo-Capabilities", ctx.capabilities.joinToString(","))
         ctx.location()?.let { (lat, lon) -> header("X-Kairo-Location", "$lat,$lon") }
     }
 
     /**
-     * Ejecuta la petición; si el access token expiró, refresca una vez y reintenta.
-     * Ojo: el parámetro no puede llamarse `build`, porque dentro del bloque `build()` resolvería a
-     * `HttpRequestBuilder.build()` y el cuerpo nunca se pondría.
+     * Runs the request; if the access token expired, refreshes once and retries.
+     * Note: the parameter cannot be named `build`, because inside the `build()` block it would resolve to
+     * `HttpRequestBuilder.build()` and the body would never be set.
      */
     suspend fun raw(method: HttpMethod, path: String, configure: HttpRequestBuilder.() -> Unit = {}): HttpResponse {
         if (session.accessToken == null) refresh()
@@ -230,7 +242,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         if (resp.status.value == 401 && refresh()) {
             resp = http.request(url) { this.method = method; common(); configure() }
         }
-        if (resp.status.value == 401) throw ApiException(401, "Tu sesión expiró. Inicia sesión de nuevo.")
+        if (resp.status.value == 401) throw ApiException(401, "Your session expired. Sign in again.", ApiException.Kind.SessionExpired)
         return resp
     }
 
@@ -247,14 +259,14 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend inline fun <reified T> decode(resp: HttpResponse): T {
         val text = resp.bodyAsText()
         if (!resp.status.isSuccess()) {
-            val msg = runCatching { json.decodeFromString(ApiError.serializer(), text).error }.getOrNull() ?: "Error ${resp.status.value}"
-            throw ApiException(resp.status.value, msg)
+            val serverMsg = runCatching { json.decodeFromString(ApiError.serializer(), text).error }.getOrNull()
+            throw ApiException(resp.status.value, serverMsg ?: "Error ${resp.status.value}", if (serverMsg != null) ApiException.Kind.Server else ApiException.Kind.Http)
         }
         if (T::class == Unit::class) return Unit as T
         return json.decodeFromString(text)
     }
 
-    // ------------------------------------------------------------ Agente (SSE)
+    // ------------------------------------------------------------ Agent (SSE)
 
     fun chat(message: String, conversationId: String?, channel: String = "chat"): Flow<AgentEvent> = stream("/api/chat") {
         contentType(ContentType.Application.Json)
@@ -284,7 +296,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             if (image != null) {
                 append("file", image, Headers.build {
                     append(HttpHeaders.ContentType, imageMime ?: "image/jpeg")
-                    append(HttpHeaders.ContentDisposition, "filename=\"captura.jpg\"")
+                    append(HttpHeaders.ContentDisposition, "filename=\"capture.jpg\"")
                 })
             }
         }))
@@ -330,20 +342,20 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         }
     }
 
-    // ------------------------------------------------------------ Voz
+    // ------------------------------------------------------------ Voice
 
     suspend fun speak(text: String, voice: String? = null): ByteArray {
         val resp = raw(HttpMethod.Post, "/api/voice/speak") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("text", text); voice?.let { put("voice", it) } }.toString())
         }
-        if (!resp.status.isSuccess()) throw ApiException(resp.status.value, "No se pudo generar la voz")
+        if (!resp.status.isSuccess()) throw ApiException(resp.status.value, "Could not generate speech", ApiException.Kind.SpeechFailed)
         return resp.readRawBytes()
     }
 
     suspend fun voices(): VoicesResponse = send(HttpMethod.Get, "/api/voice/voices")
 
-    // ------------------------------------------------------------ Datos
+    // ------------------------------------------------------------ Data
 
     suspend fun today(): TodayData = send(HttpMethod.Get, "/api/today")
     suspend fun briefing(): BriefingResponse = send(HttpMethod.Post, "/api/briefing")
@@ -361,7 +373,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun updateNote(id: String, patch: JsonObject): Note = send(HttpMethod.Patch, "/api/notes/$id", patch)
     suspend fun deleteNote(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/notes/$id") }
 
-    /** [assignee]: `me` o el id de un miembro (tareas de las que es responsable). */
+    /** [assignee]: `me` or a member id (tasks that person is responsible for). */
     suspend fun tasks(includeDone: Boolean = true, assignee: String? = null): List<Task> =
         send(HttpMethod.Get, "/api/tasks?includeDone=$includeDone" + (assignee?.let { "&assignee=${it.encodeURLParameter()}" } ?: ""))
     suspend fun createTask(body: JsonObject): Task = send(HttpMethod.Post, "/api/tasks", body)
@@ -434,7 +446,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun revokeDevice(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/devices/$id") }
     suspend fun deviceSync(): DeviceSync = send(HttpMethod.Get, "/api/sync/device")
 
-    // ------------------------------------------------------------ Familia
+    // ------------------------------------------------------------ Family
 
     suspend fun family(): FamilyInfo = send(HttpMethod.Get, "/api/family")
     suspend fun renameFamily(name: String): Household = send(HttpMethod.Patch, "/api/family", obj { put("name", name) })
@@ -446,37 +458,37 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun setMemberRole(memberId: String, role: String): Member = send(HttpMethod.Patch, "/api/family/members/$memberId", obj { put("role", role) })
     suspend fun removeMember(memberId: String) { send<JsonObject>(HttpMethod.Delete, "/api/family/members/$memberId") }
 
-    /** Aviso a la familia; sin [to], a todos menos a ti. Devuelve a cuántos les llegó. */
+    /** Notice to the family; without [to], to everyone but you. Returns how many received it. */
     suspend fun familyMessage(text: String, to: List<String>? = null): Int =
         send<SentCount>(HttpMethod.Post, "/api/family/message", obj { put("text", text); to?.let { put("to", strings(it)) } }).sent
 
     suspend fun notices(unread: Boolean = false, limit: Int = 50): NoticesResponse = send(HttpMethod.Get, "/api/notices?unread=$unread&limit=$limit")
-    /** Marca avisos como leídos; sin [ids], todos. */
+    /** Marks notices as read; without [ids], all of them. */
     suspend fun markNoticesRead(ids: List<String>? = null) { send<JsonObject>(HttpMethod.Post, "/api/notices/read", obj { ids?.let { put("ids", strings(it)) } }) }
 
-    // ------------------------------------------------------------ Push propio (UnifiedPush)
+    // ------------------------------------------------------------ Own push (UnifiedPush)
 
     suspend fun pushConfig(): PushConfig = send(HttpMethod.Get, "/api/push")
     suspend fun registerPush(endpoint: String, p256dh: String, auth: String): PushConfig =
         send(HttpMethod.Post, "/api/push/register", obj { put("endpoint", endpoint); put("p256dh", p256dh); put("auth", auth) })
     suspend fun unregisterPush() { send<JsonObject>(HttpMethod.Delete, "/api/push/register") }
-    /** Envía un `family.notice` de prueba sólo por push; devuelve cuántos dispositivos lo aceptaron. */
+    /** Sends a test `family.notice` over push only; returns how many devices accepted it. */
     suspend fun testPush(): Int = send<Delivered>(HttpMethod.Post, "/api/push/test").delivered
 
-    /** URL absoluta para archivos firmados (adjuntos e imágenes). */
+    /** Absolute URL for signed files (attachments and images). */
     suspend fun absolute(url: String): String = if (url.startsWith("http")) url else base() + url
 
-    // ------------------------------------------------------------ Tiempo real
+    // ------------------------------------------------------------ Realtime
 
-    /** Eventos del servidor con reconexión automática (backoff exponencial hasta 60 s). */
+    /** Server events with automatic reconnection (exponential backoff up to 60 s). */
     fun realtime(): Flow<ServerEvent> = flow {
         var backoff = 2_000L
         while (true) {
             try {
-                // El servidor cierra el socket cuando vence el token y rechaza el handshake con uno vencido:
-                // se renueva antes de conectar en vez de esperar un 401 (que en el handshake no llega como ApiException)
+                // The server closes the socket when the token expires and rejects the handshake with an expired one:
+                // renew before connecting instead of waiting for a 401 (which does not surface as ApiException in the handshake)
                 if (session.accessToken?.let { expiresSoon(it) } != false) refresh()
-                val token = session.accessToken ?: throw ApiException(401, "Sin sesión")
+                val token = session.accessToken ?: throw ApiException(401, "No session", ApiException.Kind.NoSession)
                 val wsUrl = base().replaceFirst("http", "ws") + "/api/ws?access_token=" + token.encodeURLParameter()
                 http.webSocket(wsUrl) {
                     backoff = 2_000L
@@ -498,7 +510,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     }
 
     companion object {
-        /** true si al JWT le queda menos de un minuto, o si no se puede leer su `exp`. */
+        /** True if the JWT has less than a minute left, or if its `exp` cannot be read. */
         fun expiresSoon(token: String, nowSeconds: Long = System.currentTimeMillis() / 1000): Boolean {
             val payload = token.split('.').getOrNull(1) ?: return true
             val exp = runCatching {
@@ -514,7 +526,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             return s.removeSuffix("/api")
         }
 
-        /** Códigos de familia `XXXX-XXXX`: acepta minúsculas, espacios y sin guion. */
+        /** Family codes `XXXX-XXXX`: accepts lower case, spaces and a missing dash. */
         fun normalizeCode(raw: String): String {
             val clean = raw.uppercase().filter { it.isLetterOrDigit() }
             return if (clean.length == 8) clean.take(4) + "-" + clean.drop(4) else clean

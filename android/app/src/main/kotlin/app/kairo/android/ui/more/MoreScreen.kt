@@ -1,5 +1,7 @@
 package app.kairo.android.ui.more
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,14 +23,14 @@ import androidx.compose.ui.unit.dp
 import app.kairo.android.ui.Destination
 
 private val DESCRIPTIONS = mapOf(
-    Destination.Reminders to "Avisos por hora y por lugar",
-    Destination.Calendar to "Tu agenda y Google Calendar",
-    Destination.Lists to "Súper, farmacia, viajes",
-    Destination.Family to "Miembros, invitaciones y avisos",
-    Destination.Memory to "Lo que Kairo sabe de ti",
-    Destination.Recordings to "Reuniones resumidas",
-    Destination.Activity to "Historial y deshacer",
-    Destination.Settings to "Voz, escucha y cuenta",
+    Destination.Reminders to R.string.more_reminders,
+    Destination.Calendar to R.string.more_calendar,
+    Destination.Lists to R.string.more_lists,
+    Destination.Family to R.string.more_family,
+    Destination.Memory to R.string.more_memory,
+    Destination.Recordings to R.string.more_recordings,
+    Destination.Activity to R.string.more_activity,
+    Destination.Settings to R.string.more_settings,
 )
 
 @Composable
@@ -40,14 +42,14 @@ fun MoreScreen(navigate: (Destination) -> Unit, destinations: List<Destination> 
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item(span = { GridItemSpan(maxLineSpan) }) { Text("Más", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) }
+        item(span = { GridItemSpan(maxLineSpan) }) { Text(stringResource(R.string.nav_more), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) }
         items(destinations) { d ->
             Surface(onClick = { navigate(d) }, color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.large) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(d.icon, null, tint = MaterialTheme.colorScheme.primary)
                     Column {
-                        Text(d.label, style = MaterialTheme.typography.titleSmall)
-                        Text(DESCRIPTIONS[d] ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(d.label), style = MaterialTheme.typography.titleSmall)
+                        Text(DESCRIPTIONS[d]?.let { stringResource(it) } ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var deepLink by mutableStateOf<String?>(null)
+    private var invite by mutableStateOf<InviteLink?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
         handle(intent)
         setContent {
             KairoTheme {
-                KairoAppUi(graph, deepLink) { deepLink = null }
+                KairoAppUi(graph, deepLink, invite) { deepLink = null; invite = null }
             }
         }
     }
@@ -42,21 +43,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Si la escucha estaba activa (p. ej. tras reiniciar), se reactiva ahora que la app está visible
+        // If listening was on (e.g. after a reboot), turn it back on now that the app is visible
         lifecycleScope.launch {
             val local = graph.prefs.current()
             val signedIn = graph.session.current() != null
             if (local.wakeWordEnabled && signedIn && graph.voice.hasMicPermission()) {
                 ListeningService.start(this@MainActivity)
             }
-            // La conexión directa solo corre si la persona la activó en Ajustes
+            // The direct connection only runs if the person turned it on in Settings
             if (local.directConnection && signedIn) ConnectionService.start(this@MainActivity)
         }
     }
 
     private fun handle(intent: Intent?) {
         intent?.getStringExtra(EXTRA_DESTINATION)?.let { deepLink = it }
-        // Tocar un aviso de la familia lo marca como leído
+        // Invite link: https://host/join?code=XXXX-XXXX (or the legacy /unirse?codigo=XXXX-XXXX)
+        if (intent?.action == Intent.ACTION_VIEW) InviteLink.parse(intent.dataString)?.let { invite = it }
+        // Tapping a family notice marks it as read
         intent?.getStringExtra(EXTRA_NOTICE)?.let { id ->
             intent.removeExtra(EXTRA_NOTICE)
             graph.scope.launch { runCatching { graph.api.markNoticesRead(listOf(id)) } }

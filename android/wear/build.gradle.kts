@@ -6,8 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Firma de release: android/keystore.properties (no versionado) o variables de entorno (CI).
-// Sin keystore se firma con la clave de depuración: sirve para probar, no para instalar en la familia.
+// Release signing: android/keystore.properties (not versioned) or environment variables (CI).
+// Without a keystore the build is signed with the debug key: fine for testing, not for real installs.
 val releaseSigning: Map<String, String>? = run {
     val file = rootProject.file("keystore.properties")
     val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
@@ -22,8 +22,8 @@ val releaseSigning: Map<String, String>? = run {
     )
 }
 
-// Tu servidor (el reloj se vincula contra él y el teléfono lo trae escrito al iniciar sesión).
-// Cámbialo con KAIRO_SERVER_URL=https://kairo.tudominio.com o kairo.serverUrl en gradle.properties.
+// Your server (the watch pairs against it and the phone prefills it on the sign-in screen).
+// Change it with KAIRO_SERVER_URL=https://kairo.example.com or kairo.serverUrl in gradle.properties.
 val kairoServerUrl: String = System.getenv("KAIRO_SERVER_URL")
     ?: (findProperty("kairo.serverUrl") as String?)
     ?: "https://kairo.dvxlabs.online"
@@ -33,7 +33,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // Mismo applicationId que el teléfono: Wear OS los reconoce como la misma app
+        // Same applicationId as the phone: Wear OS treats them as the same app
         applicationId = "app.kairo.android"
         minSdk = 33
         targetSdk = 36
@@ -45,6 +45,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // English (default) and Spanish
+    androidResources {
+        localeFilters += listOf("en", "es")
     }
 
     signingConfigs {

@@ -1,5 +1,7 @@
 package app.kairo.android.assist
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.Intent
 import android.os.Bundle
@@ -60,9 +62,9 @@ import app.kairo.android.voice.VoicePhase
 import kotlinx.coroutines.delay
 
 /**
- * Kairo como asistente del sistema: se abre sobre cualquier app (pulsación larga del botón de
- * inicio/encendido si elegiste Kairo como asistente digital, tile de ajustes rápidos o widget)
- * y empieza a escuchar de inmediato.
+ * Kairo as the system assistant: it opens over any app (long press of the home/power button
+ * if you picked Kairo as the digital assistant, quick settings tile or widget)
+ * and starts listening right away.
  */
 class AssistActivity : ComponentActivity() {
     private var trigger by mutableStateOf(0)
@@ -92,7 +94,7 @@ class AssistActivity : ComponentActivity() {
                     if (graph.voice.hasMicPermission()) graph.voice.talk() else mic.launch(Manifest.permission.RECORD_AUDIO)
                     started = true
                 }
-                // Se cierra solo unos segundos después de responder
+                // It closes by itself a few seconds after replying
                 LaunchedEffect(voice.phase, voice.reply, voice.error) {
                     val idle = voice.phase == VoicePhase.Off || voice.phase == VoicePhase.Armed
                     if (started && idle && (voice.reply != null || voice.error != null)) {
@@ -126,10 +128,10 @@ class AssistActivity : ComponentActivity() {
                                 KairoOrb(orb, voice.level, size = 112.dp)
                                 Text(
                                     when (voice.phase) {
-                                        VoicePhase.Listening -> "Te escucho"
-                                        VoicePhase.Thinking -> voice.working ?: "Pensando"
-                                        VoicePhase.Speaking -> "Kairo"
-                                        else -> voice.error ?: if (voice.reply != null) "Listo" else "Toca para hablar"
+                                        VoicePhase.Listening -> stringResource(R.string.home_status_listening)
+                                        VoicePhase.Thinking -> voice.working ?: stringResource(R.string.home_status_thinking)
+                                        VoicePhase.Speaking -> stringResource(R.string.assist_kairo)
+                                        else -> voice.error ?: if (voice.reply != null) stringResource(R.string.common_done) else stringResource(R.string.home_status_idle)
                                     },
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -141,14 +143,14 @@ class AssistActivity : ComponentActivity() {
                                     TextButton(onClick = {
                                         startActivity(Intent(this@AssistActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(MainActivity.EXTRA_DESTINATION, "chat"))
                                         finish()
-                                    }) { Text("Abrir Kairo") }
+                                    }) { Text(stringResource(R.string.assist_open)) }
                                     Spacer(Modifier.weight(1f))
                                     val busy = voice.phase == VoicePhase.Listening || voice.phase == VoicePhase.Thinking || voice.phase == VoicePhase.Speaking
                                     FilledIconButton(
                                         onClick = { if (busy) graph.voice.cancel() else graph.voice.talk() },
                                         modifier = Modifier.size(52.dp), shape = CircleShape,
                                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                                    ) { Icon(if (busy) Icons.Rounded.Stop else Icons.Rounded.Mic, if (busy) "Detener" else "Hablar") }
+                                    ) { Icon(if (busy) Icons.Rounded.Stop else Icons.Rounded.Mic, if (busy) stringResource(R.string.home_stop) else stringResource(R.string.home_talk)) }
                                 }
                             }
                         }

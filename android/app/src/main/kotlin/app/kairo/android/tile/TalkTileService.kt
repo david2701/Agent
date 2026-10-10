@@ -1,5 +1,6 @@
 package app.kairo.android.tile
 
+import app.kairo.android.R
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
@@ -7,13 +8,13 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import app.kairo.android.assist.AssistActivity
 
-/** Tile de ajustes rápidos: un toque y Kairo escucha. */
+/** Quick settings tile: one tap and Kairo listens. */
 class TalkTileService : TileService() {
     override fun onStartListening() {
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
-            label = "Kairo"
-            subtitle = "Hablar"
+            label = getString(R.string.tile_label)
+            subtitle = getString(R.string.tile_subtitle)
             updateTile()
         }
     }
@@ -24,6 +25,7 @@ class TalkTileService : TileService() {
             startActivityAndCollapse(PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE))
         } else {
             @Suppress("DEPRECATION")
+            @android.annotation.SuppressLint("StartActivityAndCollapseDeprecated")
             startActivityAndCollapse(intent)
         }
     }

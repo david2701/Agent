@@ -47,5 +47,5 @@ val KairoTypography = Typography(
     labelSmall = style(11, 14, FontWeight.Medium, 0.02),
 )
 
-/** Horas, fechas y números. */
+/** Times, dates and numbers. */
 val MonoStyle = TextStyle(fontFamily = GeistMono, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp)

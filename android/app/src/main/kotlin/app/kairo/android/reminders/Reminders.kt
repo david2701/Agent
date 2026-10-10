@@ -1,5 +1,6 @@
 package app.kairo.android.reminders
 
+import app.kairo.android.R
 import android.Manifest
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -22,14 +23,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Programa los recordatorios como alarmas exactas locales: suenan aunque el teléfono
- * no tenga internet o el servidor esté caído. El servidor también los envía por WebSocket;
- * [FiredLog] evita la notificación duplicada.
+ * Schedules reminders as local exact alarms: they ring even if the phone has no internet
+ * or the server is down. The server also sends them over WebSocket; [FiredLog] prevents
+ * a duplicate notification.
  */
 class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
-    /** [from] traduce `createdBy` a nombre para el subtítulo "De Valentina" de lo que otro te programó. */
+    /** [from] translates `createdBy` to a name for the "From Valentina" subtitle of what someone else scheduled for you. */
     suspend fun apply(reminders: List<Reminder>, eventAlerts: List<app.kairo.core.model.EventAlert> = emptyList(), from: (String?) -> String? = { null }) {
         val now = System.currentTimeMillis()
         val horizon = now + 35L * 86_400_000
@@ -42,7 +43,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
             .filter { (_, at) -> at in (now - 60_000)..horizon }.take(100)
         val wantedIds = wanted.map { it.first.id }.toSet() + events.map { eventKey(it.first) }
         prefs.scheduledAlarms().filter { it !in wantedIds }.forEach { cancel(it) }
-        wanted.forEach { (r, at) -> schedule(r, at, from(r.createdBy)?.let { "De $it" }) }
+        wanted.forEach { (r, at) -> schedule(r, at, from(r.createdBy)?.let { context.getString(R.string.rem_from, it) }) }
         events.forEach { (a, at) -> scheduleEvent(a, at) }
         prefs.setScheduledAlarms(wantedIds)
     }
@@ -51,7 +52,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
 
     private fun scheduleEvent(a: app.kairo.core.model.EventAlert, at: Long) {
         val key = eventKey(a)
-        val subtitle = app.kairo.android.sync.ServerEventHandler.eventSubtitle(a.minutes, a.location, a.shared)
+        val subtitle = app.kairo.android.sync.ServerEventHandler.eventSubtitle(context, a.minutes, a.location, a.shared)
         val pi = PendingIntent.getBroadcast(
             context, key.hashCode(),
             Intent(context, ReminderReceiver::class.java).putExtra(EXTRA_ID, key).putExtra(EXTRA_TEXT, a.title).putExtra(EXTRA_AT, at)
@@ -63,7 +64,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
         else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
     }
 
-    /** Alarma diaria del resumen de la mañana (hora configurada en el servidor). */
+    /** Daily alarm for the morning briefing (time set on the server). */
     fun scheduleBriefing(enabled: Boolean, time: String) {
         val pi = PendingIntent.getBroadcast(context, 9_001, Intent(context, BriefingReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         alarms.cancel(pi)
@@ -103,7 +104,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
     }
 }
 
-/** Avisa que el resumen del día está listo; "Escuchar" lo pide al servidor y lo lee en voz alta. */
+/** Announces that the daily briefing is ready; "Listen" asks the server for it and reads it aloud. */
 class BriefingReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (FiredLog(context).markIfNew("briefing", java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())) {
@@ -115,22 +116,22 @@ class BriefingReceiver : BroadcastReceiver() {
             val n = androidx.core.app.NotificationCompat.Builder(context, app.kairo.android.notify.Channels.BRIEFING)
                 .setSmallIcon(app.kairo.android.R.drawable.ic_stat_kairo)
                 .setColor(0xFFF0A23B.toInt())
-                .setContentTitle("Tu resumen del día")
-                .setContentText("Agenda, pendientes y clima de hoy")
+                .setContentTitle(context.getString(app.kairo.android.R.string.briefing_title))
+                .setContentText(context.getString(app.kairo.android.R.string.briefing_text))
                 .setAutoCancel(true)
                 .setContentIntent(listen)
-                .addAction(0, "Escuchar", listen)
+                .addAction(0, context.getString(app.kairo.android.R.string.briefing_listen), listen)
                 .build()
             Notifications.show(context, Notifications.ID_BRIEFING, n)
         }
-        SyncWorker.runNow(context) // reprograma la alarma de mañana
+        SyncWorker.runNow(context) // reschedules tomorrow's alarm
     }
 }
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(AlarmScheduler.EXTRA_ID) ?: return
-        val text = intent.getStringExtra(AlarmScheduler.EXTRA_TEXT) ?: "Recordatorio"
+        val text = intent.getStringExtra(AlarmScheduler.EXTRA_TEXT) ?: context.getString(app.kairo.android.R.string.notif_reminder_default)
         val at = intent.getLongExtra(AlarmScheduler.EXTRA_AT, System.currentTimeMillis())
         if (intent.getStringExtra(AlarmScheduler.EXTRA_KIND) == "event") {
             if (FiredLog(context).markIfNew(id, at)) {
@@ -142,12 +143,12 @@ class ReminderReceiver : BroadcastReceiver() {
         if (FiredLog(context).markIfNew(id, at)) {
             Notifications.show(context, Notifications.reminderNotificationId(id), Notifications.reminder(context, id, text, at, intent.getStringExtra(AlarmScheduler.EXTRA_SUBTITLE)))
         }
-        // Reprograma la siguiente ocurrencia de los recurrentes
+        // Reschedules the next occurrence of recurring reminders
         SyncWorker.runNow(context, delaySeconds = 90)
     }
 }
 
-/** Botones "Hecho" y "10 min más" de la notificación. */
+/** The "Done" and "Snooze 10 min" buttons of the notification. */
 class ReminderActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(EXTRA_ID) ?: return
@@ -161,7 +162,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
                     ACTION_SNOOZE -> api.reminderSnooze(id, 10)
                 }
             } catch (_: Exception) {
-                // Sin conexión: se reintentará al sincronizar; el aviso local ya se descartó
+                // Offline: it will be retried on sync; the local notice was already dismissed
             } finally {
                 SyncWorker.runNow(context)
                 pending.finish()
@@ -177,8 +178,8 @@ class ReminderActionReceiver : BroadcastReceiver() {
 }
 
 /**
- * Recordatorios por lugar con alertas de proximidad del sistema (sin Google Play Services).
- * Requiere ubicación precisa y "permitir todo el tiempo".
+ * Place-based reminders with system proximity alerts (no Google Play Services).
+ * Requires precise location and "allow all the time".
  */
 class GeofenceManager(private val context: Context, private val prefs: AppPrefs) {
     private val lm = context.getSystemService(LocationManager::class.java)
@@ -207,7 +208,7 @@ class GeofenceManager(private val context: Context, private val prefs: AppPrefs)
     private fun intent(id: String, text: String, place: String, trigger: String) = PendingIntent.getBroadcast(
         context, ("geo$id").hashCode(),
         Intent(context, ProximityReceiver::class.java).putExtra("id", id).putExtra("text", text).putExtra("place", place).putExtra("trigger", trigger),
-        // Mutable: el sistema añade KEY_PROXIMITY_ENTERING
+        // Mutable: the system adds KEY_PROXIMITY_ENTERING
         PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 }
@@ -218,11 +219,11 @@ class ProximityReceiver : BroadcastReceiver() {
         val trigger = intent.getStringExtra("trigger") ?: "arrive"
         if ((trigger == "arrive") != entering) return
         val id = intent.getStringExtra("id") ?: return
-        val text = intent.getStringExtra("text") ?: "Recordatorio"
+        val text = intent.getStringExtra("text") ?: context.getString(app.kairo.android.R.string.notif_reminder_default)
         val place = intent.getStringExtra("place") ?: ""
         val now = System.currentTimeMillis()
         if (FiredLog(context).markIfNew(id, now - now % (30 * 60_000))) {
-            val subtitle = if (entering) "Llegaste a $place" else "Saliste de $place"
+            val subtitle = if (entering) context.getString(app.kairo.android.R.string.geo_arrived, place) else context.getString(app.kairo.android.R.string.geo_left, place)
             Notifications.show(context, Notifications.reminderNotificationId(id), Notifications.reminder(context, id, text, now, subtitle))
         }
     }

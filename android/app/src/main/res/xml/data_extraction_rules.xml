@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No se respaldan datos de Kairo en la nube de Google: la sesión está cifrada con una clave del dispositivo. -->
+<!-- Kairo data is not backed up to Google's cloud: the session is encrypted with a device key. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" />

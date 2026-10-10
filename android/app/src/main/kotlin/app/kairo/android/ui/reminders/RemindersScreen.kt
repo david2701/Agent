@@ -1,5 +1,13 @@
 package app.kairo.android.ui.reminders
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
+import androidx.compose.ui.platform.LocalContext
+import android.text.format.DateFormat
+import app.kairo.android.ui.common.dayLabel
+import app.kairo.android.ui.common.recurrenceLabel
+import app.kairo.android.ui.common.clockLabel
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -92,7 +100,7 @@ import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Place
 import app.kairo.core.model.Reminder
 import app.kairo.core.net.KairoApi.Companion.obj
-import app.kairo.core.util.dayTimeLabel
+import app.kairo.android.ui.common.dayTimeLabel
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.serialization.json.put
 import java.time.DayOfWeek
@@ -109,14 +117,14 @@ class RemindersViewModel(graph: AppGraph) : ResourceViewModel<RemindersData>(gra
 
     init { refresh() }
 
-    fun done(r: Reminder) = mutate("Hecho") { graph.api.reminderDone(r.id) }
-    fun snooze(r: Reminder) = mutate("Te aviso en 10 minutos") { graph.api.reminderSnooze(r.id, 10) }
-    fun cancel(r: Reminder) = mutate("Cancelado") { graph.api.reminderCancel(r.id) }
-    fun delete(r: Reminder) = mutate("Eliminado. Puedes deshacerlo en Actividad.") { graph.api.deleteReminder(r.id) }
+    fun done(r: Reminder) = mutate(str(R.string.home_reminder_done)) { graph.api.reminderDone(r.id) }
+    fun snooze(r: Reminder) = mutate(str(R.string.home_snoozed)) { graph.api.reminderSnooze(r.id, 10) }
+    fun cancel(r: Reminder) = mutate(str(R.string.rem_cancelled)) { graph.api.reminderCancel(r.id) }
+    fun delete(r: Reminder) = mutate(str(R.string.rem_deleted)) { graph.api.deleteReminder(r.id) }
 
-    /** [forUserId]: otro miembro; le suena en su teléfono y le llega un aviso. */
+    /** [forUserId]: another member; it rings on their phone and they get a notice. */
     fun create(text: String, at: Instant?, rrule: String?, placeId: String?, trigger: String, forUserId: String?) =
-        mutate(forUserId?.let { id -> graph.family.firstName(id)?.let { "Recordatorio programado para $it" } } ?: "Recordatorio creado") {
+        mutate(forUserId?.let { id -> graph.family.firstName(id)?.let { str(R.string.rem_scheduled_for, it) } } ?: str(R.string.rem_created)) {
             graph.api.createReminder(obj {
                 put("text", text)
                 at?.let { put("dueAt", it.toString()) }
@@ -128,16 +136,16 @@ class RemindersViewModel(graph: AppGraph) : ResourceViewModel<RemindersData>(gra
 
     fun saveCurrentPlace(name: String, shared: Boolean) {
         val loc = graph.location.last()
-        if (loc == null) { say("No tengo una ubicación reciente. Abre un mapa un momento y vuelve a intentar."); return }
-        mutate("Lugar guardado: $name") { graph.api.savePlace(name, loc.first, loc.second, 150, shared) }
+        if (loc == null) { say(R.string.rem_no_location); return }
+        mutate(str(R.string.rem_place_saved, name)) { graph.api.savePlace(name, loc.first, loc.second, 150, shared) }
     }
 
     fun sharePlace(p: Place, shared: Boolean) {
         updateData { d -> d.copy(places = d.places.map { if (it.id == p.id) it.copy(shared = shared) else it }) }
-        mutate(if (shared) "${p.name} ahora es un lugar familiar" else "${p.name} vuelve a ser solo tuyo") { graph.api.sharePlace(p.id, shared) }
+        mutate(if (shared) str(R.string.rem_place_shared, p.name) else str(R.string.rem_place_unshared, p.name)) { graph.api.sharePlace(p.id, shared) }
     }
 
-    fun deletePlace(p: Place) = mutate("Lugar eliminado") { graph.api.deletePlace(p.id) }
+    fun deletePlace(p: Place) = mutate(str(R.string.rem_place_deleted)) { graph.api.deletePlace(p.id) }
 }
 
 @Composable
@@ -158,10 +166,16 @@ fun RemindersScreen(graph: AppGraph) {
     val byPlace = all.filter { it.status == "scheduled" && it.placeId != null }
     val done = all.filter { it.status == "done" || it.status == "cancelled" }.take(15)
 
+    val titleWentOff = stringResource(R.string.home_went_off)
+    val titleUpcoming = stringResource(R.string.rem_group_upcoming)
+    val titleRecurring = stringResource(R.string.rem_group_recurring)
+    val titleByPlace = stringResource(R.string.rem_group_place)
+    val titleDone = stringResource(R.string.rem_group_done)
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { creating = true }, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nuevo") },
+            ExtendedFloatingActionButton(onClick = { creating = true }, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text(stringResource(R.string.rem_new)) },
                 containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -171,23 +185,23 @@ fun RemindersScreen(graph: AppGraph) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            item { Text("Recordatorios", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) }
+            item { Text(stringResource(R.string.nav_reminders), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) }
             state.error?.let { item { ErrorBanner(it, onRetry = { vm.refresh() }) } }
             if (state.loading && state.data == null) { item { SkeletonList(6) }; return@LazyColumn }
             if (all.none { it.status == "scheduled" || it.status == "fired" }) item {
-                EmptyState(Icons.Rounded.NotificationsNone, "Nada pendiente", "Dile a Kairo \"recuérdame...\" con una hora o un lugar.")
+                EmptyState(Icons.Rounded.NotificationsNone, stringResource(R.string.rem_empty_title), stringResource(R.string.rem_empty_body))
             }
-            group("Sonaron", fired) { ReminderItem(it, vm, family, highlight = true) }
-            group("Próximos", upcoming) { ReminderItem(it, vm, family) }
-            group("Se repiten", recurring) { ReminderItem(it, vm, family) }
-            group("Por lugar", byPlace) { ReminderItem(it, vm, family) }
-            item { SectionHeader("Lugares", action = "Guardar ubicación", onAction = {
+            group(titleWentOff, fired) { ReminderItem(it, vm, family, highlight = true) }
+            group(titleUpcoming, upcoming) { ReminderItem(it, vm, family) }
+            group(titleRecurring, recurring) { ReminderItem(it, vm, family) }
+            group(titleByPlace, byPlace) { ReminderItem(it, vm, family) }
+            item { SectionHeader(stringResource(R.string.rem_places), action = stringResource(R.string.rem_save_location), onAction = {
                 if (graph.location.hasPermission()) newPlace = true
                 else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             }) }
             val places = state.data?.places.orEmpty()
             if (places.isEmpty()) item {
-                Text("Guarda Casa, Trabajo o el Súper para recibir avisos al llegar o salir.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.rem_places_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(places, key = { "p" + it.id }) { p ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -196,22 +210,22 @@ fun RemindersScreen(graph: AppGraph) {
                     Column(Modifier.weight(1f)) {
                         Text(p.name, style = MaterialTheme.typography.bodyLarge)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Radio ${p.radiusM} m", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.rem_radius, p.radiusM), style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (!family.owns(p.ownerId)) sharedLabel(p.shared, p.ownerId, family)?.let { SharedBadge(it) }
                         }
                     }
-                    // Quien lo guardó decide si es familiar; los demás solo lo usan
+                    // Whoever saved it decides if it is a family place; everyone else just uses it
                     if (family.owns(p.ownerId) && (family.hasOthers || p.shared)) {
                         FilterChip(
                             selected = p.shared, onClick = { vm.sharePlace(p, !p.shared) },
-                            label = { Text("Familiar") },
+                            label = { Text(stringResource(R.string.shared_family)) },
                             leadingIcon = if (p.shared) { { Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) } } else null,
                         )
                     }
-                    IconButton(onClick = { vm.deletePlace(p) }) { Icon(Icons.Rounded.DeleteOutline, "Eliminar lugar") }
+                    IconButton(onClick = { vm.deletePlace(p) }) { Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.rem_delete_place_cd)) }
                 }
             }
-            if (done.isNotEmpty()) group("Hechos", done) { ReminderItem(it, vm, family, muted = true) }
+            if (done.isNotEmpty()) group(titleDone, done) { ReminderItem(it, vm, family, muted = true) }
         }
     }
 
@@ -223,16 +237,16 @@ fun RemindersScreen(graph: AppGraph) {
         var shared by rememberSaveable { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { newPlace = false },
-            title = { Text("Guardar este lugar") },
+            title = { Text(stringResource(R.string.rem_save_place_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Se usará tu ubicación actual.", style = MaterialTheme.typography.bodyMedium)
-                    OutlinedTextField(name, { name = it }, label = { Text("Nombre (Casa, Trabajo, Súper)") }, singleLine = true)
-                    if (family.hasOthers) ShareRow(shared, { shared = it }, title = "Familiar", body = "Todos pueden usarlo en sus recordatorios.")
+                    Text(stringResource(R.string.rem_use_location), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.rem_place_name)) }, singleLine = true)
+                    if (family.hasOthers) ShareRow(shared, { shared = it }, title = stringResource(R.string.shared_family), body = stringResource(R.string.rem_place_share_body))
                 }
             },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.saveCurrentPlace(name.trim(), shared); newPlace = false } }) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { newPlace = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.saveCurrentPlace(name.trim(), shared); newPlace = false } }) { Text(stringResource(R.string.common_save)) } },
+            dismissButton = { TextButton(onClick = { newPlace = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }
@@ -245,12 +259,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.group(title: String, 
 
 @Composable
 private fun ReminderItem(r: Reminder, vm: RemindersViewModel, family: FamilyInfo?, highlight: Boolean = false, muted: Boolean = false) {
-    // Para otro miembro (lo programaste tú) o de otro miembro (te lo programó)
+    // For another member (you scheduled it) or from another member (they scheduled it for you)
     val forOther = r.ownerId != null && family != null && r.ownerId != family.me
     val fromOther = r.createdBy != null && family != null && r.createdBy != family.me
     val who = when {
-        forOther -> family.firstNameOf(r.ownerId)?.let { "Para $it" } ?: "Para otro miembro"
-        fromOther -> family.firstNameOf(r.createdBy)?.let { "De $it" } ?: "De otro miembro"
+        forOther -> family.firstNameOf(r.ownerId)?.let { stringResource(R.string.rem_for, it) } ?: stringResource(R.string.rem_for_other)
+        fromOther -> family.firstNameOf(r.createdBy)?.let { stringResource(R.string.rem_from, it) } ?: stringResource(R.string.rem_from_other)
         else -> null
     }
     Surface(
@@ -267,34 +281,22 @@ private fun ReminderItem(r: Reminder, vm: RemindersViewModel, family: FamilyInfo
                 Text(r.text, style = MaterialTheme.typography.bodyLarge, color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                 val detail = listOfNotNull(
                     r.nextFireAt?.toInstantOrNull()?.dayTimeLabel()?.replaceFirstChar { it.uppercase() },
-                    r.rrule?.let { describe(it) },
-                    r.placeName?.let { if (r.placeTrigger == "leave") "Al salir de $it" else "Al llegar a $it" },
-                ).joinToString("  ·  ")
+                    r.rrule?.recurrenceLabel(),
+                    r.placeName?.let { if (r.placeTrigger == "leave") stringResource(R.string.rem_on_leaving, it) else stringResource(R.string.home_on_arrival, it) },
+                ).joinToString("  \u00B7  ")
                 if (detail.isNotBlank()) Text(detail, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 who?.let { Pill(it, Modifier.padding(top = 4.dp)) }
             }
             if (!muted && !forOther) {
-                if (r.status == "fired") IconButton(onClick = { vm.snooze(r) }) { Icon(Icons.Rounded.Snooze, "Posponer 10 minutos") }
-                IconButton(onClick = { vm.done(r) }) { Icon(Icons.Rounded.Check, "Hecho") }
+                if (r.status == "fired") IconButton(onClick = { vm.snooze(r) }) { Icon(Icons.Rounded.Snooze, stringResource(R.string.home_snooze_10_cd)) }
+                IconButton(onClick = { vm.done(r) }) { Icon(Icons.Rounded.Check, stringResource(R.string.home_reminder_done)) }
             }
-            IconButton(onClick = { if (muted) vm.delete(r) else vm.cancel(r) }) { Icon(Icons.Rounded.DeleteOutline, if (muted) "Eliminar" else "Cancelar") }
+            IconButton(onClick = { if (muted) vm.delete(r) else vm.cancel(r) }) { Icon(Icons.Rounded.DeleteOutline, if (muted) stringResource(R.string.common_delete) else stringResource(R.string.common_cancel)) }
         }
     }
 }
 
-private fun describe(rrule: String): String {
-    val parts = rrule.split(';').mapNotNull { p -> p.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
-    val names = mapOf("MO" to "lun", "TU" to "mar", "WE" to "mié", "TH" to "jue", "FR" to "vie", "SA" to "sáb", "SU" to "dom")
-    return when (parts["FREQ"]) {
-        "DAILY" -> "Cada día"
-        "WEEKLY" -> parts["BYDAY"]?.split(',')?.mapNotNull { names[it.takeLast(2)] }?.let { if (it.size == 5 && "sáb" !in it && "dom" !in it) "Días hábiles" else "Cada " + it.joinToString(", ") } ?: "Cada semana"
-        "MONTHLY" -> "Cada mes"
-        "YEARLY" -> "Cada año"
-        else -> "Se repite"
-    }
-}
-
-private enum class Repeat(val label: String) { None("No se repite"), Daily("Cada día"), Weekdays("Días hábiles"), Weekly("Cada semana"), Monthly("Cada mes") }
+private enum class Repeat(@StringRes val label: Int) { None(R.string.rec_none), Daily(R.string.rec_daily), Weekdays(R.string.rec_weekdays), Weekly(R.string.rec_weekly), Monthly(R.string.rec_monthly) }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -313,12 +315,12 @@ private fun CreateReminderSheet(places: List<Place>, family: FamilyInfo?, onDism
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Nuevo recordatorio", style = MaterialTheme.typography.titleLarge)
-            Labeled("Qué recordar") { OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
+            Text(stringResource(R.string.rem_new_title), style = MaterialTheme.typography.titleLarge)
+            Labeled(stringResource(R.string.rem_f_what)) { OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
             if (family.hasOthers) {
-                Labeled("Para") {
+                Labeled(stringResource(R.string.rem_f_for)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = forUser == null, onClick = { forUser = null }, label = { Text("Yo") })
+                        FilterChip(selected = forUser == null, onClick = { forUser = null }, label = { Text(stringResource(R.string.tasks_me)) })
                         family?.others.orEmpty().forEach { m ->
                             FilterChip(
                                 selected = forUser == m.id, onClick = { forUser = m.id },
@@ -328,37 +330,37 @@ private fun CreateReminderSheet(places: List<Place>, family: FamilyInfo?, onDism
                         }
                     }
                     forUser?.let { id ->
-                        Text("Le suena en su teléfono y le llega un aviso de que lo programaste.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.rem_for_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(!byPlace, { byPlace = false }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("A una hora") }
-                SegmentedButton(byPlace, { byPlace = true }, SegmentedButtonDefaults.itemShape(1, 2), enabled = places.isNotEmpty()) { Text("En un lugar") }
+                SegmentedButton(!byPlace, { byPlace = false }, SegmentedButtonDefaults.itemShape(0, 2)) { Text(stringResource(R.string.rem_at_time)) }
+                SegmentedButton(byPlace, { byPlace = true }, SegmentedButtonDefaults.itemShape(1, 2), enabled = places.isNotEmpty()) { Text(stringResource(R.string.rem_at_place)) }
             }
             if (!byPlace) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { pickDate = true }) { Text(date.let { if (it == LocalDate.now()) "Hoy" else if (it == LocalDate.now().plusDays(1)) "Mañana" else it.toString() }) }
-                    TextButton(onClick = { pickTime = true }) { Text("%02d:%02d".format(time.hour, time.minute), style = MonoStyle) }
+                    TextButton(onClick = { pickDate = true }) { Text(date.dayLabel().replaceFirstChar { it.uppercase() }) }
+                    TextButton(onClick = { pickTime = true }) { Text(time.clockLabel(), style = MonoStyle) }
                 }
-                Labeled("Repetir") {
+                Labeled(stringResource(R.string.rem_f_repeat)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Repeat.entries.forEach { r -> FilterChip(selected = repeat == r, onClick = { repeat = r }, label = { Text(r.label) }) }
+                        Repeat.entries.forEach { r -> FilterChip(selected = repeat == r, onClick = { repeat = r }, label = { Text(stringResource(r.label)) }) }
                     }
                 }
             } else {
-                Labeled("Lugar") {
+                Labeled(stringResource(R.string.rem_f_place)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         places.forEach { p -> FilterChip(selected = placeId == p.id, onClick = { placeId = p.id }, label = { Text(p.name) }, leadingIcon = { Icon(Icons.Rounded.MyLocation, null, Modifier.size(16.dp)) }) }
                     }
                 }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(trigger == "arrive", { trigger = "arrive" }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Al llegar") }
-                    SegmentedButton(trigger == "leave", { trigger = "leave" }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Al salir") }
+                    SegmentedButton(trigger == "arrive", { trigger = "arrive" }, SegmentedButtonDefaults.itemShape(0, 2)) { Text(stringResource(R.string.rem_on_arrive)) }
+                    SegmentedButton(trigger == "leave", { trigger = "leave" }, SegmentedButtonDefaults.itemShape(1, 2)) { Text(stringResource(R.string.rem_on_leave)) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     enabled = text.isNotBlank() && (!byPlace || placeId != null),
                     onClick = {
@@ -374,7 +376,7 @@ private fun CreateReminderSheet(places: List<Place>, family: FamilyInfo?, onDism
                         onCreate(text.trim(), at, rule, if (byPlace) placeId else null, trigger, forUser)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                ) { Text("Crear") }
+                ) { Text(stringResource(R.string.rem_create)) }
             }
         }
     }
@@ -382,16 +384,16 @@ private fun CreateReminderSheet(places: List<Place>, family: FamilyInfo?, onDism
         val dp = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { pickDate = false },
-            confirmButton = { TextButton(onClick = { dp.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }; pickDate = false }) { Text("Listo") } },
-            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { dp.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }; pickDate = false }) { Text(stringResource(R.string.common_done)) } },
+            dismissButton = { TextButton(onClick = { pickDate = false }) { Text(stringResource(R.string.common_cancel)) } },
         ) { DatePicker(dp) }
     }
     if (pickTime) {
-        val tp = rememberTimePickerState(time.hour, time.minute, is24Hour = true)
+        val tp = rememberTimePickerState(time.hour, time.minute, is24Hour = DateFormat.is24HourFormat(LocalContext.current))
         AlertDialog(
             onDismissRequest = { pickTime = false },
-            confirmButton = { TextButton(onClick = { time = LocalTime.of(tp.hour, tp.minute); pickTime = false }) { Text("Listo") } },
-            dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { time = LocalTime.of(tp.hour, tp.minute); pickTime = false }) { Text(stringResource(R.string.common_done)) } },
+            dismissButton = { TextButton(onClick = { pickTime = false }) { Text(stringResource(R.string.common_cancel)) } },
             text = { TimePicker(tp, Modifier.widthIn(max = 360.dp)) },
         )
     }

@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -7,8 +8,8 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-// Firma de release: android/keystore.properties (no versionado) o variables de entorno (CI).
-// Sin keystore se firma con la clave de depuración: sirve para probar, no para instalar en la familia.
+// Release signing: android/keystore.properties (not versioned) or environment variables (CI).
+// Without a keystore the build is signed with the debug key: fine for testing, not for real installs.
 val releaseSigning: Map<String, String>? = run {
     val file = rootProject.file("keystore.properties")
     val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
@@ -23,8 +24,8 @@ val releaseSigning: Map<String, String>? = run {
     )
 }
 
-// Tu servidor (el reloj se vincula contra él y el teléfono lo trae escrito al iniciar sesión).
-// Cámbialo con KAIRO_SERVER_URL=https://kairo.tudominio.com o kairo.serverUrl en gradle.properties.
+// Your server (the watch pairs against it and the phone prefills it on the sign-in screen).
+// Change it with KAIRO_SERVER_URL=https://kairo.example.com or kairo.serverUrl in gradle.properties.
 val kairoServerUrl: String = System.getenv("KAIRO_SERVER_URL")
     ?: (findProperty("kairo.serverUrl") as String?)
     ?: "https://kairo.dvxlabs.online"
@@ -39,15 +40,22 @@ android {
         targetSdk = 37
         versionCode = 2
         versionName = "1.0.1"
-        // URL del servidor sugerida en el login (se puede cambiar en la app)
+        // Server URL suggested on the sign-in screen (it can be changed in the app)
         buildConfigField("String", "DEFAULT_SERVER", "\"$kairoServerUrl\"")
-        // Plegables y teléfonos actuales son arm64; x86_64 solo para el emulador.
+        // Host of the server: the app handles its /join?code=... invite links (see AndroidManifest.xml)
+        manifestPlaceholders["kairoHost"] = runCatching { URI(kairoServerUrl).host }.getOrNull() ?: "localhost"
+        // Foldables and current phones are arm64; x86_64 only for the emulator.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // English (default) and Spanish; the Android 13+ per-app language picker is fed by res/xml/locales_config.xml
+    androidResources {
+        localeFilters += listOf("en", "es")
     }
 
     signingConfigs {
@@ -80,7 +88,9 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.systemProperty("kairo.screenshots", rootProject.file("../docs/screenshots/android").absolutePath)
-                // Las capturas muestran las horas como las ve la familia de prueba (Medellín), no en UTC
+                // Language of the screenshots: en (default) or es (KAIRO_SCREENSHOT_LOCALE=es)
+                it.systemProperty("kairo.screenshot.locale", System.getenv("KAIRO_SCREENSHOT_LOCALE") ?: "en")
+                // Screenshots show times as the sample family sees them (Medellin), not in UTC
                 it.systemProperty("user.timezone", System.getenv("KAIRO_TEST_TZ") ?: "America/Bogota")
                 System.getenv("ROBOLECTRIC_REPO")?.let { repo -> it.systemProperty("robolectric.dependency.repo.url", repo) }
                 it.maxHeapSize = "3g"
@@ -146,7 +156,7 @@ dependencies {
     implementation(libs.vosk.android)
     implementation("${libs.jna.get().module}:${libs.versions.jna.get()}@aar")
 
-    // Push propio sin Firebase (UnifiedPush; descifra Web Push RFC 8291 con Tink)
+    // Own push without Firebase (UnifiedPush; decrypts Web Push RFC 8291 with Tink)
     implementation(libs.unifiedpush.connector)
 
     testImplementation(libs.junit)

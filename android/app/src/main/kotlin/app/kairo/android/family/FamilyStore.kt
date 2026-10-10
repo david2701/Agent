@@ -12,15 +12,15 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 /**
- * Familia del usuario en caché, para que las pantallas traduzcan `ownerId`, `assigneeId` y
- * `createdBy` a nombres sin pedirla cada vez. Se recarga al abrir la app, al iniciar sesión y
- * cuando llega `entity.changed` con `family`; la última copia queda en disco.
+ * The user's family in cache, so screens can translate `ownerId`, `assigneeId` and
+ * `createdBy` to names without requesting it every time. It reloads when opening the app, on sign-in and
+ * when `entity.changed` arrives with `family`; the last copy is kept on disk.
  */
 class FamilyStore(private val api: KairoApi, private val prefs: AppPrefs, private val scope: CoroutineScope) {
     private val _info = MutableStateFlow<FamilyInfo?>(null)
     val info: StateFlow<FamilyInfo?> = _info
 
-    /** Al cambiar la sesión: usa la copia en disco si es de este usuario y la actualiza del servidor. */
+    /** When the session changes: uses the copy on disk if it belongs to this user and refreshes it from the server. */
     suspend fun onSession(userId: String?) {
         if (userId == null) { clear(); return }
         if (_info.value?.me != userId) {

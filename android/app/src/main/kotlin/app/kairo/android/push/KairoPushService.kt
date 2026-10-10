@@ -8,13 +8,13 @@ import org.unifiedpush.android.connector.data.PushEndpoint
 import org.unifiedpush.android.connector.data.PushMessage
 
 /**
- * Recibe el push propio a través del distribuidor (UnifiedPush). El contenido es el mismo
- * `{type, data}` del WebSocket, ya descifrado por el conector, y pasa por el mismo manejador.
+ * Receives the own push through the distributor (UnifiedPush). The content is the same
+ * `{type, data}` as the WebSocket, already decrypted by the connector, and goes through the same handler.
  */
 class KairoPushService : PushService() {
 
     override fun onNewEndpoint(endpoint: PushEndpoint, instance: String) {
-        // Sin claves el servidor no puede cifrar (RFC 8291): solo pasa con distribuidores muy antiguos
+        // Without keys the server cannot encrypt (RFC 8291): this only happens with very old distributors
         val keys = endpoint.pubKeySet ?: return graph.push.onRegistrationFailed(FailedReason.INTERNAL_ERROR)
         graph.push.onNewEndpoint(endpoint.url, keys.pubKey, keys.auth)
     }

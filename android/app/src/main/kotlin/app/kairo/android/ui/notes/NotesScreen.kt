@@ -1,5 +1,8 @@
 package app.kairo.android.ui.notes
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -85,7 +88,7 @@ import app.kairo.core.model.FamilyInfo
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Note
 import app.kairo.core.net.KairoApi.Companion.obj
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.relativeLabel
 import app.kairo.core.util.toInstantOrNull
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Job
@@ -116,17 +119,17 @@ class NotesViewModel(graph: AppGraph) : ResourceViewModel<List<Note>>(graph, set
     fun save(id: String?, title: String, content: String, shared: Boolean, onSaved: (String) -> Unit) = viewModelScope.launch {
         runCatching {
             if (id == null) graph.api.createNote(title, content, shared = shared) else graph.api.updateNote(id, obj { put("title", title); put("content", content) })
-        }.onSuccess { onSaved(it.id); refresh(silent = true) }.onFailure { say("No se pudo guardar la nota") }
+        }.onSuccess { onSaved(it.id); refresh(silent = true) }.onFailure { say(R.string.notes_save_failed) }
     }
 
-    /** Solo quien creó la nota puede dejar de compartirla. */
+    /** Only the note's creator can stop sharing it. */
     fun share(n: Note, shared: Boolean) {
         updateData { all -> all.map { if (it.id == n.id) it.copy(shared = shared) else it } }
-        mutate(if (shared) "Nota compartida con la familia" else "La nota vuelve a ser solo tuya") { graph.api.updateNote(n.id, obj { put("shared", shared) }) }
+        mutate(if (shared) str(R.string.notes_shared_toast) else str(R.string.notes_unshared_toast)) { graph.api.updateNote(n.id, obj { put("shared", shared) }) }
     }
 
     fun togglePin(n: Note) = mutate { graph.api.updateNote(n.id, obj { put("pinned", !n.pinned) }) }
-    fun delete(n: Note) = mutate("Nota eliminada. Puedes deshacerlo en Actividad.") { graph.api.deleteNote(n.id) }
+    fun delete(n: Note) = mutate(str(R.string.notes_deleted)) { graph.api.deleteNote(n.id) }
 }
 
 @Composable
@@ -168,19 +171,19 @@ fun NotesScreen(graph: AppGraph) {
                 AnimatedPane {
                     Box(Modifier.fillMaxSize()) {
                         LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            item { Text("Notas", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)) }
+                            item { Text(stringResource(R.string.nav_notes), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)) }
                             item {
                                 TextField(
                                     value = query, onValueChange = vm::search,
                                     leadingIcon = { Icon(Icons.Rounded.Search, null) },
-                                    placeholder = { Text("Buscar notas") },
+                                    placeholder = { Text(stringResource(R.string.notes_search)) },
                                     singleLine = true, shape = CircleShape, modifier = Modifier.fillMaxWidth(),
                                     colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh, focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                                 )
                             }
                             if (showOwner) item {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                                    Owner.entries.forEach { o -> FilterChip(selected = owner == o, onClick = { owner = o }, label = { Text(o.label) }) }
+                                    Owner.entries.forEach { o -> FilterChip(selected = owner == o, onClick = { owner = o }, label = { Text(stringResource(o.label)) }) }
                                 }
                             }
                             if (tags.isNotEmpty()) item {
@@ -193,11 +196,11 @@ fun NotesScreen(graph: AppGraph) {
                             else if (shown.isEmpty()) item {
                                 EmptyState(
                                     Icons.Rounded.StickyNote2,
-                                    when { results != null -> "Sin resultados"; owner == Owner.Family -> "Nada compartido aún"; else -> "Aún no hay notas" },
+                                    when { results != null -> stringResource(R.string.notes_empty_no_results); owner == Owner.Family -> stringResource(R.string.notes_empty_nothing_shared); else -> stringResource(R.string.notes_empty_none) },
                                     when {
-                                        results != null -> "Prueba con otras palabras; la búsqueda entiende el significado."
-                                        owner == Owner.Family -> "Abre una nota y activa Compartir con la familia para que la vean todos."
-                                        else -> "Dile a Kairo \"anota que...\" o crea una aquí."
+                                        results != null -> stringResource(R.string.notes_empty_no_results_body)
+                                        owner == Owner.Family -> stringResource(R.string.notes_empty_shared_body)
+                                        else -> stringResource(R.string.notes_empty_none_body)
                                     },
                                 )
                             }
@@ -205,7 +208,7 @@ fun NotesScreen(graph: AppGraph) {
                                 Surface(onClick = { open(n.id) }, shape = MaterialTheme.shapes.medium, color = if (selectedId == n.id) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow) {
                                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (n.pinned) Icon(Icons.Rounded.PushPin, "Fijada", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                            if (n.pinned) Icon(Icons.Rounded.PushPin, stringResource(R.string.notes_pinned), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                             if (n.pinned) Spacer(Modifier.width(6.dp))
                                             Text(n.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                             Text(n.updatedAt.toInstantOrNull()?.relativeLabel() ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
@@ -223,7 +226,7 @@ fun NotesScreen(graph: AppGraph) {
                         }
                         ExtendedFloatingActionButton(
                             onClick = { open(NEW) },
-                            icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Nueva nota") },
+                            icon = { Icon(Icons.Rounded.Add, null) }, text = { Text(stringResource(R.string.notes_new)) },
                             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
                             containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
@@ -235,7 +238,7 @@ fun NotesScreen(graph: AppGraph) {
                     val id = selectedId
                     val note = notes.firstOrNull { it.id == id } ?: results?.firstOrNull { it.id == id }
                     if (id == null) {
-                        EmptyState(Icons.Rounded.StickyNote2, "Elige una nota", "O crea una nueva.", Modifier.fillMaxSize())
+                        EmptyState(Icons.Rounded.StickyNote2, stringResource(R.string.notes_pick), stringResource(R.string.notes_pick_body), Modifier.fillMaxSize())
                     } else {
                         NoteDetail(
                             note = note, isNew = id == NEW, baseUrl = session?.serverUrl ?: "", family = family,
@@ -255,7 +258,7 @@ fun NotesScreen(graph: AppGraph) {
 
 private const val NEW = "__new__"
 
-private enum class Owner(val label: String) { All("Todas"), Mine("Mías"), Family("Familiares") }
+private enum class Owner(@StringRes val label: Int) { All(R.string.tasks_filter_all), Mine(R.string.notes_filter_mine), Family(R.string.tasks_filter_family) }
 
 @Composable
 private fun NoteDetail(
@@ -277,42 +280,42 @@ private fun NoteDetail(
 
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (showBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Volver") }
+            if (showBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.common_back)) }
             Spacer(Modifier.weight(1f))
             if (note != null && !editing) {
-                IconButton(onClick = onPin) { Icon(if (note.pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin, if (note.pinned) "Desfijar" else "Fijar") }
-                IconButton(onClick = onDelete) { Icon(Icons.Rounded.DeleteOutline, "Eliminar") }
+                IconButton(onClick = onPin) { Icon(if (note.pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin, if (note.pinned) stringResource(R.string.notes_unpin) else stringResource(R.string.notes_pin)) }
+                IconButton(onClick = onDelete) { Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.common_delete)) }
             }
             IconButton(onClick = {
                 if (editing) { if (content.isNotBlank() || title.isNotBlank()) onSave(title, content, shareNew); editing = false } else editing = true
-            }) { Icon(if (editing) Icons.Rounded.Check else Icons.Rounded.Edit, if (editing) "Guardar" else "Editar") }
+            }) { Icon(if (editing) Icons.Rounded.Check else Icons.Rounded.Edit, if (editing) stringResource(R.string.common_save) else stringResource(R.string.common_edit)) }
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp).widthIn(max = 760.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (editing) {
                 val colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent)
-                TextField(title, { title = it }, placeholder = { Text("Título") }, textStyle = MaterialTheme.typography.headlineSmall, colors = colors, modifier = Modifier.fillMaxWidth())
-                TextField(content, { content = it }, placeholder = { Text("Escribe aquí. Admite markdown: # títulos, - listas, **negritas**") }, textStyle = MaterialTheme.typography.bodyLarge, colors = colors, modifier = Modifier.fillMaxWidth(), minLines = 8)
-                if (isNew && family.hasOthers) ShareRow(shareNew, { shareNew = it }, body = "La verán y podrán editarla en ${family?.household?.name ?: "tu familia"}.")
+                TextField(title, { title = it }, placeholder = { Text(stringResource(R.string.notes_title_placeholder)) }, textStyle = MaterialTheme.typography.headlineSmall, colors = colors, modifier = Modifier.fillMaxWidth())
+                TextField(content, { content = it }, placeholder = { Text(stringResource(R.string.notes_content_placeholder)) }, textStyle = MaterialTheme.typography.bodyLarge, colors = colors, modifier = Modifier.fillMaxWidth(), minLines = 8)
+                if (isNew && family.hasOthers) ShareRow(shareNew, { shareNew = it }, body = stringResource(R.string.notes_share_new_body, family?.household?.name ?: stringResource(R.string.notes_your_family)))
             } else if (note != null) {
                 Text(note.title, style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    listOfNotNull(note.updatedAt.toInstantOrNull()?.relativeLabel()?.let { "Editada $it" }, note.tags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" }).joinToString("  ·  "),
+                    listOfNotNull(note.updatedAt.toInstantOrNull()?.relativeLabel()?.let { stringResource(R.string.notes_edited, it) }, note.tags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" }).joinToString("  \u00B7  "),
                     style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 when {
                     !family.owns(note.ownerId) -> Text(
-                        "Compartida por ${family.firstNameOf(note.ownerId) ?: "otro miembro"}. Puedes editarla; solo quien la creó puede dejar de compartirla.",
+                        stringResource(R.string.notes_shared_by, family.firstNameOf(note.ownerId) ?: stringResource(R.string.tasks_another_member)),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     family.hasOthers || note.shared -> Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
                         ShareRow(
                             note.shared, onShare, Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            body = if (note.shared) "La ven y editan todos en ${family?.household?.name ?: "tu familia"}." else "Solo tú la ves.",
+                            body = if (note.shared) stringResource(R.string.shared_family_body, family?.household?.name ?: stringResource(R.string.notes_your_family)) else stringResource(R.string.notes_private),
                         )
                     }
                 }
                 note.attachments.forEach { f ->
-                    AsyncImage(model = baseUrl + f.url, contentDescription = "Adjunto", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)))
+                    AsyncImage(model = baseUrl + f.url, contentDescription = stringResource(R.string.notes_attachment), contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)))
                 }
                 MarkdownText(note.content)
             }

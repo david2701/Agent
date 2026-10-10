@@ -6,7 +6,7 @@ import android.media.AudioTrack
 import kotlin.math.PI
 import kotlin.math.sin
 
-/** Sonidos breves y suaves sintetizados (sin archivos): inicio y fin de escucha. */
+/** Short, soft synthesized sounds (no files): start and end of listening. */
 object Earcon {
     private const val RATE = 44_100
 
@@ -22,7 +22,7 @@ object Earcon {
             for ((freq, ms) in notes) {
                 val n = ms * RATE / 1000
                 for (i in 0 until n) {
-                    val env = sin(PI * i / n) // ataque y caída suaves
+                    val env = sin(PI * i / n) // soft attack and decay
                     pcm[offset + i] = (sin(2 * PI * freq * i / RATE) * env * 0.22 * Short.MAX_VALUE).toInt().toShort()
                 }
                 offset += n

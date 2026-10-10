@@ -1,5 +1,9 @@
 package app.kairo.android.ui.login
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import app.kairo.android.InviteLink
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -63,20 +67,22 @@ import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.net.KairoApi
 import kotlinx.coroutines.launch
 
-/** Pasos del inicio: entrar con cuenta, escribir un código, unirse a la familia o definir contraseña nueva. */
+/** Sign-in steps: sign in with an account, enter a code, join the family or set a new password. */
 private enum class Step { Login, Code, Join, Reset }
 
 private const val MIN_PASSWORD = 10
 
 @Composable
-fun LoginScreen(graph: AppGraph) {
+fun LoginScreen(graph: AppGraph, invite: InviteLink? = null, onInviteConsumed: () -> Unit = {}) {
+    val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     var step by rememberSaveable { mutableStateOf(Step.Login) }
     var server by rememberSaveable { mutableStateOf(BuildConfig.DEFAULT_SERVER) }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
     var name by rememberSaveable { mutableStateOf("") }
-    // Lo que devolvió GET /auth/invite/{code}
+    // What GET /auth/invite/{code} returned
     var household by rememberSaveable { mutableStateOf("") }
     var targetEmail by rememberSaveable { mutableStateOf<String?>(null) }
     var loading by rememberSaveable { mutableStateOf(false) }
@@ -93,18 +99,18 @@ fun LoginScreen(graph: AppGraph) {
     fun run(block: suspend () -> Unit) {
         loading = true; error = null
         scope.launch {
-            try { block() } catch (e: Exception) { error = e.friendly() } finally { loading = false }
+            try { block() } catch (e: Exception) { error = e.friendly(context) } finally { loading = false }
         }
     }
 
     fun login() {
-        if (email.isBlank() || password.isBlank()) { error = "Escribe tu correo y contraseña"; return }
+        if (email.isBlank() || password.isBlank()) { error = resources.getString(R.string.login_err_credentials); return }
         run { graph.api.login(server, email, password, deviceName) }
     }
 
     fun preview() {
         val normalized = KairoApi.normalizeCode(code)
-        if (normalized.length != 9) { error = "El código tiene 8 letras o números, como ABCD-2345"; return }
+        if (normalized.length != 9) { error = resources.getString(R.string.login_err_code_format); return }
         run {
             val p = graph.api.invitePreview(server, normalized)
             code = normalized
@@ -117,12 +123,29 @@ fun LoginScreen(graph: AppGraph) {
     }
 
     fun join() {
-        if (step == Step.Join && name.isBlank()) { error = "Escribe tu nombre"; return }
-        if (step == Step.Join && email.isBlank()) { error = "Escribe tu correo"; return }
-        if (password.length < MIN_PASSWORD) { error = "La contraseña debe tener al menos $MIN_PASSWORD caracteres"; return }
+        if (step == Step.Join && name.isBlank()) { error = resources.getString(R.string.login_err_name); return }
+        if (step == Step.Join && email.isBlank()) { error = resources.getString(R.string.login_err_email); return }
+        if (password.length < MIN_PASSWORD) { error = resources.getString(R.string.login_err_password_length, MIN_PASSWORD); return }
         run {
             if (step == Step.Join) graph.api.join(server, code, email, password, name, deviceName)
             else graph.api.join(server, code, null, password, null, deviceName)
+        }
+    }
+
+    // Opened from an invite link (https://host/join?code=... or the legacy /unirse?codigo=...): prefill and look it up
+    LaunchedEffect(invite) {
+        if (invite == null) return@LaunchedEffect
+        invite.server?.let { server = it }
+        code = invite.code
+        step = Step.Code
+        onInviteConsumed()
+        run {
+            val p = graph.api.invitePreview(server, invite.code)
+            household = p.householdName
+            name = p.name
+            targetEmail = p.email
+            password = ""
+            step = if (p.kind == "reset") Step.Reset else Step.Join
         }
     }
 
@@ -137,30 +160,33 @@ fun LoginScreen(graph: AppGraph) {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         when (current) {
                             Step.Login -> {
-                                Title("Kairo", "Tu asistente personal. Entra con la cuenta de tu servidor.", big = true)
+                                Title(stringResource(R.string.app_name), stringResource(R.string.login_tagline), big = true)
                                 Spacer(Modifier.height(8.dp))
-                                Field("Servidor", server, { server = it }, KeyboardType.Uri, ImeAction.Next)
-                                Field("Correo", email, { email = it }, KeyboardType.Email, ImeAction.Next)
-                                PasswordField("Contraseña", password, { password = it }, onDone = ::login)
+                                Field(stringResource(R.string.login_server), server, { server = it }, KeyboardType.Uri, ImeAction.Next)
+                                Field(stringResource(R.string.login_email), email, { email = it }, KeyboardType.Email, ImeAction.Next)
+                                PasswordField(stringResource(R.string.login_password), password, { password = it }, onDone = ::login)
                             }
                             Step.Code -> {
-                                Title("Tengo un código", "Escribe el código que te compartieron para unirte a tu familia o para definir una contraseña nueva.")
-                                Field("Servidor", server, { server = it }, KeyboardType.Uri, ImeAction.Next)
+                                Title(stringResource(R.string.login_code_title), stringResource(R.string.login_code_body))
+                                Field(stringResource(R.string.login_server), server, { server = it }, KeyboardType.Uri, ImeAction.Next)
                                 Field(
-                                    "Código", code, { code = it.take(12) }, KeyboardType.Ascii, ImeAction.Go,
+                                    stringResource(R.string.login_code), code, { code = it.take(12) }, KeyboardType.Ascii, ImeAction.Go,
                                     modifier = Modifier.testTag("invite-code"), placeholder = "ABCD-2345",
                                     textStyle = MonoStyle.copy(fontSize = 20.sp, letterSpacing = 2.sp), capitalize = true, onAction = ::preview,
                                 )
                             }
                             Step.Join -> {
-                                Title("Te invitaron a $household", "Crea tu cuenta. Lo que marques como familiar lo verán todos; lo demás es solo tuyo.")
-                                Field("Tu nombre", name, { name = it }, KeyboardType.Text, ImeAction.Next)
-                                Field("Correo", email, { email = it }, KeyboardType.Email, ImeAction.Next)
-                                PasswordField("Contraseña", password, { password = it }, helper = "Mínimo $MIN_PASSWORD caracteres", onDone = ::join)
+                                Title(stringResource(R.string.login_join_title, household), stringResource(R.string.login_join_body))
+                                Field(stringResource(R.string.login_name), name, { name = it }, KeyboardType.Text, ImeAction.Next)
+                                Field(stringResource(R.string.login_email), email, { email = it }, KeyboardType.Email, ImeAction.Next)
+                                PasswordField(stringResource(R.string.login_password), password, { password = it }, helper = stringResource(R.string.login_password_hint, MIN_PASSWORD), onDone = ::join)
                             }
                             Step.Reset -> {
-                                Title("Hola, ${name.ifBlank { "de nuevo" }}", "Define una contraseña nueva" + (targetEmail?.let { " para $it" } ?: "") + ". Se cerrarán tus otras sesiones.")
-                                PasswordField("Contraseña nueva", password, { password = it }, helper = "Mínimo $MIN_PASSWORD caracteres", onDone = ::join)
+                                Title(
+                                    if (name.isBlank()) stringResource(R.string.login_reset_title_again) else stringResource(R.string.login_reset_title, name),
+                                    targetEmail?.let { stringResource(R.string.login_reset_body_email, it) } ?: stringResource(R.string.login_reset_body),
+                                )
+                                PasswordField(stringResource(R.string.login_new_password), password, { password = it }, helper = stringResource(R.string.login_password_hint, MIN_PASSWORD), onDone = ::join)
                             }
                         }
                     }
@@ -173,15 +199,15 @@ fun LoginScreen(graph: AppGraph) {
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
                 ) {
                     if (loading) LoadingIndicator(Modifier.height(28.dp))
-                    else Text(when (step) { Step.Login -> "Entrar"; Step.Code -> "Continuar"; Step.Join -> "Unirme"; Step.Reset -> "Guardar y entrar" }, style = MaterialTheme.typography.titleMedium)
+                    else Text(stringResource(when (step) { Step.Login -> R.string.login_action_sign_in; Step.Code -> R.string.login_action_continue; Step.Join -> R.string.login_action_join; Step.Reset -> R.string.login_action_save }), style = MaterialTheme.typography.titleMedium)
                 }
                 when (step) {
-                    Step.Login -> OutlinedButton(onClick = { error = null; step = Step.Code }, enabled = !loading, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Tengo un código") }
-                    Step.Code -> TextButton(onClick = { error = null; step = Step.Login }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Ya tengo cuenta") }
-                    else -> TextButton(onClick = { error = null; step = Step.Code }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Usar otro código") }
+                    Step.Login -> OutlinedButton(onClick = { error = null; step = Step.Code }, enabled = !loading, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(R.string.login_code_title)) }
+                    Step.Code -> TextButton(onClick = { error = null; step = Step.Login }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.login_have_account)) }
+                    else -> TextButton(onClick = { error = null; step = Step.Code }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.login_other_code)) }
                 }
                 Text(
-                    "La sesión queda cifrada en este teléfono. Puedes cerrarla desde Ajustes o desde el dashboard.",
+                    stringResource(R.string.login_footnote),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -247,7 +273,7 @@ private fun PasswordField(label: String, value: String, onChange: (String) -> Un
             supportingText = helper?.let { { Text(it) } },
             trailingIcon = {
                 IconButton(onClick = { show = !show }) {
-                    Icon(if (show) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (show) "Ocultar" else "Mostrar")
+                    Icon(if (show) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, if (show) stringResource(R.string.password_hide) else stringResource(R.string.password_show))
                 }
             },
             shape = MaterialTheme.shapes.small,

@@ -18,8 +18,8 @@ import app.kairo.core.model.Notice
 import java.util.concurrent.TimeUnit
 
 /**
- * Trae del servidor los recordatorios y lugares, y reprograma alarmas y geovallas locales.
- * También muestra los avisos de la familia que no llegaron por push ni por WebSocket.
+ * Fetches reminders and places from the server and reschedules local alarms and geofences.
+ * It also shows the family notices that did not arrive by push or WebSocket.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -42,12 +42,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
     }
 
-    /** Avisos sin leer que este teléfono aún no mostró (mismo registro que el push y el WebSocket). */
+    /** Unread notices this phone has not shown yet (same log as push and WebSocket). */
     private fun showNotices(notices: List<Notice>) {
         val log = FiredLog(applicationContext)
         val fresh = notices.filter { it.readAt == null }.sortedBy { it.createdAt }.filter { log.markNoticeIfNew(it.id) }
         if (fresh.size > MAX_SINGLE_NOTICES) {
-            // Muchos de golpe (p. ej. el primer arranque): un solo resumen en lugar de llenar la bandeja
+            // Many at once (e.g. the first start): a single summary instead of filling the tray
             Notifications.show(applicationContext, Notifications.ID_FAMILY_SUMMARY, Notifications.familySummary(applicationContext, fresh.size, fresh.reversed().map { it.title }, groupSummary = false))
         } else {
             fresh.forEach { Notifications.showFamilyNotice(applicationContext, ServerEvents.alert(it)) }

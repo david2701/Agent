@@ -1,5 +1,6 @@
 package app.kairo.android.recording
 
+import app.kairo.android.ui.common.friendly
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -39,9 +40,9 @@ data class RecorderState(
 )
 
 /**
- * Graba reuniones o notas largas en segmentos de 5 minutos (AAC 16 kHz) que se suben
- * y transcriben mientras se graba. Al terminar, el servidor genera resumen y acciones.
- * El audio se borra del teléfono en cuanto se sube.
+ * Records meetings or long notes in 5-minute segments (AAC 16 kHz) that are uploaded
+ * and transcribed while recording. When finished, the server generates a summary and action items.
+ * The audio is deleted from the phone as soon as it is uploaded.
  */
 class RecorderController(private val context: Context, private val api: KairoApi, private val scope: CoroutineScope) {
     private val _state = MutableStateFlow(RecorderState())
@@ -60,7 +61,7 @@ class RecorderController(private val context: Context, private val api: KairoApi
                 startUploader(rec.id)
                 context.startForegroundService(Intent(context, MeetingRecorderService::class.java))
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message ?: "No se pudo iniciar la grabación") }
+                _state.update { it.copy(error = if (e is app.kairo.core.net.ApiException) e.friendly(context) else context.getString(R.string.rec_error_start)) }
             }
         }
     }
@@ -90,7 +91,7 @@ class RecorderController(private val context: Context, private val api: KairoApi
                     attempt++
                 }
                 seg.file.delete()
-                _state.update { it.copy(uploaded = it.uploaded + if (ok) 1 else 0, pending = (it.pending - 1).coerceAtLeast(0), error = if (ok) it.error else "Un segmento no se pudo subir") }
+                _state.update { it.copy(uploaded = it.uploaded + if (ok) 1 else 0, pending = (it.pending - 1).coerceAtLeast(0), error = if (ok) it.error else context.getString(R.string.rec_error_segment)) }
                 if (seg.last) {
                     runCatching { api.finishRecording(id) }
                     _state.update { RecorderState(lastFinishedId = id) }
@@ -175,14 +176,14 @@ class MeetingRecorderService : Service() {
     private fun notification() = NotificationCompat.Builder(this, Channels.RECORDING)
         .setSmallIcon(R.drawable.ic_stat_kairo)
         .setColor(0xFFF0A23B.toInt())
-        .setContentTitle("Grabando")
-        .setContentText("Kairo transcribe mientras grabas")
+        .setContentTitle(getString(R.string.rec_notif_title))
+        .setContentText(getString(R.string.rec_notif_text))
         .setUsesChronometer(true)
         .setWhen(System.currentTimeMillis())
         .setOngoing(true)
         .setSilent(true)
         .setContentIntent(Notifications.openApp(this, "recordings"))
-        .addAction(0, "Detener", PendingIntent.getService(this, 3, Intent(this, MeetingRecorderService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+        .addAction(0, getString(R.string.home_stop), PendingIntent.getService(this, 3, Intent(this, MeetingRecorderService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
         .build()
 
     companion object {

@@ -1,5 +1,7 @@
 package app.kairo.android.push
 
+import app.kairo.android.R
+import app.kairo.android.ui.common.friendly
 import android.app.Activity
 import android.content.Context
 import app.kairo.core.net.ApiException
@@ -12,30 +14,30 @@ import kotlinx.coroutines.launch
 import org.unifiedpush.android.connector.FailedReason
 import org.unifiedpush.android.connector.UnifiedPush
 
-/** Estado del push propio que muestra Ajustes. */
+/** State of the own push shown in Settings. */
 data class PushState(
-    /** Distribuidor elegido (paquete) y su nombre visible, p. ej. "ntfy". */
+    /** Chosen distributor (package) and its display name, e.g. "ntfy". */
     val distributor: String? = null,
     val distributorLabel: String? = null,
-    /** Distribuidores instalados aunque no se hayan elegido. */
+    /** Installed distributors even if none was chosen. */
     val installed: List<String> = emptyList(),
-    /** Este teléfono entregó su endpoint al servidor. */
+    /** This phone gave its endpoint to the server. */
     val registered: Boolean = false,
     val working: Boolean = false,
     val error: String? = null,
 )
 
 /**
- * Push propio sin Firebase con UnifiedPush: un distribuidor (la app ntfy apuntando al ntfy del
- * usuario) entrega a Kairo el Web Push cifrado que envía el servidor. El conector descifra el
- * contenido (RFC 8291) y [KairoPushService] lo procesa igual que un evento del WebSocket.
+ * Own push without Firebase using UnifiedPush: a distributor (the ntfy app pointing at the user's
+ * ntfy) delivers to Kairo the encrypted Web Push the server sends. The connector decrypts the
+ * content (RFC 8291) and [KairoPushService] processes it like a WebSocket event.
  */
 class PushManager(private val context: Context, private val api: KairoApi, private val scope: CoroutineScope) {
     private val store = context.getSharedPreferences("kairo_push", Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(PushState())
     val state: StateFlow<PushState> = _state
 
-    /** Relee el distribuidor elegido y los instalados (al abrir Ajustes o volver de otra app). */
+    /** Re-reads the chosen distributor and the installed ones (when opening Settings or coming back from another app). */
     fun refreshState() {
         val ack = runCatching { UnifiedPush.getAckDistributor(context) }.getOrNull()
         val installed = runCatching { UnifiedPush.getDistributors(context) }.getOrDefault(emptyList())
@@ -49,32 +51,32 @@ class PushManager(private val context: Context, private val api: KairoApi, priva
         }
     }
 
-    /** Pide al distribuidor un endpoint para este teléfono; la respuesta llega a [onNewEndpoint]. */
+    /** Asks the distributor for an endpoint for this phone; the answer arrives at [onNewEndpoint]. */
     suspend fun register() {
         _state.update { it.copy(working = true, error = null) }
         val vapid = try {
             api.pushConfig().vapidPublicKey
         } catch (e: Exception) {
-            fail(if (e is ApiException) e.message else "No hay conexión con tu servidor")
+            fail(if (e is ApiException) e.friendly(context) else context.getString(R.string.push_err_no_connection))
             return
         }
         runCatching { UnifiedPush.register(context, messageForDistributor = "Kairo", vapid = vapid) }
-            .onFailure { fail("El distribuidor no aceptó la clave del servidor") }
+            .onFailure { fail(context.getString(R.string.push_err_key_rejected)) }
     }
 
-    /** Al abrir la app o iniciar sesión: renueva el registro si ya hay un distribuidor elegido. */
+    /** On opening the app or signing in: renews the registration if a distributor is already chosen. */
     fun registerIfAcknowledged() {
         refreshState()
         if (_state.value.distributor != null) scope.launch { register() }
     }
 
-    /** Botón "Configurar": usa el distribuidor actual o el predeterminado (pregunta si hay varios). */
+    /** "Set up" button: uses the current or default distributor (asks if there are several). */
     fun configure(activity: Activity) {
         _state.update { it.copy(working = true, error = null) }
         UnifiedPush.tryUseCurrentOrDefaultDistributor(activity) { ok ->
             refreshState()
             if (ok) scope.launch { register() }
-            else _state.update { it.copy(working = false, error = if (it.installed.isEmpty()) "No encontré ntfy ni otro distribuidor en este teléfono." else "No elegiste un distribuidor.") }
+            else _state.update { it.copy(working = false, error = context.getString(if (it.installed.isEmpty()) R.string.push_err_none_installed else R.string.push_err_not_chosen)) }
         }
     }
 
@@ -86,7 +88,7 @@ class PushManager(private val context: Context, private val api: KairoApi, priva
                 refreshState()
                 _state.update { it.copy(working = false, error = null) }
             } catch (e: Exception) {
-                fail(if (e is ApiException) "Tu servidor no aceptó el registro: ${e.message}" else "No hay conexión con tu servidor")
+                fail(if (e is ApiException) context.getString(R.string.push_err_server_rejected, e.friendly(context)) else context.getString(R.string.push_err_no_connection))
             }
         }
     }
@@ -94,22 +96,22 @@ class PushManager(private val context: Context, private val api: KairoApi, priva
     fun onRegistrationFailed(reason: FailedReason) {
         fail(
             when (reason) {
-                FailedReason.NETWORK -> "El distribuidor no tiene conexión con tu servidor ntfy."
-                FailedReason.ACTION_REQUIRED -> "Abre la app del distribuidor y revisa su configuración."
-                FailedReason.VAPID_REQUIRED -> "El distribuidor pide una clave VAPID; vuelve a tocar Configurar."
-                else -> "El distribuidor no pudo registrar a Kairo."
+                FailedReason.NETWORK -> context.getString(R.string.push_fail_network)
+                FailedReason.ACTION_REQUIRED -> context.getString(R.string.push_fail_action)
+                FailedReason.VAPID_REQUIRED -> context.getString(R.string.push_fail_vapid)
+                else -> context.getString(R.string.push_fail_other)
             },
         )
     }
 
-    /** El distribuidor retiró el endpoint (desinstalado o cambiado): el servidor deja de usarlo. */
+    /** The distributor withdrew the endpoint (uninstalled or changed): the server stops using it. */
     fun onUnregistered() {
         store.edit().remove(KEY_ENDPOINT).apply()
         refreshState()
         scope.launch { runCatching { api.unregisterPush() } }
     }
 
-    /** Al cerrar sesión: el servidor olvida el endpoint y el distribuidor lo borra. */
+    /** On sign-out: the server forgets the endpoint and the distributor deletes it. */
     suspend fun unregister() {
         runCatching { api.unregisterPush() }
         runCatching { UnifiedPush.unregister(context) }
@@ -117,12 +119,12 @@ class PushManager(private val context: Context, private val api: KairoApi, priva
         refreshState()
     }
 
-    /** `POST /push/test`: cuántos dispositivos aceptaron el aviso de prueba. */
+    /** `POST /push/test`: how many devices accepted the test notice. */
     suspend fun test(): Int = api.testPush()
 
     private fun fail(message: String) = _state.update { it.copy(working = false, error = message) }
 
-    @Suppress("DEPRECATION") // la variante con ApplicationInfoFlags es de Android 13; minSdk es 31
+    @Suppress("DEPRECATION") // the ApplicationInfoFlags variant is Android 13; minSdk is 31
     private fun label(pkg: String): String = runCatching {
         val pm = context.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()

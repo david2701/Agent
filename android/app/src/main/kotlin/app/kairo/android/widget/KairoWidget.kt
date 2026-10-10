@@ -1,5 +1,7 @@
 package app.kairo.android.widget
 
+import androidx.glance.LocalContext
+import app.kairo.android.ui.common.longDateLabel
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -46,8 +48,9 @@ import app.kairo.android.ui.theme.KairoLightScheme
 import app.kairo.core.model.TodayData
 import app.kairo.core.util.timeLabel
 import app.kairo.core.util.toInstantOrNull
+import app.kairo.core.util.toLocalDateOrNull
 
-/** Widget: tu día de un vistazo y un botón para hablar con Kairo. */
+/** Widget: your day at a glance and a button to talk to Kairo. */
 class KairoWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(DpSize(120.dp, 60.dp), DpSize(220.dp, 110.dp), DpSize(280.dp, 200.dp)))
 
@@ -61,12 +64,13 @@ class KairoWidget : GlanceAppWidget() {
     @Composable
     private fun Content(today: TodayData?) {
         val size = LocalSize.current
+        val context = LocalContext.current
         val items = buildList {
-            today?.firedReminders?.forEach { add("Sonó: ${it.text}") }
-            today?.events?.forEach { e -> add((if (e.allDay) "Hoy" else e.startAt.toInstantOrNull()?.timeLabel() ?: "") + "  " + e.title) }
+            today?.firedReminders?.forEach { add(context.getString(R.string.widget_fired, it.text)) }
+            today?.events?.forEach { e -> add((if (e.allDay) context.getString(R.string.widget_today) else e.startAt.toInstantOrNull()?.timeLabel() ?: "") + "  " + e.title) }
             today?.reminders?.forEach { r -> add((r.nextFireAt?.toInstantOrNull()?.timeLabel() ?: "") + "  " + r.text) }
-            today?.tasksOverdue?.forEach { add("Vencida: ${it.title}") }
-            today?.tasksDueToday?.forEach { add("Hoy: ${it.title}") }
+            today?.tasksOverdue?.forEach { add(context.getString(R.string.widget_overdue, it.title)) }
+            today?.tasksDueToday?.forEach { add(context.getString(R.string.widget_today_task, it.title)) }
         }
         Box(
             GlanceModifier.fillMaxSize().background(GlanceTheme.colors.surface).cornerRadius(24.dp).padding(14.dp)
@@ -75,18 +79,18 @@ class KairoWidget : GlanceAppWidget() {
             Column(GlanceModifier.fillMaxSize()) {
                 Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(GlanceModifier.defaultWeight()) {
-                        Text("Kairo", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Medium))
-                        if (size.height > 80.dp) Text(today?.dateLabel ?: "Toca para abrir", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+                        Text(context.getString(R.string.app_name), style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Medium))
+                        if (size.height > 80.dp) Text(today?.date?.toLocalDateOrNull()?.let { context.longDateLabel(it) } ?: context.getString(R.string.widget_tap_open), style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
                     }
                     Box(
                         GlanceModifier.size(44.dp).cornerRadius(22.dp).background(ColorProvider(Color(0xFFF0A23B))).clickable(actionStartActivity<AssistActivity>()),
                         contentAlignment = Alignment.Center,
-                    ) { Image(ImageProvider(R.drawable.ic_widget_mic), contentDescription = "Hablar con Kairo", modifier = GlanceModifier.size(22.dp)) }
+                    ) { Image(ImageProvider(R.drawable.ic_widget_mic), contentDescription = context.getString(R.string.assist_label), modifier = GlanceModifier.size(22.dp)) }
                 }
                 if (size.height > 100.dp) {
                     Spacer(GlanceModifier.height(10.dp))
                     if (items.isEmpty()) {
-                        Text("Día despejado", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp))
+                        Text(context.getString(R.string.home_clear_day), style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp))
                     } else {
                         items.take(if (size.height > 180.dp) 5 else 2).forEach {
                             Text(it, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp))

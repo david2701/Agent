@@ -42,44 +42,44 @@ object Notifications {
         val alarmAttrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).build()
         nm.createNotificationChannels(
             listOf(
-                NotificationChannel(Channels.REMINDERS, "Recordatorios", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Avisos de tus recordatorios"
+                NotificationChannel(Channels.REMINDERS, context.getString(R.string.ch_reminders_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = context.getString(R.string.ch_reminders_desc)
                     enableVibration(true)
                     setSound(alarmSound, alarmAttrs)
                 },
-                NotificationChannel(Channels.TIMERS, "Temporizadores y alarmas", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Temporizadores y alarmas que pides por voz"
+                NotificationChannel(Channels.TIMERS, context.getString(R.string.ch_timers_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = context.getString(R.string.ch_timers_desc)
                     enableVibration(true)
                     setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
                 },
-                NotificationChannel(Channels.ASSISTANT, "Respuestas de Kairo", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Lo que Kairo respondió cuando hablaste con la pantalla apagada"
+                NotificationChannel(Channels.ASSISTANT, context.getString(R.string.ch_assistant_name), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = context.getString(R.string.ch_assistant_desc)
                     setSound(null, null)
                 },
-                NotificationChannel(Channels.LISTENING, "Escucha continua", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Indicador permanente mientras Kairo espera \"Oye Kairo\""
+                NotificationChannel(Channels.LISTENING, context.getString(R.string.ch_listening_name), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = context.getString(R.string.ch_listening_desc, context.getString(R.string.wake_phrase))
                     setShowBadge(false)
                 },
-                NotificationChannel(Channels.BRIEFING, "Resumen del día", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Tu resumen de la mañana"
+                NotificationChannel(Channels.BRIEFING, context.getString(R.string.ch_briefing_name), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = context.getString(R.string.ch_briefing_desc)
                 },
-                NotificationChannel(Channels.RECORDING, "Grabaciones", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Grabación de reuniones en curso"
+                NotificationChannel(Channels.RECORDING, context.getString(R.string.ch_recording_name), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = context.getString(R.string.ch_recording_desc)
                     setShowBadge(false)
                 },
-                NotificationChannel(Channels.FAMILY, "Familia", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Mensajes de tu familia, tareas que te asignan y cambios en lo compartido"
+                NotificationChannel(Channels.FAMILY, context.getString(R.string.ch_family_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = context.getString(R.string.ch_family_desc)
                     enableVibration(true)
                 },
-                NotificationChannel(Channels.CONNECTION, "Conexión directa", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Indicador permanente mientras Kairo mantiene la conexión con tu servidor"
+                NotificationChannel(Channels.CONNECTION, context.getString(R.string.ch_connection_name), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = context.getString(R.string.ch_connection_desc)
                     setShowBadge(false)
                 },
             ),
         )
     }
 
-    /** Abre la app en [destination]; con [noticeId], además marca ese aviso de la familia como leído. */
+    /** Opens the app at [destination]; with [noticeId], it also marks that family notice as read. */
     fun openApp(context: Context, destination: String? = null, noticeId: String? = null): PendingIntent =
         PendingIntent.getActivity(
             context, (destination + (noticeId ?: "")).hashCode(),
@@ -108,15 +108,15 @@ object Notifications {
             .setSmallIcon(R.drawable.ic_stat_kairo)
             .setColor(0xFFF0A23B.toInt())
             .setContentTitle(text)
-            .setContentText(subtitle ?: "Recordatorio")
+            .setContentText(subtitle ?: context.getString(R.string.notif_reminder_default))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setWhen(fireAtMillis)
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(openApp(context, "reminders"))
-            .addAction(0, "Hecho", action(ReminderActionReceiver.ACTION_DONE, 1))
-            .addAction(0, "10 min más", action(ReminderActionReceiver.ACTION_SNOOZE, 2))
+            .addAction(0, context.getString(R.string.home_reminder_done), action(ReminderActionReceiver.ACTION_DONE, 1))
+            .addAction(0, context.getString(R.string.notif_snooze_10), action(ReminderActionReceiver.ACTION_SNOOZE, 2))
             .build()
     }
 
@@ -139,12 +139,12 @@ object Notifications {
 
     fun reminderNotificationId(id: String) = id.hashCode()
 
-    /** Aviso de la familia; si ya hay otros en la bandeja, se agrupan bajo un resumen. */
+    /** Family notice; if there are others in the tray, they are grouped under a summary. */
     fun showFamilyNotice(context: Context, n: NoticeAlert) {
         val builder = NotificationCompat.Builder(context, Channels.FAMILY)
             .setSmallIcon(R.drawable.ic_stat_kairo)
             .setColor(0xFFF0A23B.toInt())
-            .setContentTitle(n.title)
+            .setContentTitle(n.title.ifBlank { context.getString(R.string.family_notice_default_title) })
             .setCategory(if (n.kind == "message") NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_SOCIAL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setGroup(GROUP_FAMILY)
@@ -162,16 +162,16 @@ object Notifications {
     }
 
     /**
-     * Resumen de varios avisos de la familia: encabeza el grupo en la bandeja o, con
-     * [groupSummary] en false, reemplaza a muchos avisos que trae de golpe la sincronización.
+     * Summary of several family notices: it heads the group in the tray or, with
+     * [groupSummary] false, replaces many notices that sync brings at once.
      */
     fun familySummary(context: Context, count: Int, titles: List<String>, groupSummary: Boolean = true): Notification {
-        val style = NotificationCompat.InboxStyle().setSummaryText("Familia")
+        val style = NotificationCompat.InboxStyle().setSummaryText(context.getString(R.string.notif_family_summary))
         titles.take(5).forEach { style.addLine(it) }
         val builder = NotificationCompat.Builder(context, Channels.FAMILY)
             .setSmallIcon(R.drawable.ic_stat_kairo)
             .setColor(0xFFF0A23B.toInt())
-            .setContentTitle("$count avisos de la familia")
+            .setContentTitle(context.resources.getQuantityString(R.plurals.notif_family_count, count, count))
             .setContentText(titles.take(3).joinToString(", "))
             .setStyle(style)
             .setAutoCancel(true)

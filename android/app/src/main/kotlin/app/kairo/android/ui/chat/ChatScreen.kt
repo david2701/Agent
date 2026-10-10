@@ -1,5 +1,7 @@
 package app.kairo.android.ui.chat
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -88,7 +90,7 @@ import app.kairo.core.model.AgentEvent
 import app.kairo.core.model.Conversation
 import app.kairo.core.model.EntityRef
 import app.kairo.core.model.StoredMessage
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.relativeLabel
 import app.kairo.core.util.toInstantOrNull
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -100,7 +102,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 
-/** Turno en curso mostrado mientras llega el streaming. */
+/** Turn in progress, shown while the stream arrives. */
 data class LiveTurn(
     val userText: String,
     val partial: String = "",
@@ -126,7 +128,7 @@ class ChatViewModel(private val graph: AppGraph) : ViewModel() {
 
     init {
         loadConversations()
-        // Si se habló por voz en esta conversación, recarga al terminar
+        // If voice was used in this conversation, reload when it finishes
         viewModelScope.launch {
             var last = VoicePhase.Off
             graph.voice.state.collect { v ->
@@ -144,7 +146,7 @@ class ChatViewModel(private val graph: AppGraph) : ViewModel() {
     fun loadConversations() = viewModelScope.launch {
         runCatching { graph.api.conversations() }
             .onSuccess { list -> ui.update { it.copy(conversations = list, loadingList = false, error = null) } }
-            .onFailure { e -> ui.update { it.copy(loadingList = false, error = e.friendly()) } }
+            .onFailure { e -> ui.update { it.copy(loadingList = false, error = e.friendly(graph.app)) } }
     }
 
     fun open(id: String?) {
@@ -153,7 +155,7 @@ class ChatViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             runCatching { graph.api.messages(id) }
                 .onSuccess { m -> ui.update { if (it.current == id) it.copy(messages = m, loadingMessages = false) else it } }
-                .onFailure { e -> ui.update { it.copy(loadingMessages = false, error = e.friendly()) } }
+                .onFailure { e -> ui.update { it.copy(loadingMessages = false, error = e.friendly(graph.app)) } }
         }
     }
 
@@ -161,7 +163,7 @@ class ChatViewModel(private val graph: AppGraph) : ViewModel() {
         runCatching { graph.api.deleteConversation(id) }.onSuccess {
             if (ui.value.current == id) open(null)
             loadConversations()
-        }.onFailure { messages.tryEmit(it.friendly()) }
+        }.onFailure { messages.tryEmit(it.friendly(graph.app)) }
     }
 
     fun send(text: String) {
@@ -184,7 +186,7 @@ class ChatViewModel(private val graph: AppGraph) : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
-                ui.update { s -> s.copy(live = s.live?.copy(error = e.friendly())) }
+                ui.update { s -> s.copy(live = s.live?.copy(error = e.friendly(graph.app))) }
             }
             val id = ui.value.current
             if (ui.value.live?.error == null && id != null) {
@@ -251,11 +253,11 @@ private fun ConversationList(ui: ChatUi, onOpen: (String?) -> Unit, onDelete: (S
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            item { Text("Conversaciones", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)) }
+            item { Text(stringResource(R.string.chat_conversations), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)) }
             ui.error?.let { item { ErrorBanner(it, onRetry = onRetry) } }
             if (ui.loadingList) item { SkeletonList(6) }
             else if (ui.conversations.isEmpty()) item {
-                EmptyState(Icons.Rounded.ChatBubbleOutline, "Sin conversaciones", "Escribe o habla con Kairo; aquí queda el historial con todo lo que hizo.")
+                EmptyState(Icons.Rounded.ChatBubbleOutline, stringResource(R.string.chat_empty_title), stringResource(R.string.chat_empty_body))
             }
             items(ui.conversations, key = { it.id }) { c ->
                 val selected = ui.current == c.id
@@ -266,7 +268,7 @@ private fun ConversationList(ui: ChatUi, onOpen: (String?) -> Unit, onDelete: (S
                 ) {
                     Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(c.title.ifBlank { "Conversación" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(c.title.ifBlank { stringResource(R.string.chat_untitled) }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val preview = c.preview?.takeIf { p -> !p.startsWith(c.title.removeSuffix("...").take(40)) }
                             if (preview != null) Text(
                                 preview,
@@ -275,7 +277,7 @@ private fun ConversationList(ui: ChatUi, onOpen: (String?) -> Unit, onDelete: (S
                             )
                         }
                         Text(c.updatedAt.toInstantOrNull()?.relativeLabel() ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
-                        IconButton(onClick = { onDelete(c.id) }) { Icon(Icons.Rounded.DeleteOutline, "Borrar conversación", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        IconButton(onClick = { onDelete(c.id) }) { Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.chat_delete_cd), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -283,7 +285,7 @@ private fun ConversationList(ui: ChatUi, onOpen: (String?) -> Unit, onDelete: (S
         ExtendedFloatingActionButton(
             onClick = { onOpen(null) },
             icon = { Icon(Icons.Rounded.Add, null) },
-            text = { Text("Nueva") },
+            text = { Text(stringResource(R.string.chat_new)) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -312,16 +314,16 @@ private fun Thread(
 
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (showBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Volver") }
-            val title = ui.conversations.firstOrNull { it.id == ui.current }?.title ?: "Nueva conversación"
-            Text(title.ifBlank { "Conversación" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+            if (showBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.common_back)) }
+            val title = ui.conversations.firstOrNull { it.id == ui.current }?.title ?: stringResource(R.string.chat_new_conversation)
+            Text(title.ifBlank { stringResource(R.string.chat_untitled) }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (ui.messages.isEmpty() && ui.live == null && !ui.loadingMessages && !voiceHere) {
                 Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     KairoOrb(OrbState.Idle, 0f, size = 120.dp)
-                    Text("¿En qué te ayudo?", style = MaterialTheme.typography.titleLarge)
-                    Text("Notas, tareas, recordatorios, tu agenda o una pregunta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.chat_prompt_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.chat_prompt_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             LazyColumn(
@@ -340,7 +342,7 @@ private fun Thread(
                             voice.level, size = 48.dp,
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text(voice.transcript?.let { "\"$it\"" } ?: if (voice.phase == VoicePhase.Listening) "Te escucho" else voice.working ?: "Pensando", style = MaterialTheme.typography.bodyMedium)
+                        Text(voice.transcript?.let { "\"$it\"" } ?: if (voice.phase == VoicePhase.Listening) stringResource(R.string.home_status_listening) else voice.working ?: stringResource(R.string.home_status_thinking), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -350,7 +352,7 @@ private fun Thread(
             TextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text("Escribe a Kairo") },
+                placeholder = { Text(stringResource(R.string.home_ask_placeholder)) },
                 modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                 shape = RoundedCornerShape(26.dp),
                 maxLines = 6,
@@ -375,7 +377,7 @@ private fun Thread(
             ) {
                 Icon(
                     when { text.isNotBlank() -> Icons.AutoMirrored.Rounded.Send; voiceHere -> Icons.Rounded.Stop; else -> Icons.Rounded.Mic },
-                    contentDescription = if (text.isNotBlank()) "Enviar" else "Hablar",
+                    contentDescription = if (text.isNotBlank()) stringResource(R.string.chat_send) else stringResource(R.string.home_talk),
                 )
             }
         }
@@ -423,7 +425,7 @@ private fun LiveItem(live: LiveTurn, baseUrl: String, onOpenEntity: (EntityRef) 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LoadingIndicator(Modifier.size(32.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(live.working ?: "Pensando", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(live.working ?: stringResource(R.string.home_status_thinking), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -433,7 +435,7 @@ private fun LiveItem(live: LiveTurn, baseUrl: String, onOpenEntity: (EntityRef) 
 private fun ChatImage(url: String) {
     AsyncImage(
         model = url,
-        contentDescription = "Imagen",
+        contentDescription = stringResource(R.string.chat_image),
         contentScale = ContentScale.Crop,
         modifier = Modifier.size(280.dp).clip(RoundedCornerShape(16.dp)),
     )

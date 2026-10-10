@@ -1,5 +1,8 @@
 package app.kairo.android.ui.recordings
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,7 +68,7 @@ import app.kairo.android.ui.components.SectionHeader
 import app.kairo.android.ui.components.SkeletonList
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Recording
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.relativeLabel
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,8 +76,8 @@ import kotlinx.coroutines.launch
 class RecordingsViewModel(graph: AppGraph) : ResourceViewModel<List<Recording>>(graph, setOf("recording")) {
     override suspend fun load() = graph.api.recordings()
     init { refresh() }
-    fun delete(r: Recording) = mutate("Grabación eliminada") { graph.api.deleteRecording(r.id) }
-    fun createTasks(r: Recording) = mutate { val n = graph.api.recordingTasks(r.id); say("Se crearon $n tareas") }
+    fun delete(r: Recording) = mutate(str(R.string.rec_deleted)) { graph.api.deleteRecording(r.id) }
+    fun createTasks(r: Recording) = mutate { val n = graph.api.recordingTasks(r.id); say(graph.app.resources.getQuantityString(R.plurals.rec_tasks_created, n, n)) }
     suspend fun detail(id: String): Recording? = runCatching { graph.api.recording(id) }.getOrNull()
     fun poll() = viewModelScope.launch { while (state.value.data?.any { it.status == "processing" || it.status == "recording" } == true) { delay(4000); refresh(silent = true) } }
 }
@@ -96,7 +99,7 @@ fun RecordingsScreen(graph: AppGraph, navigate: (Destination) -> Unit) {
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { inner ->
         LazyColumn(Modifier.fillMaxSize().padding(inner).statusBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text("Grabaciones", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) }
+            item { Text(stringResource(R.string.nav_recordings), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) }
             item {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -104,26 +107,26 @@ fun RecordingsScreen(graph: AppGraph, navigate: (Destination) -> Unit) {
                         if (rec.active) {
                             val secs = ((now - rec.startedAt) / 1000).coerceAtLeast(0)
                             Text("%02d:%02d".format(secs / 60, secs % 60), style = MaterialTheme.typography.headlineMedium.copy(fontFamily = MonoStyle.fontFamily))
-                            Text(if (rec.finishing) "Terminando y subiendo..." else "Transcribiendo por partes · ${rec.uploaded} subidas", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (rec.finishing) stringResource(R.string.rec_finishing) else pluralStringResource(R.plurals.rec_transcribing, rec.uploaded, rec.uploaded), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Button(onClick = { graph.recorder.stop() }, enabled = !rec.finishing, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)) {
-                                Icon(Icons.Rounded.Stop, null); Spacer(Modifier.width(8.dp)); Text("Detener")
+                                Icon(Icons.Rounded.Stop, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.home_stop))
                             }
                         } else {
-                            Text("Graba una reunión o una idea larga", style = MaterialTheme.typography.titleMedium)
-                            Text("Kairo transcribe, resume y propone tareas. El audio se borra al subirse.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.rec_idle_title), style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.rec_idle_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Button(
                                 onClick = { if (graph.voice.hasMicPermission()) graph.recorder.start() else mic.launch(Manifest.permission.RECORD_AUDIO) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                            ) { Icon(Icons.Rounded.FiberManualRecord, null); Spacer(Modifier.width(8.dp)); Text("Grabar") }
+                            ) { Icon(Icons.Rounded.FiberManualRecord, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.rec_record)) }
                         }
                         rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
             state.error?.let { item { ErrorBanner(it, onRetry = { vm.refresh() }) } }
-            item { SectionHeader("Anteriores") }
+            item { SectionHeader(stringResource(R.string.rec_previous)) }
             if (state.loading && state.data == null) item { SkeletonList(3) }
-            else if (state.data.isNullOrEmpty()) item { EmptyState(Icons.Rounded.GraphicEq, "Sin grabaciones", "Tus reuniones resumidas aparecerán aquí.") }
+            else if (state.data.isNullOrEmpty()) item { EmptyState(Icons.Rounded.GraphicEq, stringResource(R.string.rec_empty_title), stringResource(R.string.rec_empty_body)) }
             items(state.data.orEmpty(), key = { it.id }) { r ->
                 Surface(onClick = { open = r }, color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
                     Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -131,16 +134,16 @@ fun RecordingsScreen(graph: AppGraph, navigate: (Destination) -> Unit) {
                             Text(r.title, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 when (r.status) {
-                                    "processing" -> "Resumiendo..."
-                                    "recording" -> "Grabando · ${r.segments} partes"
-                                    "failed" -> r.error ?: "No se pudo procesar"
-                                    else -> "${r.durationS / 60} min · ${r.createdAt.toInstantOrNull()?.relativeLabel() ?: ""}"
+                                    "processing" -> stringResource(R.string.rec_status_processing)
+                                    "recording" -> pluralStringResource(R.plurals.rec_status_recording, r.segments, r.segments)
+                                    "failed" -> r.error ?: stringResource(R.string.rec_failed)
+                                    else -> stringResource(R.string.rec_duration, r.durationS / 60, r.createdAt.toInstantOrNull()?.relativeLabel() ?: "")
                                 },
                                 style = MonoStyle, color = if (r.status == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         if (r.status == "processing") LoadingIndicator(Modifier.size(28.dp))
-                        IconButton(onClick = { vm.delete(r) }) { Icon(Icons.Rounded.DeleteOutline, "Eliminar") }
+                        IconButton(onClick = { vm.delete(r) }) { Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.common_delete)) }
                     }
                 }
             }
@@ -158,17 +161,17 @@ fun RecordingsScreen(graph: AppGraph, navigate: (Destination) -> Unit) {
                 Text(d.title, style = MaterialTheme.typography.titleLarge)
                 if (d.summary.isNotBlank()) Text(d.summary, style = MaterialTheme.typography.bodyLarge)
                 if (d.keyPoints.isNotEmpty()) {
-                    Text("Puntos clave", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.rec_key_points), style = MaterialTheme.typography.titleSmall)
                     d.keyPoints.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
                 }
                 if (d.actionItems.isNotEmpty()) {
-                    Text("Acciones", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.rec_actions), style = MaterialTheme.typography.titleSmall)
                     d.actionItems.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
-                    OutlinedButton(onClick = { vm.createTasks(d) }) { Icon(Icons.Rounded.TaskAlt, null); Spacer(Modifier.width(8.dp)); Text("Crear tareas") }
+                    OutlinedButton(onClick = { vm.createTasks(d) }) { Icon(Icons.Rounded.TaskAlt, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.rec_create_tasks)) }
                 }
-                if (d.noteId != null) TextButton(onClick = { open = null; navigate(Destination.Notes) }) { Text("Ver nota") }
+                if (d.noteId != null) TextButton(onClick = { open = null; navigate(Destination.Notes) }) { Text(stringResource(R.string.rec_view_note)) }
                 if (d.transcript.isNotBlank()) {
-                    TextButton(onClick = { showTranscript = !showTranscript }) { Text(if (showTranscript) "Ocultar transcripción" else "Ver transcripción") }
+                    TextButton(onClick = { showTranscript = !showTranscript }) { Text(if (showTranscript) stringResource(R.string.rec_hide_transcript) else stringResource(R.string.rec_show_transcript)) }
                     if (showTranscript) Text(d.transcript, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(16.dp))

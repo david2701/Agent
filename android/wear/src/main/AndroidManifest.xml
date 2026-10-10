@@ -14,7 +14,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KairoWear">
 
-        <!-- La app funciona sola (Wi-Fi o LTE del reloj), sin depender de la app del teléfono -->
+        <!-- The app works on its own (watch Wi-Fi or LTE), without depending on the phone app -->
         <meta-data android:name="com.google.android.wearable.standalone" android:value="true" />
 
         <activity
@@ -25,7 +25,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Botón o gesto de asistente del reloj -->
+            <!-- Watch assistant button or gesture -->
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />

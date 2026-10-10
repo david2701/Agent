@@ -2,33 +2,33 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Red y tiempo real -->
+    <!-- Network and realtime -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Voz: micrófono continuo con servicio en primer plano -->
+    <!-- Voice: continuous microphone with a foreground service -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Conexión directa opcional con el servidor propio (sin Firebase ni ntfy) -->
+    <!-- Optional direct connection to your own server (no Firebase or ntfy) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- Recordatorios: notificaciones y alarmas exactas aunque no haya internet -->
+    <!-- Reminders: notifications and exact alarms even without internet -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Recordatorios por lugar -->
+    <!-- Place-based reminders -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <!-- Temporizadores/alarmas nativas del reloj (si el usuario lo prefiere) -->
+    <!-- Native clock timers/alarms (if the user prefers them) -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -58,10 +58,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Family invite links: /join?code=XXXX-XXXX (canonical) and the legacy /unirse?codigo=XXXX-XXXX.
+                 The host is the Kairo server (kairo.serverUrl in gradle.properties or KAIRO_SERVER_URL). -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="${kairoHost}" />
+                <data android:pathPrefix="/join" />
+                <data android:pathPrefix="/unirse" />
+            </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- Asistente: pulsación larga de encendido/inicio (si eliges Kairo como asistente), tile y widget -->
+        <!-- Assistant: long-press of power/home (if you pick Kairo as the assistant), tile and widget -->
         <activity
             android:name=".assist.AssistActivity"
             android:exported="true"
@@ -84,7 +95,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Compartir con Kairo (texto, enlaces, fotos) -->
+        <!-- Share to Kairo (text, links, photos) -->
         <activity
             android:name=".share.ShareActivity"
             android:exported="true"
@@ -114,7 +125,7 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Conexión directa: solo mantiene el WebSocket con el servidor del usuario; se activa en Ajustes -->
+        <!-- Direct connection: only keeps the WebSocket open to the user's server; turned on in Settings -->
         <service
             android:name=".service.ConnectionService"
             android:exported="false"
@@ -125,7 +136,7 @@
                 android:value="Keeps a WebSocket open to the user's self-hosted Kairo server to deliver reminders and family notices without Firebase. Opt-in from settings." />
         </service>
 
-        <!-- Push propio con UnifiedPush (ntfy u otro distribuidor); el conector lo enlaza internamente -->
+        <!-- Own push with UnifiedPush (ntfy or another distributor); the connector wires it up internally -->
         <service
             android:name=".push.KairoPushService"
             android:exported="false">
@@ -178,7 +189,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- WorkManager se inicializa a mano en KairoApplication -->
+        <!-- WorkManager is initialized manually in KairoApplication -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

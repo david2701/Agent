@@ -1,5 +1,7 @@
 package app.kairo.android.share
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
@@ -47,27 +49,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
-/** "Compartir > Kairo": guarda textos, enlaces y fotos (con lectura del texto de la imagen). */
+/** "Share > Kairo": saves texts, links and photos (reading the text in the image). */
 class ShareActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim()
-        val stream = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        val stream = androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
         val url = text?.let { Regex("https?://\\S+").find(it)?.value }
         val note = listOfNotNull(subject, text?.replace(url ?: "\u0000", "")?.trim()?.takeIf { it.isNotEmpty() }).joinToString("\n").ifBlank { null }
 
         setContent {
             KairoTheme {
-                var working by remember { mutableStateOf("Leyendo lo que compartiste") }
+                var working by remember { mutableStateOf(getString(R.string.share_reading)) }
                 var done by remember { mutableStateOf(false) }
                 var reply by remember { mutableStateOf<String?>(null) }
                 var error by remember { mutableStateOf<String?>(null) }
                 val actions = remember { mutableStateListOf<AgentEvent.ToolEnd>() }
 
                 LaunchedEffect(Unit) {
-                    if (graph.session.current() == null) { error = "Inicia sesión en Kairo primero"; done = true; return@LaunchedEffect }
+                    if (graph.session.current() == null) { error = getString(R.string.share_sign_in); done = true; return@LaunchedEffect }
                     try {
                         val image = stream?.let { withContext(Dispatchers.IO) { compress(it) } }
                         graph.api.capture(
@@ -83,7 +85,7 @@ class ShareActivity : ComponentActivity() {
                             }
                         }
                     } catch (e: Exception) {
-                        error = e.friendly()
+                        error = e.friendly(this@ShareActivity)
                     }
                     done = true
                     delay(if (error == null) 3500 else 6000)
@@ -96,7 +98,7 @@ class ShareActivity : ComponentActivity() {
                         modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(10.dp).navigationBarsPadding(),
                     ) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Guardar en Kairo", style = MaterialTheme.typography.titleLarge)
+                            Text(stringResource(R.string.share_label), style = MaterialTheme.typography.titleLarge)
                             if (!done) Row(verticalAlignment = Alignment.CenterVertically) {
                                 LoadingIndicator(Modifier.size(36.dp)); Spacer(Modifier.size(10.dp))
                                 Text(working, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -104,7 +106,7 @@ class ShareActivity : ComponentActivity() {
                             actions.forEach { ActionCard(it) }
                             reply?.let { MarkdownText(it, style = MaterialTheme.typography.bodyMedium) }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                            if (done) TextButton(onClick = { finish() }, modifier = Modifier.align(Alignment.End)) { Text("Listo") }
+                            if (done) TextButton(onClick = { finish() }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.common_done)) }
                         }
                     }
                 }
@@ -112,7 +114,7 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    /** Reduce la foto a 1600 px como máximo (JPEG 85 %) para subirla rápido. */
+    /** Shrinks the photo to 1600 px at most (JPEG 85 %) to upload it quickly. */
     private fun compress(uri: Uri): ByteArray? = runCatching {
         val src = ImageDecoder.createSource(contentResolver, uri)
         val bmp = ImageDecoder.decodeBitmap(src) { decoder, info, _ ->

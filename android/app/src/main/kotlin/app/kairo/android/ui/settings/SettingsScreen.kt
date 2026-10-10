@@ -1,5 +1,11 @@
 package app.kairo.android.ui.settings
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import android.text.format.DateFormat
+import app.kairo.android.ui.common.clockLabel
+import app.kairo.android.ui.common.formatLocale
 import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
@@ -75,7 +81,7 @@ import app.kairo.core.model.SettingsResponse
 import app.kairo.core.model.VoiceOption
 import app.kairo.core.net.KairoApi.Companion.obj
 import app.kairo.core.session.Session
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.relativeLabel
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
@@ -92,31 +98,25 @@ class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph
     fun patch(block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = mutate { graph.api.updateSettings(obj(block)) }
     val pairCode = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     fun newPairCode() = viewModelScope.launch {
-        runCatching { graph.api.pairCode() }.onSuccess { pairCode.value = it }.onFailure { say("No se pudo generar el código") }
+        runCatching { graph.api.pairCode() }.onSuccess { pairCode.value = it }.onFailure { say(R.string.set_pair_failed) }
     }
 
-    fun revoke(d: Device) = mutate("Sesión cerrada en ${d.name}") { graph.api.revokeDevice(d.id) }
+    fun revoke(d: Device) = mutate(str(R.string.set_session_closed, d.name)) { graph.api.revokeDevice(d.id) }
     fun logout() = viewModelScope.launch {
         ListeningService.stop(graph.app)
         ConnectionService.stop(graph.app)
         graph.prefs.setWakeWord(false)
         graph.prefs.setDirectConnection(false)
-        // El servidor olvida el endpoint de push antes de cerrar la sesión (necesita el token)
+        // The server forgets the push endpoint before the session is closed (it needs the token)
         graph.push.unregister()
         graph.api.logout()
     }
 
-    /** "Enviar prueba": un aviso sólo por push para comprobar que llega con la app cerrada. */
+    /** "Send test": a notice over push only, to check that it arrives with the app closed. */
     fun testPush() = viewModelScope.launch {
         runCatching { graph.push.test() }
             .onSuccess { n ->
-                say(
-                    when (n) {
-                        0 -> "Ningún teléfono tiene el push registrado todavía"
-                        1 -> "Prueba enviada: la aceptó 1 dispositivo"
-                        else -> "Prueba enviada: la aceptaron $n dispositivos"
-                    },
-                )
+                say(if (n == 0) str(R.string.set_push_test_none) else graph.app.resources.getQuantityString(R.plurals.set_push_test_sent, n, n))
                 refresh(silent = true)
             }
             .onFailure { say(it.friendly()) }
@@ -127,9 +127,9 @@ class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph
         if (on) ConnectionService.start(graph.app) else ConnectionService.stop(graph.app)
     }
 
-    /** Activa la escucha continua: descarga el modelo si falta y arranca el servicio. */
+    /** Turns on continuous listening: downloads the model if missing and starts the service. */
     fun enableWakeWord() = viewModelScope.launch {
-        if (!graph.wakeModel.ensure()) { say("No se pudo descargar el modelo de activación"); return@launch }
+        if (!graph.wakeModel.ensure()) { say(R.string.set_model_failed); return@launch }
         graph.prefs.setWakeWord(true)
         ListeningService.start(graph.app)
     }
@@ -154,7 +154,7 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
-    // Estado de permisos del sistema (se reevalúa al volver de Ajustes de Android)
+    // System permission state (re-evaluated when coming back from Android Settings)
     var tick by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++; graph.push.refreshState() }
     val perms = remember(tick) { SystemStatus.read(context) }
@@ -163,22 +163,23 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
         if (res[Manifest.permission.RECORD_AUDIO] == true) vm.enableWakeWord()
     }
     val locationPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
-    // La conexión directa funciona sin este permiso, pero sin él la notificación fija no se ve
+    // The direct connection works without this permission, but without it the fixed notification is not shown
     val connectionPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.setDirectConnection(true) }
     var pickTime by remember { mutableStateOf(false) }
     var pickVoice by remember { mutableStateOf(false) }
 
     val s = state.data?.server?.settings
+    val wake = stringResource(R.string.wake_phrase)
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { inner ->
         LazyColumn(Modifier.fillMaxSize().padding(inner).statusBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { Text("Ajustes", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp)) }
+            item { Text(stringResource(R.string.nav_settings), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp)) }
             state.error?.let { item { ErrorBanner(it, onRetry = { vm.refresh() }) } }
 
             item {
-                Group("Escucha") {
+                Group(stringResource(R.string.set_listening_group)) {
                     ToggleRow(
-                        "Oye Kairo", "Kairo escucha la frase de activación en el teléfono, sin enviar audio hasta que la dices. Usa batería y muestra el indicador del micrófono.",
+                        wake, stringResource(R.string.set_wake_body),
                         checked = local.wakeWordEnabled,
                     ) { on ->
                         if (on) {
@@ -188,52 +189,52 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
                     }
                     when (val st = modelStatus) {
                         is WakeModelManager.Status.Downloading -> Column(Modifier.padding(top = 8.dp)) {
-                            Text("Descargando modelo de voz offline (40 MB)...", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.set_model_downloading), style = MaterialTheme.typography.bodySmall)
                             LinearWavyProgressIndicator(progress = { st.progress }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
                         }
-                        is WakeModelManager.Status.Failed -> Text(st.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        is WakeModelManager.Status.Failed -> Text(stringResource(R.string.set_model_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         else -> Unit
                     }
                     Divider()
-                    ToggleRow("Seguir la conversación", "Si Kairo te pregunta algo, escucha la respuesta sin repetir \"Oye Kairo\".", local.followUp) { scope.launch { graph.prefs.setFollowUp(it) } }
+                    ToggleRow(stringResource(R.string.set_follow_title), stringResource(R.string.set_follow_body, wake), local.followUp) { scope.launch { graph.prefs.setFollowUp(it) } }
                     Divider()
-                    ToggleRow("Sonidos de escucha", "Un tono breve al empezar y al terminar.", local.earcons) { scope.launch { graph.prefs.setEarcons(it) } }
+                    ToggleRow(stringResource(R.string.set_sounds_title), stringResource(R.string.set_sounds_body), local.earcons) { scope.launch { graph.prefs.setEarcons(it) } }
                     Divider()
-                    ToggleRow("Leer respuestas del chat", "Kairo lee en voz alta lo que responde en Conversación.", local.speakChatReplies) { scope.launch { graph.prefs.setSpeakChatReplies(it) } }
+                    ToggleRow(stringResource(R.string.set_speak_title), stringResource(R.string.set_speak_body), local.speakChatReplies) { scope.launch { graph.prefs.setSpeakChatReplies(it) } }
                 }
             }
 
             item {
-                Group("Para que funcione siempre") {
-                    StatusRow("Asistente del sistema", "Elige Kairo como asistente digital para abrirlo manteniendo pulsado el botón de inicio o encendido.", "Configurar") {
+                Group(stringResource(R.string.set_always_group)) {
+                    StatusRow(stringResource(R.string.set_assistant_title), stringResource(R.string.set_assistant_body), stringResource(R.string.set_configure)) {
                         val intents = listOf(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), Intent(Settings.ACTION_SETTINGS))
                         intents.firstOrNull { runCatching { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess }
                     }
                     Divider()
                     StatusRow(
-                        "Batería sin restricciones",
-                        if (perms.batteryUnrestricted) "Listo: Android no detendrá a Kairo." else "Samsung y otros fabricantes cierran apps en segundo plano. Permite que Kairo siga activo.",
-                        if (perms.batteryUnrestricted) null else "Permitir",
+                        stringResource(R.string.set_battery_title),
+                        if (perms.batteryUnrestricted) stringResource(R.string.set_battery_ok) else stringResource(R.string.set_battery_needed),
+                        if (perms.batteryUnrestricted) null else stringResource(R.string.set_allow),
                     ) {
                         runCatching { context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))) }
                     }
                     Divider()
                     StatusRow(
-                        "Alarmas exactas",
-                        if (perms.exactAlarms) "Listo: los recordatorios suenan a la hora exacta, incluso sin internet." else "Necesario para que los recordatorios suenen puntuales.",
-                        if (perms.exactAlarms) null else "Permitir",
+                        stringResource(R.string.set_alarms_title),
+                        if (perms.exactAlarms) stringResource(R.string.set_alarms_ok) else stringResource(R.string.set_alarms_needed),
+                        if (perms.exactAlarms) null else stringResource(R.string.set_allow),
                     ) {
                         if (Build.VERSION.SDK_INT >= 31) runCatching { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) }
                     }
                     Divider()
                     StatusRow(
-                        "Ubicación para recordatorios por lugar",
+                        stringResource(R.string.set_location_title),
                         when {
-                            perms.backgroundLocation -> "Listo: avisos al llegar o salir de tus lugares."
-                            perms.fineLocation -> "Falta \"Permitir todo el tiempo\" para avisarte con la app cerrada."
-                            else -> "Opcional. Permite avisos al llegar al súper, a casa o al trabajo."
+                            perms.backgroundLocation -> stringResource(R.string.set_location_ok)
+                            perms.fineLocation -> stringResource(R.string.set_location_background)
+                            else -> stringResource(R.string.set_location_optional)
                         },
-                        when { perms.backgroundLocation -> null; perms.fineLocation -> "Abrir ajustes"; else -> "Permitir" },
+                        when { perms.backgroundLocation -> null; perms.fineLocation -> stringResource(R.string.set_open_settings); else -> stringResource(R.string.set_allow) },
                     ) {
                         if (!perms.fineLocation) locationPermissions.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                         else context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -242,39 +243,35 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
             }
 
             item {
-                Group("Avisos al instante, sin Firebase") {
+                Group(stringResource(R.string.set_push_group)) {
                     val label = push.distributorLabel ?: push.distributor
                     StatusRow(
-                        "Push propio",
+                        stringResource(R.string.set_push_title),
                         when {
-                            label != null && push.registered -> "Activo con $label: los avisos llegan aunque Kairo esté cerrado."
-                            label != null && push.working -> "Registrando este teléfono con $label..."
-                            label != null -> "Usando $label. Toca Configurar para registrar este teléfono en tu servidor."
-                            push.installed.isNotEmpty() -> "Hay un distribuidor instalado. Toca Configurar para usarlo."
-                            else -> "No hay un distribuidor en este teléfono."
+                            label != null && push.registered -> stringResource(R.string.set_push_active, label)
+                            label != null && push.working -> stringResource(R.string.set_push_registering, label)
+                            label != null -> stringResource(R.string.set_push_using, label)
+                            push.installed.isNotEmpty() -> stringResource(R.string.set_push_installed)
+                            else -> stringResource(R.string.set_push_none)
                         },
-                        if (push.working) null else "Configurar",
+                        if (push.working) null else stringResource(R.string.set_configure),
                     ) { activity?.let(graph.push::configure) }
                     push.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     state.data?.push?.let { p ->
                         Text(
-                            when (p.registeredDevices) {
-                                0 -> "Aún no hay teléfonos con push en tu cuenta."
-                                1 -> "1 teléfono con push en tu cuenta."
-                                else -> "${p.registeredDevices} teléfonos con push en tu cuenta."
-                            },
+                            if (p.registeredDevices == 0) stringResource(R.string.set_push_devices_none) else pluralStringResource(R.plurals.set_push_devices, p.registeredDevices, p.registeredDevices),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    OutlinedButton(onClick = { vm.testPush() }) { Text("Enviar prueba") }
+                    OutlinedButton(onClick = { vm.testPush() }) { Text(stringResource(R.string.set_send_test)) }
                     Text(
-                        "Instala ntfy (F-Droid o Play Store), apúntalo a tu propio servidor ntfy (el del perfil push del docker compose de Kairo) y vuelve aquí para tocar Configurar.",
+                        stringResource(R.string.set_push_hint),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Divider()
                     ToggleRow(
-                        "Conexión directa con tu servidor",
-                        "Sin ntfy ni \"Oye Kairo\": Kairo queda conectado con una notificación fija. Gasta algo más de batería.",
+                        stringResource(R.string.set_direct_title),
+                        stringResource(R.string.set_direct_body, wake),
                         checked = local.directConnection,
                     ) { on ->
                         if (on && Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -285,57 +282,65 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
             }
 
             if (s != null) item {
-                Group("Asistente") {
+                Group(stringResource(R.string.set_assistant_group)) {
                     val voiceName = state.data?.voices?.firstOrNull { it.id == s.voice }?.name ?: s.voice
-                    StatusRow("Voz", "$voiceName · velocidad ${"%.1f".format(s.voiceSpeed)}x", "Cambiar") { pickVoice = true }
+                    StatusRow(stringResource(R.string.set_voice), stringResource(R.string.set_voice_value, voiceName, String.format(context.formatLocale(), "%.1f", s.voiceSpeed)), stringResource(R.string.set_change)) { pickVoice = true }
                     var speed by remember(s.voiceSpeed) { mutableFloatStateOf(s.voiceSpeed.toFloat()) }
                     Slider(speed, { speed = it }, valueRange = 0.7f..1.4f, steps = 6, onValueChangeFinished = { vm.patch { put("voiceSpeed", speed.toDouble()) } })
                     Divider()
-                    ToggleRow("Respuestas rápidas", "Desactiva el razonamiento extendido del modelo para responder antes.", s.fastMode) { v -> vm.patch { put("fastMode", v) } }
+                    ToggleRow(stringResource(R.string.set_fast_title), stringResource(R.string.set_fast_body), s.fastMode) { v -> vm.patch { put("fastMode", v) } }
                     Divider()
-                    ToggleRow("Resumen de la mañana", "A las ${s.briefingTime}, Kairo te resume el día: agenda, pendientes y clima.", s.briefingEnabled) { v -> vm.patch { put("briefingEnabled", v) } }
-                    if (s.briefingEnabled) TextButton(onClick = { pickTime = true }) { Text("Cambiar hora: ${s.briefingTime}") }
+                    val briefingTime = runCatching { context.clockLabel(java.time.LocalTime.parse(s.briefingTime)) }.getOrDefault(s.briefingTime)
+                    ToggleRow(stringResource(R.string.set_briefing_title), stringResource(R.string.set_briefing_body, briefingTime), s.briefingEnabled) { v -> vm.patch { put("briefingEnabled", v) } }
+                    if (s.briefingEnabled) TextButton(onClick = { pickTime = true }) { Text(stringResource(R.string.set_change_time, briefingTime)) }
                     Divider()
-                    Text("Modelo: ${s.chatModel} (respaldo ${s.fallbackModel})", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Ciudad para el clima: ${s.homeCity ?: "sin configurar (cámbiala en el dashboard)"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.set_model, s.chatModel, s.fallbackModel), style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.set_city, s.homeCity ?: stringResource(R.string.set_city_unset)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
             item {
-                Group("Familia") {
+                Group(stringResource(R.string.nav_family)) {
                     val subtitle = when {
-                        family == null -> "Miembros, invitaciones y avisos de tu hogar."
-                        family.others.isEmpty() && family.isAdmin -> "Solo estás tú. Invita a tu familia para compartir listas, eventos y tareas."
-                        else -> (if (family.members.size == 1) "1 miembro" else "${family.members.size} miembros") + if (family.isAdmin) " · administras la familia" else ""
+                        family == null -> stringResource(R.string.set_family_blurb)
+                        family.others.isEmpty() && family.isAdmin -> stringResource(R.string.set_family_alone)
+                        else -> pluralStringResource(R.plurals.family_members, family.members.size, family.members.size) + if (family.isAdmin) " \u00B7 " + stringResource(R.string.family_admin_note) else ""
                     }
-                    StatusRow(family?.household?.name ?: "Familia", subtitle, "Abrir") { navigate(Destination.Family) }
+                    StatusRow(family?.household?.name ?: stringResource(R.string.nav_family), subtitle, stringResource(R.string.home_open)) { navigate(Destination.Family) }
                 }
             }
 
             item {
-                Group("Cuenta") {
+                Group(stringResource(R.string.set_account_group)) {
                     Text(session.user.displayName, style = MaterialTheme.typography.titleMedium)
                     Text(session.user.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(session.serverUrl, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(1.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.newPairCode() }) { Text("Vincular reloj") }
-                        OutlinedButton(onClick = { vm.logout() }) { Text("Cerrar sesión") }
+                        OutlinedButton(onClick = { vm.newPairCode() }) { Text(stringResource(R.string.set_pair_watch)) }
+                        OutlinedButton(onClick = { vm.logout() }) { Text(stringResource(R.string.set_sign_out)) }
+                    }
+                    // Kairo follows the system language; Android 13+ has a per-app language picker
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        Divider()
+                        StatusRow(stringResource(R.string.set_language_title), stringResource(R.string.set_language_body), stringResource(R.string.set_change)) {
+                            runCatching { context.startActivity(Intent(Settings.ACTION_APP_LOCALE_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        }
                     }
                 }
             }
 
             state.data?.devices?.takeIf { it.isNotEmpty() }?.let { devices ->
                 item {
-                    Group("Dispositivos con sesión") {
+                    Group(stringResource(R.string.set_devices_group)) {
                         devices.forEachIndexed { i, d ->
                             if (i > 0) Divider()
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(d.name + if (d.current) " (este)" else "", style = MaterialTheme.typography.bodyLarge)
-                                    Text("${d.platform} · ${d.lastSeenAt.toInstantOrNull()?.relativeLabel() ?: ""}", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(d.name + if (d.current) " " + stringResource(R.string.set_this_device) else "", style = MaterialTheme.typography.bodyLarge)
+                                    Text("${d.platform} \u00B7 ${d.lastSeenAt.toInstantOrNull()?.relativeLabel() ?: ""}", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                if (!d.current) TextButton(onClick = { vm.revoke(d) }) { Text("Cerrar") }
+                                if (!d.current) TextButton(onClick = { vm.revoke(d) }) { Text(stringResource(R.string.set_revoke)) }
                             }
                         }
                     }
@@ -344,7 +349,7 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
 
             item {
                 Text(
-                    "Kairo ${BuildConfig.VERSION_NAME}. Tus datos viven en tu servidor; la IA la provee Nan. El audio de \"Oye Kairo\" se procesa en el teléfono.",
+                    stringResource(R.string.set_footer, BuildConfig.VERSION_NAME, wake),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                 )
@@ -356,32 +361,32 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
     code?.let { c ->
         AlertDialog(
             onDismissRequest = { vm.pairCode.value = null },
-            title = { Text("Vincular reloj") },
+            title = { Text(stringResource(R.string.set_pair_watch)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Abre Kairo en tu reloj y escribe este código. Vence en 5 minutos.", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.set_pair_body), style = MaterialTheme.typography.bodyMedium)
                     Text(c.chunked(3).joinToString(" "), style = MaterialTheme.typography.displaySmall.copy(fontFamily = MonoStyle.fontFamily))
                     Text(session.serverUrl, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            confirmButton = { TextButton(onClick = { vm.pairCode.value = null }) { Text("Listo") } },
+            confirmButton = { TextButton(onClick = { vm.pairCode.value = null }) { Text(stringResource(R.string.common_done)) } },
         )
     }
 
     if (pickTime && s != null) {
         val (h, m) = s.briefingTime.split(':').map { it.toIntOrNull() ?: 0 }.let { (it.getOrElse(0) { 7 }) to (it.getOrElse(1) { 0 }) }
-        val tp = rememberTimePickerState(h, m, is24Hour = true)
+        val tp = rememberTimePickerState(h, m, is24Hour = DateFormat.is24HourFormat(context))
         AlertDialog(
             onDismissRequest = { pickTime = false },
-            confirmButton = { TextButton(onClick = { vm.patch { put("briefingTime", "%02d:%02d".format(tp.hour, tp.minute)) }; pickTime = false }) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { vm.patch { put("briefingTime", "%02d:%02d".format(tp.hour, tp.minute)) }; pickTime = false }) { Text(stringResource(R.string.common_save)) } },
+            dismissButton = { TextButton(onClick = { pickTime = false }) { Text(stringResource(R.string.common_cancel)) } },
             text = { TimePicker(tp) },
         )
     }
     if (pickVoice && s != null) {
         AlertDialog(
             onDismissRequest = { pickVoice = false },
-            title = { Text("Voz de Kairo") },
+            title = { Text(stringResource(R.string.set_voice_dialog_title)) },
             text = {
                 Column {
                     state.data?.voices.orEmpty().forEach { v ->
@@ -391,12 +396,12 @@ fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) ->
                                 Text(v.name, style = MaterialTheme.typography.bodyLarge)
                                 Text(v.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            TextButton(onClick = { graph.voice.preview(v.id) }) { Text("Probar") }
+                            TextButton(onClick = { graph.voice.preview(v.id) }) { Text(stringResource(R.string.set_try)) }
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { pickVoice = false }) { Text("Listo") } },
+            confirmButton = { TextButton(onClick = { pickVoice = false }) { Text(stringResource(R.string.common_done)) } },
         )
     }
 }

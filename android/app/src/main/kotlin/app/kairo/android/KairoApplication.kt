@@ -24,12 +24,12 @@ open class KairoApplication : Application() {
         startBackground()
     }
 
-    /** Trabajo en segundo plano (WorkManager y tiempo real). Las pruebas de UI lo omiten. */
+    /** Background work (WorkManager and realtime). UI tests skip it. */
     protected open fun startBackground() {
         WorkManager.initialize(this, Configuration.Builder().setMinimumLoggingLevel(android.util.Log.WARN).build())
         SyncWorker.schedulePeriodic(this)
 
-        // Tiempo real mientras la app está visible
+        // Realtime while the app is visible
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 graph.realtime.acquire()
@@ -38,7 +38,7 @@ open class KairoApplication : Application() {
             override fun onStop(owner: LifecycleOwner) = graph.realtime.release()
         })
 
-        // Push propio: al abrir la app y tras iniciar sesión, renueva el registro si hay distribuidor elegido
+        // Own push: on opening the app and after sign-in, renews the registration if a distributor is chosen
         graph.scope.launch {
             graph.session.session.map { it?.user?.id }.distinctUntilChanged().filterNotNull().collect { graph.push.registerIfAcknowledged() }
         }

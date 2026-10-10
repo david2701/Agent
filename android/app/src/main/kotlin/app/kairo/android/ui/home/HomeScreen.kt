@@ -1,5 +1,12 @@
 package app.kairo.android.ui.home
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
+import app.kairo.android.ui.common.greeting
+import app.kairo.android.ui.common.longDateLabel
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -103,11 +110,12 @@ import app.kairo.core.model.Reminder
 import app.kairo.core.model.TodayData
 import app.kairo.core.session.Session
 import app.kairo.core.util.timeLabel
+import app.kairo.core.util.toLocalDateOrNull
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.launch
 
 class HomeViewModel(graph: AppGraph) : ResourceViewModel<TodayData>(graph, setOf("event", "task", "reminder", "note", "list", "notice", "family")) {
-    /** Últimos avisos sin leer de la familia para la tarjeta "Familia". */
+    /** Latest unread family notices for the "Family" card. */
     val notices = kotlinx.coroutines.flow.MutableStateFlow<NoticesResponse?>(null)
 
     override suspend fun load(): TodayData {
@@ -124,13 +132,13 @@ class HomeViewModel(graph: AppGraph) : ResourceViewModel<TodayData>(graph, setOf
         mutate { graph.api.markNoticesRead(listOf(n.id)) }
     }
 
-    fun done(r: Reminder) = mutate("Hecho") { graph.api.reminderDone(r.id) }
-    fun snooze(r: Reminder) = mutate("Te aviso en 10 minutos") { graph.api.reminderSnooze(r.id, 10) }
-    fun completeTask(id: String) = mutate("Tarea completada") { graph.api.updateTask(id, app.kairo.core.net.KairoApi.obj { put("status", kotlinx.serialization.json.JsonPrimitive("done")) }) }
+    fun done(r: Reminder) = mutate(str(R.string.home_reminder_done)) { graph.api.reminderDone(r.id) }
+    fun snooze(r: Reminder) = mutate(str(R.string.home_snoozed)) { graph.api.reminderSnooze(r.id, 10) }
+    fun completeTask(id: String) = mutate(str(R.string.home_task_completed)) { graph.api.updateTask(id, app.kairo.core.net.KairoApi.obj { put("status", kotlinx.serialization.json.JsonPrimitive("done")) }) }
 
     fun briefing() {
         viewModelScope.launch {
-            runCatching { graph.api.briefing().text }.onSuccess { graph.voice.say(it) }.onFailure { say("No pude preparar el resumen") }
+            runCatching { graph.api.briefing().text }.onSuccess { graph.voice.say(it) }.onFailure { say(R.string.home_briefing_failed) }
         }
     }
 }
@@ -190,10 +198,10 @@ fun HomeScreen(graph: AppGraph, session: Session, navigate: (Destination) -> Uni
 @Composable
 private fun Greeting(name: String, data: TodayData?) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(data?.dateLabel ?: " ", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("${data?.greeting ?: "Hola"}, $name", style = MaterialTheme.typography.headlineMedium)
+        Text(data?.date?.toLocalDateOrNull()?.longDateLabel() ?: " ", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(LocalContext.current.greeting(name), style = MaterialTheme.typography.headlineMedium)
         data?.weather?.let { w ->
-            Pill("${w.place} · ${w.temperature.toInt()}° ${w.description}", icon = weatherIcon(w.description), modifier = Modifier.padding(top = 6.dp))
+            Pill("${w.place} \u00B7 ${w.temperature.toInt()}° ${w.description}", icon = weatherIcon(w.description), modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -207,12 +215,13 @@ private fun VoiceState.orbState(): OrbState = when {
     else -> OrbState.Idle
 }
 
+@Composable
 private fun VoiceState.statusText(): String = when (phase) {
-    VoicePhase.Listening -> "Te escucho"
-    VoicePhase.Thinking -> working ?: "Pensando"
-    VoicePhase.Speaking -> "Kairo responde"
-    VoicePhase.Armed -> "Di \"Oye Kairo\" o toca para hablar"
-    VoicePhase.Off -> "Toca para hablar"
+    VoicePhase.Listening -> stringResource(R.string.home_status_listening)
+    VoicePhase.Thinking -> working ?: stringResource(R.string.home_status_thinking)
+    VoicePhase.Speaking -> stringResource(R.string.home_status_speaking)
+    VoicePhase.Armed -> stringResource(R.string.home_status_armed, stringResource(R.string.wake_phrase))
+    VoicePhase.Off -> stringResource(R.string.home_status_idle)
 }
 
 @Composable
@@ -251,7 +260,7 @@ fun VoicePanel(
                     voice.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     if (!busy) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            IconButton(onClick = onClear) { Icon(Icons.Rounded.Close, "Limpiar") }
+                            IconButton(onClick = onClear) { Icon(Icons.Rounded.Close, stringResource(R.string.home_clear)) }
                         }
                     }
                 }
@@ -262,7 +271,7 @@ fun VoicePanel(
                     TextField(
                         value = text,
                         onValueChange = { text = it },
-                        placeholder = { Text("Escribe a Kairo") },
+                        placeholder = { Text(stringResource(R.string.home_ask_placeholder)) },
                         modifier = Modifier.weight(1f),
                         shape = CircleShape,
                         singleLine = true,
@@ -290,7 +299,7 @@ fun VoicePanel(
                     ) {
                         Icon(
                             when { text.isNotBlank() -> Icons.AutoMirrored.Rounded.Send; busy -> Icons.Rounded.Stop; else -> Icons.Rounded.Mic },
-                            contentDescription = if (busy) "Detener" else "Hablar",
+                            contentDescription = if (busy) stringResource(R.string.home_stop) else stringResource(R.string.home_talk),
                         )
                     }
                 }
@@ -309,8 +318,8 @@ internal fun TabletopHome(
     onClear: () -> Unit,
     navigate: (Destination) -> Unit,
 ) {
-    // Modo mesa (Fold semiabierto): el orbe y la respuesta quedan en la mitad superior,
-    // los controles en la mitad inferior, sobre la bisagra.
+    // Tabletop mode (half-open Fold): the orb and the reply stay in the upper half,
+    // the controls in the lower half, over the hinge.
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(Modifier.weight(1f).fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             KairoOrb(voice.orbState(), voice.level, size = 150.dp)
@@ -321,7 +330,7 @@ internal fun TabletopHome(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Column(Modifier.weight(1f).fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("${data?.greeting ?: "Hola"}, $name", style = MaterialTheme.typography.titleLarge)
+            Text(LocalContext.current.greeting(name), style = MaterialTheme.typography.titleLarge)
             voice.actions.takeLast(2).forEach { ActionCard(it, onOpen = { t -> navigate(Destination.forEntity(t)) }) }
             Spacer(Modifier.weight(1f))
             VoicePanel(voice.copy(transcript = null, reply = null, partialReply = "", actions = emptyList(), error = null), onTalk, onAsk, onClear, navigate, orbSize = 0.dp, showOrb = false)
@@ -329,7 +338,7 @@ internal fun TabletopHome(
     }
 }
 
-/** Lo que necesita la tarjeta "Familia" de Hoy. */
+/** What the Today "Family" card needs. */
 private class FamilyCardModel(val family: FamilyInfo?, val notices: NoticesResponse?, val onNotice: (Notice) -> Unit)
 
 @Composable
@@ -353,31 +362,31 @@ private fun TodayList(
         val d = data ?: return@LazyColumn
         item {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Tu día", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = vm::briefing) { Text("Escuchar resumen") }
+                Text(stringResource(R.string.home_your_day), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = vm::briefing) { Text(stringResource(R.string.home_listen_briefing)) }
             }
         }
 
         if (d.firedReminders.isNotEmpty()) {
-            item { SectionHeader("Sonaron") }
+            item { SectionHeader(stringResource(R.string.home_went_off)) }
             items(d.firedReminders, key = { "f" + it.id }) { r -> ReminderRow(r, onDone = { vm.done(r) }, onSnooze = { vm.snooze(r) }, highlight = true) }
         }
 
         item(key = "family") { FamilyHomeCard(familyCard.family, familyCard.notices, onOpen = { navigate(Destination.Family) }, onNotice = familyCard.onNotice) }
 
-        item { SectionHeader("Agenda", action = "Calendario", onAction = { navigate(Destination.Calendar) }) }
+        item { SectionHeader(stringResource(R.string.home_agenda), action = stringResource(R.string.nav_calendar), onAction = { navigate(Destination.Calendar) }) }
         if (d.events.isEmpty()) {
-            item { Text("Sin eventos hoy", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp)) }
+            item { Text(stringResource(R.string.home_no_events), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp)) }
         } else {
             items(d.events, key = { "e" + it.id + it.startAt }) { e ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (e.allDay) "Todo el día" else e.startAt.toInstantOrNull()?.timeLabel() ?: "",
+                        if (e.allDay) stringResource(R.string.all_day) else e.startAt.toInstantOrNull()?.timeLabel() ?: "",
                         style = MonoStyle, color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(84.dp),
                     )
                     Column(Modifier.weight(1f)) {
                         Text(e.title, style = MaterialTheme.typography.bodyLarge)
-                        val meta = listOfNotNull(e.location.takeIf { it.isNotBlank() }, sharedLabel(e.shared, e.ownerId, familyCard.family)).joinToString(" · ")
+                        val meta = listOfNotNull(e.location.takeIf { it.isNotBlank() }, sharedLabel(e.shared, e.ownerId, familyCard.family)).joinToString(" \u00B7 ")
                         if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -385,20 +394,20 @@ private fun TodayList(
         }
 
         val tasks = d.tasksOverdue + d.tasksDueToday + d.tasksInProgress.filter { t -> d.tasksDueToday.none { it.id == t.id } && d.tasksOverdue.none { it.id == t.id } }
-        item { SectionHeader("Pendientes", action = "Tareas", onAction = { navigate(Destination.Tasks) }) }
+        item { SectionHeader(stringResource(R.string.home_pending), action = stringResource(R.string.nav_tasks), onAction = { navigate(Destination.Tasks) }) }
         if (tasks.isEmpty()) {
-            item { Text("Nada pendiente para hoy", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp)) }
+            item { Text(stringResource(R.string.home_nothing_pending), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp)) }
         } else {
             items(tasks, key = { "t" + it.id }) { t ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { vm.completeTask(t.id) }) {
-                        Icon(Icons.Rounded.Check, "Completar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Rounded.Check, stringResource(R.string.home_complete), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Column(Modifier.weight(1f)) {
                         Text(t.title, style = MaterialTheme.typography.bodyLarge)
                         val overdue = d.tasksOverdue.any { it.id == t.id }
                         Text(
-                            when { overdue -> "Vencida"; t.status == "doing" -> "En curso"; else -> "Para hoy" },
+                            when { overdue -> stringResource(R.string.home_task_overdue); t.status == "doing" -> stringResource(R.string.home_task_in_progress); else -> stringResource(R.string.home_task_due_today) },
                             style = MaterialTheme.typography.bodySmall,
                             color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -409,19 +418,19 @@ private fun TodayList(
         }
 
         if (d.reminders.isNotEmpty()) {
-            item { SectionHeader("Próximos avisos", action = "Ver todos", onAction = { navigate(Destination.Reminders) }) }
+            item { SectionHeader(stringResource(R.string.home_upcoming), action = stringResource(R.string.home_see_all), onAction = { navigate(Destination.Reminders) }) }
             items(d.reminders.take(6), key = { "r" + it.id }) { r -> ReminderRow(r, onDone = { vm.done(r) }, onSnooze = null, highlight = false) }
         }
 
         if (d.lists.isNotEmpty()) {
-            item { SectionHeader("Listas", action = "Abrir", onAction = { navigate(Destination.Lists) }) }
+            item { SectionHeader(stringResource(R.string.nav_lists), action = stringResource(R.string.home_open), onAction = { navigate(Destination.Lists) }) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     d.lists.forEach { l ->
                         Surface(onClick = { navigate(Destination.Lists) }, color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.weight(1f)) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(l.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("${l.items.count { !it.checked }} pendientes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(pluralStringResource(R.plurals.home_list_pending, l.items.count { !it.checked }, l.items.count { !it.checked }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -430,7 +439,7 @@ private fun TodayList(
         }
 
         if (d.recentNotes.isNotEmpty()) {
-            item { SectionHeader("Notas recientes", action = "Notas", onAction = { navigate(Destination.Notes) }) }
+            item { SectionHeader(stringResource(R.string.home_recent_notes), action = stringResource(R.string.nav_notes), onAction = { navigate(Destination.Notes) }) }
             items(d.recentNotes.take(4), key = { "n" + it.id }) { n ->
                 Surface(onClick = { navigate(Destination.Notes) }, color = androidx.compose.ui.graphics.Color.Transparent) {
                     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -442,7 +451,7 @@ private fun TodayList(
         }
 
         if (d.events.isEmpty() && tasks.isEmpty() && d.reminders.isEmpty() && d.firedReminders.isEmpty()) {
-            item { EmptyState(Icons.Rounded.Schedule, "Día despejado", "Pídele a Kairo que agende algo o que te recuerde lo importante.") }
+            item { EmptyState(Icons.Rounded.Schedule, stringResource(R.string.home_clear_day), stringResource(R.string.home_clear_day_body)) }
         }
     }
 }
@@ -459,17 +468,23 @@ private fun ReminderRow(r: Reminder, onDone: () -> Unit, onSnooze: (() -> Unit)?
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(r.text, style = MaterialTheme.typography.bodyLarge)
-                val whenText = r.nextFireAt?.toInstantOrNull()?.timeLabel() ?: r.placeName?.let { "Al llegar a $it" } ?: ""
+                val whenText = r.nextFireAt?.toInstantOrNull()?.timeLabel() ?: r.placeName?.let { stringResource(R.string.home_on_arrival, it) } ?: ""
                 if (whenText.isNotBlank()) Text(whenText, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            onSnooze?.let { IconButton(onClick = it) { Icon(Icons.Rounded.Snooze, "Posponer 10 minutos") } }
-            IconButton(onClick = onDone) { Icon(Icons.Rounded.Check, "Hecho") }
+            onSnooze?.let { IconButton(onClick = it) { Icon(Icons.Rounded.Snooze, stringResource(R.string.home_snooze_10_cd)) } }
+            IconButton(onClick = onDone) { Icon(Icons.Rounded.Check, stringResource(R.string.home_reminder_done)) }
         }
     }
 }
 
-private fun weatherIcon(description: String) = when {
-    description.contains("lluvia") || description.contains("llovizna") || description.contains("chubasco") || description.contains("tormenta") -> Icons.Rounded.WaterDrop
-    description.contains("nublado") || description.contains("niebla") -> Icons.Rounded.Cloud
-    else -> Icons.Rounded.WbSunny
+/** The weather description is written by the server in the account language (English or Spanish). */
+private fun weatherIcon(description: String): ImageVector {
+    val d = description.lowercase()
+    val rain = listOf("rain", "drizzle", "shower", "thunder", "storm", "lluvia", "llovizna", "chubasco", "tormenta")
+    val cloud = listOf("cloud", "overcast", "fog", "mist", "nublado", "niebla")
+    return when {
+        rain.any { it in d } -> Icons.Rounded.WaterDrop
+        cloud.any { it in d } -> Icons.Rounded.Cloud
+        else -> Icons.Rounded.WbSunny
+    }
 }

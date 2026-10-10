@@ -1,4 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- Wear OS -->
     <string name="app_name">Kairo</string>
+    <string name="wear_device_name">Watch %1$s</string>
+    <string name="wear_pair_title">Pair</string>
+    <string name="wear_pair_hint">On the phone: Settings &gt; Pair watch</string>
+    <string name="wear_pair_failed">Couldn\'t pair</string>
+    <string name="wear_delete_cd">Delete</string>
+    <string name="wear_stop">Stop</string>
+    <string name="wear_talk">Talk</string>
+    <string name="wear_listening">Listening</string>
+    <string name="wear_thinking">Thinking</string>
+    <string name="wear_kairo">Kairo</string>
+    <string name="wear_done">Done</string>
+    <string name="wear_tap_to_talk">Tap to talk</string>
+    <string name="wear_today">Today</string>
+    <string name="wear_fired">Rang: %1$s</string>
+    <string name="wear_overdue">Overdue: %1$s</string>
+    <string name="wear_clear_day">Clear day</string>
+    <string name="wear_not_heard">I didn\'t hear you</string>
+    <string name="wear_offline">No connection</string>
+    <string name="wear_err_generic">Something went wrong</string>
+    <string name="wear_err_http">Error %1$d</string>
+    <string name="wear_err_session">Your session expired. Sign in again.</string>
+    <string name="wear_err_too_many">Too many attempts in a row. Wait a minute and try again.</string>
 </resources>

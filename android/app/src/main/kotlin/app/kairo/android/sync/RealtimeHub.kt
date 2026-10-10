@@ -8,15 +8,15 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Conexión WebSocket con el servidor. Se mantiene viva mientras la app está en primer plano,
- * mientras corre el servicio de escucha o la conexión directa (contador de referencias).
- * Los eventos los procesa [ServerEventHandler], el mismo que usa el push.
+ * WebSocket connection to the server. It stays alive while the app is in the foreground,
+ * while the listening service or the direct connection runs (reference counted).
+ * Events are processed by [ServerEventHandler], the same one push uses.
  */
 class RealtimeHub(private val api: KairoApi, private val scope: CoroutineScope, private val handler: ServerEventHandler) {
     private val users = AtomicInteger(0)
     private var job: Job? = null
 
-    /** Colección que cambió en el servidor ("note", "task", "reminder"...). */
+    /** Collection that changed on the server ("note", "task", "reminder"...). */
     val changes: SharedFlow<String> get() = handler.changes
 
     @Synchronized

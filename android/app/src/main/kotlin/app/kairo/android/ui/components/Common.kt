@@ -1,5 +1,7 @@
 package app.kairo.android.ui.components
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -96,12 +98,12 @@ fun ErrorBanner(message: String, modifier: Modifier = Modifier, onRetry: (() -> 
             Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(Modifier.width(10.dp))
             Text(message, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            if (onRetry != null) TextButton(onClick = onRetry) { Text("Reintentar") }
+            if (onRetry != null) TextButton(onClick = onRetry) { Text(stringResource(R.string.common_retry)) }
         }
     }
 }
 
-/** Esqueleto de carga con la forma del contenido final. */
+/** Loading skeleton shaped like the final content. */
 @Composable
 fun Skeleton(modifier: Modifier = Modifier, height: Dp = 56.dp) {
     val reduce = rememberReduceMotion()
@@ -133,7 +135,7 @@ fun entityIcon(type: String?): ImageVector = when (type) {
     else -> Icons.Rounded.Bolt
 }
 
-/** Tarjeta que confirma una acción del agente ("Recordatorio: llamar al dentista · mañana 9:00"). */
+/** Card confirming an agent action ("Reminder: call the dentist - tomorrow 9:00"). */
 @Composable
 fun ActionCard(ev: AgentEvent.ToolEnd, modifier: Modifier = Modifier, onOpen: ((String) -> Unit)? = null) {
     val color = if (ev.ok) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer
@@ -164,9 +166,9 @@ fun ActionCard(ev: AgentEvent.ToolEnd, modifier: Modifier = Modifier, onOpen: ((
 @Composable
 fun PriorityTag(priority: String) {
     val (label, strong) = when (priority) {
-        "urgent" -> "Urgente" to true
-        "high" -> "Alta" to false
-        "low" -> "Baja" to false
+        "urgent" -> stringResource(R.string.priority_urgent) to true
+        "high" -> stringResource(R.string.priority_high) to false
+        "low" -> stringResource(R.string.priority_low) to false
         else -> return
     }
     Surface(

@@ -1,5 +1,7 @@
 package app.kairo.android.ui.components
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,33 +34,47 @@ import app.kairo.android.AppGraph
 import app.kairo.android.family.FamilyStore
 import app.kairo.core.model.FamilyInfo
 
-/** Familia en caché; null mientras carga o sin sesión. */
+/** Cached family; null while loading or signed out. */
 @Composable
 fun rememberFamily(graph: AppGraph): FamilyInfo? = graph.family.info.collectAsState().value
 
-/** Hay alguien más en la familia: solo entonces tiene sentido compartir o asignar. */
+/** There is someone else in the family: only then does sharing or assigning make sense. */
 val FamilyInfo?.hasOthers: Boolean get() = this != null && members.any { it.id != me }
 
-/**
- * Etiqueta de algo familiar: "Familiar" si lo compartiste tú (o no se sabe de quién es),
- * "de Valentina" si lo compartió otro miembro; null si es personal.
- */
-fun sharedLabel(shared: Boolean, ownerId: String?, family: FamilyInfo?): String? {
-    if (!shared) return null
-    if (family == null || ownerId == null || ownerId == family.me) return "Familiar"
-    return family.member(ownerId)?.displayName?.let { "de ${FamilyStore.firstNameOf(it)}" } ?: "Familiar"
+/** Who shared a family item: you (or unknown) or another member. */
+sealed interface SharedBy {
+    data object Family : SharedBy
+    data class Member(val firstName: String) : SharedBy
 }
 
-/** Lo puedes dejar de compartir: eres quien lo creó (el servidor responde 400 a los demás). */
+/**
+ * Who shared something: [SharedBy.Family] if you shared it (or it is unknown whose it is),
+ * [SharedBy.Member] if another member shared it; null if it is personal.
+ */
+fun sharedBy(shared: Boolean, ownerId: String?, family: FamilyInfo?): SharedBy? {
+    if (!shared) return null
+    if (family == null || ownerId == null || ownerId == family.me) return SharedBy.Family
+    return family.member(ownerId)?.displayName?.let { SharedBy.Member(FamilyStore.firstNameOf(it)) } ?: SharedBy.Family
+}
+
+/** Label of a family item: "Family" or "from Valentina"; null if it is personal. */
+@Composable
+fun sharedLabel(shared: Boolean, ownerId: String?, family: FamilyInfo?): String? = when (val by = sharedBy(shared, ownerId, family)) {
+    null -> null
+    SharedBy.Family -> stringResource(R.string.shared_family)
+    is SharedBy.Member -> stringResource(R.string.shared_by, by.firstName)
+}
+
+/** You can stop sharing it: you created it (the server answers 400 to everyone else). */
 fun FamilyInfo?.owns(ownerId: String?): Boolean = ownerId == null || this == null || ownerId == me
 
 fun FamilyInfo?.firstNameOf(userId: String?): String? = this?.member(userId)?.displayName?.let(FamilyStore::firstNameOf)
 
-/** "D", "VR": iniciales para el avatar de un miembro. */
+/** "D", "VR": initials for a member's avatar. */
 fun initialsOf(name: String): String =
     name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.take(2).joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
 
-/** Insignia neutra de lo compartido (sin colores nuevos: el ámbar queda para lo activo). */
+/** Neutral badge for shared items (no new colors: amber is kept for active things). */
 @Composable
 fun SharedBadge(label: String, modifier: Modifier = Modifier) {
     Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = CircleShape) {
@@ -70,7 +86,7 @@ fun SharedBadge(label: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Círculo con las iniciales de un miembro; [description] lo anuncia a TalkBack ("Responsable: Valentina"). */
+/** Circle with a member's initials; [description] announces it to TalkBack ("Assignee: Valentina"). */
 @Composable
 fun MemberAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp, description: String? = null) {
     Box(
@@ -89,9 +105,9 @@ fun MemberAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp, 
     }
 }
 
-/** Fila "Compartir con la familia" con interruptor, para hojas de edición y detalles. */
+/** "Share with family" row with a switch, for edit sheets and details. */
 @Composable
-fun ShareRow(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier, title: String = "Compartir con la familia", body: String? = null, enabled: Boolean = true) {
+fun ShareRow(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier, title: String = stringResource(R.string.share_with_family), body: String? = null, enabled: Boolean = true) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Rounded.Groups, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(12.dp))
@@ -104,11 +120,11 @@ fun ShareRow(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier =
 }
 
 /**
- * Familiar que no se puede cambiar desde aquí (asignado a otra persona o compartido por otro miembro):
- * se explica en lugar de mostrar un interruptor bloqueado, que se lee como apagado.
+ * Family item that cannot be changed from here (assigned to someone else or shared by another member):
+ * it is explained instead of showing a locked switch, which reads as off.
  */
 @Composable
-fun SharedInfoRow(body: String, modifier: Modifier = Modifier, title: String = "Familiar") {
+fun SharedInfoRow(body: String, modifier: Modifier = Modifier, title: String = stringResource(R.string.shared_family)) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Rounded.Groups, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(12.dp))
@@ -116,6 +132,6 @@ fun SharedInfoRow(body: String, modifier: Modifier = Modifier, title: String = "
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(Icons.Rounded.Check, "Compartido con la familia", tint = MaterialTheme.colorScheme.primary)
+        Icon(Icons.Rounded.Check, stringResource(R.string.shared_with_family_cd), tint = MaterialTheme.colorScheme.primary)
     }
 }

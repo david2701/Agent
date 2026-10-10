@@ -1,5 +1,6 @@
 package app.kairo.wear
 
+import app.kairo.wear.R
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
@@ -48,7 +49,7 @@ data class WearState(
     val today: TodayData? = null,
 )
 
-/** Voz en el reloj: graba una frase, la envía a Kairo y lee la respuesta si el reloj tiene altavoz. */
+/** Voice on the watch: records a phrase, sends it to Kairo and reads the reply if the watch has a speaker. */
 class WearVoice(app: Application) : AndroidViewModel(app) {
     private val api = app.wear.api
     val state = MutableStateFlow(WearState())
@@ -67,12 +68,12 @@ class WearVoice(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             state.update { WearState(phase = WearPhase.Listening, today = it.today) }
             val wav = withContext(Dispatchers.IO) { record() }
-            if (wav == null) { state.update { it.copy(phase = WearPhase.Idle, error = "No te escuché", level = 0f) }; return@launch }
+            if (wav == null) { state.update { it.copy(phase = WearPhase.Idle, error = getApplication<Application>().getString(R.string.wear_not_heard), level = 0f) }; return@launch }
             state.update { it.copy(phase = WearPhase.Thinking, level = 0f) }
             var spoken: String? = null
             val conv = if (System.currentTimeMillis() - lastTurn < 5 * 60_000) conversationId else null
             try {
-                api.voiceTurn(wav, "audio/wav", "reloj.wav", conv, channel = "wear").collect { ev ->
+                api.voiceTurn(wav, "audio/wav", "watch.wav", conv, channel = "wear").collect { ev ->
                     when (ev) {
                         is AgentEvent.Start -> conversationId = ev.conversationId
                         is AgentEvent.Transcript -> state.update { it.copy(transcript = ev.text) }
@@ -89,7 +90,7 @@ class WearVoice(app: Application) : AndroidViewModel(app) {
                     play(api.speak(say))
                 }
             } catch (e: Exception) {
-                state.update { it.copy(error = e.message ?: "Sin conexión") }
+                state.update { it.copy(error = e.friendly(getApplication<Application>())) }
             }
             state.update { it.copy(phase = WearPhase.Idle, level = 0f) }
             loadToday()

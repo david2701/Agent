@@ -1,5 +1,8 @@
 package app.kairo.android.ui.family
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,12 +36,12 @@ import app.kairo.android.ui.theme.Kairo
 import app.kairo.core.model.FamilyInfo
 import app.kairo.core.model.Notice
 import app.kairo.core.model.NoticesResponse
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.relativeLabel
 import app.kairo.core.util.toInstantOrNull
 
 /**
- * Tarjeta compacta de Hoy con los últimos avisos sin leer de la familia. No aparece si no hay nadie
- * más en la familia; a quien administra le muestra una línea para invitar.
+ * Compact Today card with the latest unread family notices. It is hidden if nobody else is in the
+ * family; for the admin it shows a line to invite someone.
  */
 @Composable
 fun FamilyHomeCard(family: FamilyInfo?, notices: NoticesResponse?, onOpen: () -> Unit, onNotice: (Notice) -> Unit, modifier: Modifier = Modifier) {
@@ -49,22 +52,22 @@ fun FamilyHomeCard(family: FamilyInfo?, notices: NoticesResponse?, onOpen: () ->
             Row(Modifier.padding(start = 14.dp, end = 4.dp).heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Groups, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))
-                Text("Invita a tu familia para compartir listas, eventos y tareas.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onOpen) { Text("Invitar") }
+                Text(stringResource(R.string.family_home_invite_prompt), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onOpen) { Text(stringResource(R.string.family_home_invite_action)) }
             }
         }
         return
     }
     val unread = notices?.notices.orEmpty().filter { it.readAt == null }.take(3)
     Column(modifier) {
-        SectionHeader("Familia", action = "Ver todo", onAction = onOpen)
+        SectionHeader(stringResource(R.string.nav_family), action = stringResource(R.string.family_see_all), onAction = onOpen)
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
             Column {
                 if (unread.isEmpty()) {
                     Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         AvatarStack(family)
                         Spacer(Modifier.width(12.dp))
-                        Text("Todo al día con ${family.household.name}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(R.string.family_all_caught_up, family.household.name), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 } else {
                     unread.forEachIndexed { i, n ->
@@ -77,13 +80,13 @@ fun FamilyHomeCard(family: FamilyInfo?, notices: NoticesResponse?, onOpen: () ->
                                     Icon(noticeIcon(n), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Spacer(Modifier.width(12.dp))
-                                // El título usa todo el ancho; la hora va al final de la segunda línea
+                                // The title uses the full width; the time goes at the end of the second line
                                 Column(Modifier.weight(1f)) {
                                     Text(n.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         if (n.body.isNotBlank()) {
                                             Text(n.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                                            Text(" · ", style = MaterialTheme.typography.bodySmall, color = Kairo.colors.faint)
+                                            Text(" \u00B7 ", style = MaterialTheme.typography.bodySmall, color = Kairo.colors.faint)
                                         }
                                         Text(n.createdAt.toInstantOrNull()?.relativeLabel() ?: "", style = MaterialTheme.typography.labelSmall, color = Kairo.colors.faint, maxLines = 1, softWrap = false)
                                     }
@@ -94,7 +97,7 @@ fun FamilyHomeCard(family: FamilyInfo?, notices: NoticesResponse?, onOpen: () ->
                     val more = (notices?.unread ?: 0) - unread.size
                     if (more > 0) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        TextButton(onClick = onOpen, modifier = Modifier.padding(horizontal = 4.dp)) { Text(if (more == 1) "1 aviso más" else "$more avisos más") }
+                        TextButton(onClick = onOpen, modifier = Modifier.padding(horizontal = 4.dp)) { Text(pluralStringResource(R.plurals.family_more_notices, more, more)) }
                     }
                 }
             }
@@ -102,7 +105,7 @@ fun FamilyHomeCard(family: FamilyInfo?, notices: NoticesResponse?, onOpen: () ->
     }
 }
 
-/** Avatares superpuestos de los miembros (máximo cuatro). */
+/** Overlapping member avatars (at most four). */
 @Composable
 private fun AvatarStack(family: FamilyInfo) {
     val shown = family.members.take(4)
