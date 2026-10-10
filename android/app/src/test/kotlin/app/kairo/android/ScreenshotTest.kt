@@ -1,5 +1,7 @@
 package app.kairo.android
 
+import android.content.Context
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,13 +37,10 @@ import app.kairo.android.ui.theme.KairoTheme
 import app.kairo.android.voice.VoicePhase
 import app.kairo.android.voice.VoiceState
 import app.kairo.core.model.AgentEvent
-import app.kairo.core.model.AuthResponse
 import app.kairo.core.model.EntityRef
+import app.kairo.core.util.longDate
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -51,10 +50,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.net.HttpURLConnection
-import java.net.URL
+import java.time.LocalDate
+import java.util.Locale
 
-/** Aplicación de pruebas: sin WorkManager ni tiempo real. */
+/** Test application: no WorkManager and no realtime connection. */
 class TestKairoApp : KairoApplication() {
     override fun startBackground() = Unit
 }
@@ -64,9 +63,14 @@ private const val FOLD_OPEN = "w700dp-h840dp-xhdpi"
 private const val FOLD_LAND = "w900dp-h700dp-xhdpi"
 
 /**
- * Capturas de la UI con Roborazzi (renderizado en la JVM, sin emulador).
- * Usa el backend local real (KAIRO_TEST_SERVER, por defecto http://localhost:8088) para mostrar datos reales.
- * Ejecutar: ./gradlew :app:recordRoborazziDebug
+ * UI screenshots with Roborazzi (rendered on the JVM, no emulator).
+ * The data comes from [ScreenshotFixtures] (English sample data served by an in-process HTTP server),
+ * so no backend is needed. The tests only run when recording:
+ *
+ *     ./gradlew :app:recordRoborazziDebug
+ *
+ * Images go to docs/screenshots/android (English file names). To render the Spanish interface set
+ * KAIRO_SCREENSHOT_LOCALE=es; those images go to a subfolder named after the locale.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -74,46 +78,22 @@ private const val FOLD_LAND = "w900dp-h700dp-xhdpi"
 class ScreenshotTest {
     @get:Rule val compose = createComposeRule()
 
-    private val server = System.getenv("KAIRO_TEST_SERVER") ?: "http://localhost:8088"
-    private val out = System.getProperty("kairo.screenshots") ?: "build/screenshots"
+    private val locale = System.getProperty("kairo.screenshot.locale")?.takeIf { it.isNotBlank() } ?: "en"
+    private val out = (System.getProperty("kairo.screenshots") ?: "build/screenshots").let { if (locale == "en") it else "$it/$locale" }
     private val graph get() = ApplicationProvider.getApplicationContext<KairoApplication>().graph
 
     @Before
     fun login() {
-        // Un solo login por JVM: el backend limita a 10 intentos por minuto
-        val cached = System.getProperty("kairo.test.auth")
-        val auth = cached?.let { Json { ignoreUnknownKeys = true }.decodeFromString(AuthResponse.serializer(), it) }
-            ?: runCatching { loginToBackend() }.getOrNull()
-        assumeTrue("Backend local no disponible en $server", auth != null)
-        runBlocking { graph.session.saveForTest(server, auth!!.user, auth.deviceId, auth.accessToken) }
+        assumeTrue("Screenshots only run when recording (recordRoborazziDebug)", System.getProperty("roborazzi.test.record") == "true")
+        ScreenshotFixtures.resetInvites()
+        val server = ScreenshotFixtures.start()
+        runBlocking { graph.session.saveForTest(server, ScreenshotFixtures.user, "device-1", "test-token") }
     }
 
-    private fun loginToBackend(): AuthResponse {
-        val c = URL("$server/api/auth/login").openConnection() as HttpURLConnection
-        c.requestMethod = "POST"
-        c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/json")
-        val email = System.getenv("KAIRO_TEST_EMAIL") ?: "david@kairo.local"
-        val pass = System.getenv("KAIRO_TEST_PASSWORD") ?: "kairo-local-test-1"
-        c.outputStream.use { it.write("""{"email":"$email","password":"$pass","deviceName":"Capturas","platform":"android"}""".toByteArray()) }
-        val body = c.inputStream.bufferedReader().readText()
-        System.setProperty("kairo.test.auth", body)
-        return Json { ignoreUnknownKeys = true }.decodeFromString(AuthResponse.serializer(), body)
-    }
+    /** A string from the app resources in the language being rendered. */
+    private fun str(@StringRes id: Int, vararg args: Any): String = ApplicationProvider.getApplicationContext<Context>().getString(id, *args)
 
-    /** Petición autenticada como el usuario de prueba (para preparar y limpiar datos de una captura). */
-    private fun call(method: String, path: String, body: String? = null): String {
-        val token = graph.session.accessToken ?: error("Sin sesión")
-        val c = URL("$server/api$path").openConnection() as HttpURLConnection
-        c.requestMethod = method
-        c.setRequestProperty("Authorization", "Bearer $token")
-        if (body != null) {
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
-            c.outputStream.use { it.write(body.toByteArray()) }
-        }
-        return (if (c.responseCode < 400) c.inputStream else c.errorStream).bufferedReader().readText()
-    }
+    private fun qualifiers(size: String) = "$locale-$size"
 
     private fun waitText(text: String) {
         compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
@@ -121,16 +101,16 @@ class ScreenshotTest {
 
     private fun settle() = repeat(8) { Thread.sleep(250); compose.waitForIdle() }
 
-    private fun app(route: String, dark: Boolean, qualifiers: String, waitFor: String, name: String, before: () -> Unit = {}) {
-        RuntimeEnvironment.setQualifiers(qualifiers)
+    private fun app(route: String, dark: Boolean, size: String, waitFor: () -> String, name: String, before: () -> Unit = {}) {
+        RuntimeEnvironment.setQualifiers(qualifiers(size))
         compose.setContent { KairoTheme(dark = dark) { KairoAppUi(graph, route) {} } }
-        waitText(waitFor)
+        waitText(waitFor())
         settle()
         before()
         compose.onRoot().captureRoboImage("$out/$name.png")
     }
 
-    /** Desplaza la lista principal hasta que [text] quede arriba, debajo de la barra de estado. */
+    /** Scrolls the main list until [text] is at the top, below the status bar. */
     private fun scrollTo(text: String) {
         val list = compose.onAllNodes(hasScrollToNodeAction()).onFirst()
         list.performScrollToNode(hasText(text))
@@ -141,107 +121,90 @@ class ScreenshotTest {
         settle()
     }
 
-    @Test fun homePhoneDark() = app("home", true, PHONE, "Tu día", "hoy-telefono-oscuro")
-    @Test fun homePhoneLight() = app("home", false, PHONE, "Tu día", "hoy-telefono-claro")
-    @Test fun homeFoldOpen() = app("home", true, FOLD_OPEN, "Tu día", "hoy-fold-abierto")
-    @Test fun tasksPhone() = app("tasks", true, PHONE, "Por hacer", "tareas-telefono")
-    @Test fun tasksFoldLandscape() = app("tasks", false, FOLD_LAND, "En curso", "tareas-fold-horizontal")
-    @Test fun notesFoldOpen() = app("notes", true, FOLD_OPEN, "hace", "notas-fold-abierto")
-    @Test fun chatPhone() = app("chat", true, PHONE, "Anota", "conversaciones-telefono")
-    @Test fun remindersPhone() = app("reminders", false, PHONE, "Sonaron", "recordatorios-telefono-claro")
-    @Test fun calendarFoldOpen() = app("calendar", true, FOLD_OPEN, "Octubre", "calendario-fold-abierto")
-    @Test fun listsPhone() = app("lists", true, PHONE, "Supermercado", "listas-telefono")
-    @Test fun memoryPhone() = app("memory", true, PHONE, "Sofía", "memoria-telefono")
-    @Test fun settingsPhone() = app("settings", true, PHONE, "Para que funcione siempre", "ajustes-telefono")
-    @Test fun activityPhone() = app("activity", false, PHONE, "Deshacer", "actividad-telefono-claro")
+    @Test fun todayPhoneDark() = app("home", true, PHONE, { str(R.string.home_your_day) }, "today-phone-dark")
+    @Test fun todayPhoneLight() = app("home", false, PHONE, { str(R.string.home_your_day) }, "today-phone-light")
+    @Test fun todayFoldOpen() = app("home", true, FOLD_OPEN, { str(R.string.home_your_day) }, "today-fold-open")
+    @Test fun tasksPhone() = app("tasks", true, PHONE, { str(R.string.tasks_col_todo) }, "tasks-phone")
+    @Test fun tasksFoldLandscape() = app("tasks", false, FOLD_LAND, { str(R.string.tasks_col_doing) }, "tasks-fold-landscape")
+    @Test fun notesFoldOpen() = app("notes", true, FOLD_OPEN, { "Plumber visit" }, "notes-fold-open")
+    @Test fun chatPhone() = app("chat", true, PHONE, { "plumber" }, "chat-phone")
+    @Test fun remindersPhone() = app("reminders", false, PHONE, { str(R.string.home_went_off) }, "reminders-phone-light")
+    @Test fun calendarFoldOpen() = app("calendar", true, FOLD_OPEN, { LocalDate.now().year.toString() }, "calendar-fold-open")
+    @Test fun listsPhone() = app("lists", true, PHONE, { "Groceries" }, "lists-phone")
+    @Test fun memoryPhone() = app("memory", true, PHONE, { "Sofia" }, "memory-phone")
+    @Test fun settingsPhone() = app("settings", true, PHONE, { str(R.string.set_always_group) }, "settings-phone")
+    @Test fun activityPhone() = app("activity", false, PHONE, { str(R.string.act_undo) }, "activity-phone-light")
 
-    // --- Familia
-    @Test fun familyPhone() = app("family", true, PHONE, "Novedades", "familia-telefono")
-    @Test fun familyFoldOpen() = app("family", true, FOLD_OPEN, "Novedades", "familia-fold-abierto")
-    @Test fun homeFamilyPhone() = app("home", true, PHONE, "Tu día", "hoy-familia-telefono") { scrollTo("Familia") }
-    @Test fun settingsPushPhone() = app("settings", true, PHONE, "Para que funcione siempre", "ajustes-push-telefono") { scrollTo("Avisos al instante, sin Firebase") }
+    // --- Family
+    @Test fun familyPhone() = app("family", true, PHONE, { str(R.string.fam_news) }, "family-phone")
+    @Test fun familyFoldOpen() = app("family", true, FOLD_OPEN, { str(R.string.fam_news) }, "family-fold-open")
+    @Test fun todayFamilyPhone() = app("home", true, PHONE, { str(R.string.home_your_day) }, "today-family-phone") { scrollTo(str(R.string.nav_family)) }
+    @Test fun settingsPushPhone() = app("settings", true, PHONE, { str(R.string.set_always_group) }, "settings-push-phone") { scrollTo(str(R.string.set_push_group)) }
 
     @Test
-    fun tasksFamilyPhone() = app("tasks", true, PHONE, "Por hacer", "tareas-familia-telefono") {
-        compose.onNodeWithText("Familiares").performClick()
+    fun tasksFamilyPhone() = app("tasks", true, PHONE, { str(R.string.tasks_col_todo) }, "tasks-family-phone") {
+        compose.onAllNodesWithText(str(R.string.tasks_filter_family)).onFirst().performClick()
         settle()
     }
 
     @Test
-    fun calendarFamilyFoldOpen() = app("calendar", true, FOLD_OPEN, "Octubre", "calendario-familia-fold-abierto") {
-        // Un día con un evento familiar que agendó otro miembro
-        compose.onNodeWithContentDescription("Miércoles 14 de octubre", substring = true).performClick()
-        waitText("Reunión de padres")
+    fun calendarFamilyFoldOpen() = app("calendar", true, FOLD_OPEN, { LocalDate.now().year.toString() }, "calendar-family-fold-open") {
+        // A day with a family event that another member scheduled
+        compose.onNodeWithContentDescription(ScreenshotFixtures.parentsMeetingDay.longDate(Locale.forLanguageTag(locale)), substring = true).performClick()
+        waitText("Parent-teacher meeting")
         settle()
     }
 
     @Test
-    fun taskAssigneePhone() = app("tasks", true, PHONE, "Recoger a Sofía", "tareas-responsable-telefono") {
-        compose.onNodeWithText("Recoger a Sofía en el colegio").performClick()
-        waitText("Responsable")
+    fun taskAssigneePhone() = app("tasks", true, PHONE, { "Pick up Sofia" }, "task-assignee-phone") {
+        compose.onNodeWithText("Pick up Sofia from school").performClick()
+        waitText(str(R.string.tasks_f_assignee))
         settle()
     }
 
-    /** Invitación creada desde la app: el código grande y "Compartir invitación" (se revoca al terminar). */
+    /** Invitation created from the app: the big code and "Share invitation". */
     @Test
-    fun inviteCodePhone() {
-        fun pendingIds() = (Json.parseToJsonElement(call("GET", "/family/invites")) as kotlinx.serialization.json.JsonArray)
-            .map { it.jsonObject }.filter { it["usedAt"]?.jsonPrimitive?.content in listOf(null, "null") }
-            .map { it["id"]!!.jsonPrimitive.content }.toSet()
-        val before = pendingIds()
-        try {
-            app("family", true, PHONE, "Novedades", "familia-invitar-telefono") {
-                compose.onNodeWithText("Invitar").performClick()
-                waitText("Invitar a la familia")
-                compose.onNodeWithTag("invite-name").performTextInput("Sofía")
-                compose.onNodeWithText("Crear invitación").performClick()
-                waitText("Compartir invitación")
-                settle()
-            }
-        } finally {
-            (pendingIds() - before).forEach { call("DELETE", "/family/invites/$it") }
-        }
+    fun inviteCodePhone() = app("family", true, PHONE, { str(R.string.fam_news) }, "family-invite-phone") {
+        compose.onAllNodesWithText(str(R.string.fam_invite_button)).onFirst().performClick()
+        waitText(str(R.string.fam_invite_title))
+        compose.onNodeWithTag("invite-name").performTextInput("Sofia")
+        compose.onNodeWithText(str(R.string.fam_create_invite)).performClick()
+        waitText(str(R.string.fam_share_invite))
+        settle()
     }
 
-    /** Formulario para unirse tras revisar un código real (la invitación se revoca al terminar). */
+    /** Join form after looking up a code (invite code in the canonical `/join?code=` format). */
     @Test
     fun joinPhone() {
-        val created = Json.parseToJsonElement(call("POST", "/family/invites", """{"name":"Sofía","role":"member"}""")).jsonObject
-        val code = created["code"]!!.jsonPrimitive.content
-        val inviteId = created["invitation"]!!.jsonObject["id"]!!.jsonPrimitive.content
-        try {
-            RuntimeEnvironment.setQualifiers(PHONE)
-            compose.setContent { KairoTheme(dark = true) { LoginScreen(graph) } }
-            compose.waitForIdle()
-            compose.onNodeWithText("Tengo un código").performClick()
-            compose.waitForIdle()
-            compose.onNodeWithTag("invite-code").performTextInput(code.lowercase().replace("-", ""))
-            compose.onNodeWithText("Continuar").performClick()
-            waitText("Te invitaron")
-            settle()
-            compose.onRoot().captureRoboImage("$out/unirse-telefono.png")
-        } finally {
-            call("DELETE", "/family/invites/$inviteId")
-        }
+        RuntimeEnvironment.setQualifiers(qualifiers(PHONE))
+        compose.setContent { KairoTheme(dark = true) { LoginScreen(graph) } }
+        compose.waitForIdle()
+        compose.onNodeWithText(str(R.string.login_code_title)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("invite-code").performTextInput(ScreenshotFixtures.inviteCode.lowercase().replace("-", ""))
+        compose.onNodeWithText(str(R.string.login_action_continue)).performClick()
+        waitText(str(R.string.login_join_title, "Rivera family"))
+        settle()
+        compose.onRoot().captureRoboImage("$out/join-phone.png")
     }
 
     @Test
     fun loginPhone() {
-        RuntimeEnvironment.setQualifiers(PHONE)
+        RuntimeEnvironment.setQualifiers(qualifiers(PHONE))
         compose.setContent { KairoTheme(dark = true) { LoginScreen(graph) } }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("$out/login-telefono.png")
+        compose.onRoot().captureRoboImage("$out/login-phone.png")
     }
 
     @Test
     fun orbStates() {
-        RuntimeEnvironment.setQualifiers("w720dp-h300dp-xhdpi")
+        RuntimeEnvironment.setQualifiers(qualifiers("w720dp-h300dp-xhdpi"))
         compose.mainClock.autoAdvance = false
         compose.setContent {
             KairoTheme(dark = true) {
                 Surface(Modifier.fillMaxSize()) {
                     Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(OrbState.Idle to "Reposo", OrbState.Armed to "Atento", OrbState.Listening to "Escucha", OrbState.Thinking to "Piensa", OrbState.Speaking to "Habla").forEach { (s, l) ->
+                        listOf(OrbState.Idle to "Idle", OrbState.Armed to "Armed", OrbState.Listening to "Listening", OrbState.Thinking to "Thinking", OrbState.Speaking to "Speaking").forEach { (s, l) ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 KairoOrb(s, if (s == OrbState.Listening || s == OrbState.Speaking) 0.7f else 0f, size = 120.dp)
                                 Text(l, style = MaterialTheme.typography.labelLarge)
@@ -252,20 +215,20 @@ class ScreenshotTest {
             }
         }
         compose.mainClock.advanceTimeBy(900)
-        compose.onRoot().captureRoboImage("$out/orbe-estados.png")
+        compose.onRoot().captureRoboImage("$out/orb-states.png")
     }
 
     @Test
-    fun tabletop() {
-        RuntimeEnvironment.setQualifiers("w840dp-h700dp-xhdpi")
+    fun tabletopMode() {
+        RuntimeEnvironment.setQualifiers(qualifiers("w840dp-h700dp-xhdpi"))
         compose.mainClock.autoAdvance = false
         val voice = VoiceState(
-            phase = VoicePhase.Speaking, level = 0.5f, transcript = "Recuérdame mañana a las 9 llamar al dentista",
-            reply = "Listo, te lo recuerdo mañana a las 9 de la mañana.",
-            actions = listOf(AgentEvent.ToolEnd("1", "create_reminder", true, "Recordatorio: Llamar al dentista · mañana a las 9:00", EntityRef("reminder", "x", "Llamar al dentista"))),
+            phase = VoicePhase.Speaking, level = 0.5f, transcript = "Remind me tomorrow at 9 to call the dentist",
+            reply = "Done, I'll remind you tomorrow at 9 AM.",
+            actions = listOf(AgentEvent.ToolEnd("1", "create_reminder", true, "Reminder: Call the dentist · tomorrow at 9:00 AM", EntityRef("reminder", "x", "Call the dentist"))),
         )
         compose.setContent { KairoTheme(dark = true) { Surface { TabletopHome(voice, "David", null, {}, {}, {}, {}) } } }
         compose.mainClock.advanceTimeBy(600)
-        compose.onRoot().captureRoboImage("$out/modo-mesa.png")
+        compose.onRoot().captureRoboImage("$out/tabletop-mode.png")
     }
 }
