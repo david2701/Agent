@@ -1,0 +1,28 @@
+# Secrets
+.env
+*.env
+!.env.example
+*.keystore
+*.jks
+keystore.properties
+local.properties
+
+# Build outputs
+build/
+.gradle/
+.kotlin/
+out/
+dist/
+node_modules/
+*.apk
+*.aab
+captures/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Logs
+*.log
