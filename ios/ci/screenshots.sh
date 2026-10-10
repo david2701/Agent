@@ -69,6 +69,10 @@ run_device() { # "udid|name" file-prefix sections...
   wd 30 xcrun simctl status_bar "$udid" override --time "2026-10-10T09:41:00-04:00" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
   wd 180 xcrun simctl install "$udid" "$APP" || { log "could not install"; return 1; }
   log "installed"
+  # Pre-grant the permissions the app asks for so no system dialog covers the screenshots
+  for svc in location microphone speech-recognition photos contacts; do
+    wd 20 xcrun simctl privacy "$udid" grant "$svc" "$BUNDLE" > /dev/null 2>&1 || true
+  done
   # First launch with the app console (stdout/stderr), in case it closes on open
   SIMCTL_CHILD_KAIRO_AUTOLOGIN="http://127.0.0.1:8099|demo@example.com|demo" SIMCTL_CHILD_KAIRO_SCREENSHOT=1 \
     wd 25 xcrun simctl launch --console-pty --terminate-running-process "$udid" "$BUNDLE" "${LOCALE_ARGS[@]}" > "$OUT/$prefix-console.txt" 2>&1
