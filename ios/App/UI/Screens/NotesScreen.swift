@@ -144,7 +144,7 @@ private struct NoteRow: View {
                 if let d = KairoDate.parse(note.updatedAt) { Text(KairoDate.relative(d)).font(.kMonoSmall).foregroundStyle(KairoColor.faint) }
             }
             if !note.content.isEmpty {
-                Text(note.content.replacingOccurrences(of: "\n", with: " ")).font(.kSubheadline).foregroundStyle(KairoColor.muted).lineLimit(2)
+                Text(note.content.plainPreview).font(.kSubheadline).foregroundStyle(KairoColor.muted).lineLimit(2)
             }
             if note.shared || !note.tags.isEmpty || !note.attachments.isEmpty {
                 HStack(spacing: 6) {
@@ -345,5 +345,20 @@ struct AttachmentView: View {
         } else if let url {
             Link(destination: url) { Label("Adjunto", systemImage: "paperclip") }.font(.kCallout)
         }
+    }
+}
+
+extension String {
+    /// Texto de una nota sin marcas de markdown, en una línea, para las vistas previas.
+    var plainPreview: String {
+        components(separatedBy: "\n").map { line -> String in
+            var l = line.trimmingCharacters(in: .whitespaces)
+            while l.hasPrefix("#") { l.removeFirst() }
+            for p in ["- [ ] ", "- [x] ", "[ ] ", "[x] ", "- ", "* ", "> "] where l.hasPrefix(p) { l.removeFirst(p.count); break }
+            return l.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "").replacingOccurrences(of: "`", with: "")
+                .trimmingCharacters(in: .whitespaces)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
     }
 }

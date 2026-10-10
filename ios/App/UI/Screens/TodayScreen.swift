@@ -172,7 +172,7 @@ struct TodayScreen: View {
                                     Image(systemName: n.pinned ? "pin.fill" : "note.text").foregroundStyle(KairoColor.muted).frame(width: 24)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(n.title.isEmpty ? "Sin título" : n.title).font(.kBody).foregroundStyle(KairoColor.text).lineLimit(1)
-                                        Text(n.content).font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
+                                        Text(n.content.plainPreview).font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
                                     }
                                     Spacer(minLength: 0)
                                     if n.shared { SharedBadge(owner: model.ownerName(n.ownerId), compact: true) }

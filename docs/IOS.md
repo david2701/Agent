@@ -37,6 +37,13 @@ app de Android. Todo el código está en [`ios/`](../ios), y el proyecto de Xcod
   al actualizar en segundo plano, y con el push de Apple si lo configuras en el servidor (ver más abajo).
 - **Recordatorios por lugar** con `CLMonitor` (hasta 20 lugares a la vez), aunque la app esté cerrada.
 
+| Hoy | Tareas | Calendario | Notas |
+|---|---|---|---|
+| ![Hoy](screenshots/ios/iphone-today-light.png) | ![Tareas](screenshots/ios/iphone-tasks-light.png) | ![Calendario](screenshots/ios/iphone-calendar-dark.png) | ![Notas](screenshots/ios/iphone-notes-light.png) |
+| ![Hoy en oscuro](screenshots/ios/iphone-today-dark.png) | ![Familia](screenshots/ios/iphone-family-dark.png) | ![Chat](screenshots/ios/iphone-chat-light.png) | ![Ajustes](screenshots/ios/iphone-settings-dark.png) |
+
+Capturas tomadas en el simulador de iOS 27 (iPhone 17 Pro) con datos de prueba (`ios/ci`).
+
 ## iPhone, iPad y iPhone Duo
 
 El diseño se decide por el *size class*, no por el modelo, como recomienda Apple:
@@ -120,7 +127,8 @@ registra su token en `POST /api/push/apns/register` y en Ajustes > Avisos ves si
 
 ## Limitaciones conocidas
 
-- La app se compiló y se probó en el simulador, pero todavía no en un iPhone, iPad o Apple Watch físicos.
+- La app se compiló con Xcode 27 y se probó en el simulador de iPhone contra un servidor de prueba (las
+  capturas de arriba), pero todavía no en un iPhone, iPad o Apple Watch físicos, ni contra tu servidor real.
 - "Oye Kairo" escucha mientras Kairo está abierto o te está hablando. iOS no permite que una app escuche
   siempre en segundo plano como en Android; para eso están Siri, el botón de Acción y el control
   "Hablar con Kairo".

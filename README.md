@@ -203,6 +203,10 @@ SwiftUI con Liquid Glass.
 | ![Chat](docs/screenshots/dashboard/chat-desktop-dark.png) | ![Tareas](docs/screenshots/android/tareas-telefono.png) | ![Notas en Fold](docs/screenshots/android/notas-fold-abierto.png) |
 | ![Tareas](docs/screenshots/dashboard/tareas-desktop-light.png) | ![Recordatorios](docs/screenshots/android/recordatorios-telefono-claro.png) | ![Modo mesa](docs/screenshots/android/modo-mesa.png) |
 
+| iPhone | iPhone oscuro | Tareas | Familia |
+|---|---|---|---|
+| ![Hoy en iPhone](docs/screenshots/ios/iphone-today-light.png) | ![Hoy en iPhone, oscuro](docs/screenshots/ios/iphone-today-dark.png) | ![Tareas en iPhone](docs/screenshots/ios/iphone-tasks-light.png) | ![Familia en iPhone](docs/screenshots/ios/iphone-family-dark.png) |
+
 Más capturas en [`docs/screenshots/`](docs/screenshots).
 
 ## Licencias
