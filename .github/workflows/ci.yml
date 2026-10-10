@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, kairo]
   pull_request:
   workflow_dispatch:
 
@@ -59,7 +59,7 @@ jobs:
             android/wear/build/outputs/apk/release/*.apk
 
   docker:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/kairo')
     needs: [backend, dashboard]
     runs-on: ubuntu-latest
     permissions:
