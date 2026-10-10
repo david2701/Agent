@@ -65,7 +65,7 @@ Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).
 | `android/core` | Cliente de la API y modelos compartidos entre teléfono y reloj. |
 | `ios/` | App para iPhone, iPad (y iPhone Duo) y Apple Watch en SwiftUI (iOS 27), con widgets, Live Activities, controles, Siri y compartir. Paquete `KairoKit` (SPM). |
 | `design/` | Sistema de diseño (`DESIGN.md`), ícono en SVG y fuentes Geist. |
-| `docs/` | API, Android, iOS, familia, push sin Firebase, Google Calendar y capturas. |
+| `docs/` | Despliegue, API, Android, iOS, familia, push sin Firebase, Google Calendar y capturas. |
 | `.claude/skills/` | Skill de diseño Taste usada para la UI. |
 
 ### Modelos de Nan elegidos
@@ -85,6 +85,8 @@ Revisé y probé todos los modelos disponibles en tu cuenta:
 Todos se pueden cambiar en *Ajustes > Asistente* del dashboard. `minimax-h3` respondió 401 (sin acceso con tu clave).
 
 ## Desplegar en tu servidor
+
+Guía completa paso a paso, con la lista de pruebas en los dispositivos: [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 
 Requisitos: Docker con Compose y Caddy (que ya tienes).
 
