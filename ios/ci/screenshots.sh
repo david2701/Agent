@@ -69,7 +69,8 @@ run_device() { # "udid|nombre" prefijo-archivo secciones...
 log "simuladores disponibles:"
 xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20
 PHONE=$(pick "iPhone 17 Pro" "iPhone 17" "iPhone 16 Pro" "iPhone")
-PAD=$(pick "iPad Pro 13" "iPad Pro" "iPad Air" "iPad")
+PAD=""
+[ -n "${KAIRO_SHOTS_IPAD:-}" ] && PAD=$(pick "iPad Pro 13" "iPad Pro" "iPad Air" "iPad")
 
 # El iPad arranca en segundo plano mientras se toman las del iPhone
 [ -n "$PAD" ] && { xcrun simctl boot "${PAD%%|*}" 2>/dev/null & }

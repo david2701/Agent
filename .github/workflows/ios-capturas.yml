@@ -1,12 +1,15 @@
 name: iOS capturas
 
 # Capturas de la app en el simulador de iPhone y iPad contra un servidor de prueba (ios/ci).
-# Tarda varios minutos (arrancar los simuladores), así que no corre en cada cambio: se lanza a mano
-# (Actions > iOS capturas > Run workflow) o al cambiar los scripts de ios/ci.
+# No corre en cada cambio: se lanza a mano (Actions > iOS capturas > Run workflow).
+# Por defecto sólo iPhone (unos 8 minutos); el iPad tarda bastante más en arrancar.
 on:
   workflow_dispatch:
-  push:
-    paths: ["ios/ci/**"]
+    inputs:
+      ipad:
+        description: "También capturas de iPad (más lento)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,7 +17,7 @@ permissions:
 jobs:
   capturas:
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Compilar para el simulador
@@ -26,6 +29,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -50
       - name: Capturas
         working-directory: ios
+        env:
+          KAIRO_SHOTS_IPAD: ${{ inputs.ipad && '1' || '' }}
         run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/capturas
       - uses: actions/upload-artifact@v4
         if: always()
