@@ -1,5 +1,7 @@
 package app.kairo.android.ui.components
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -36,11 +38,11 @@ import kotlin.math.sin
 enum class OrbState { Idle, Armed, Listening, Thinking, Speaking, Error }
 
 /**
- * El orbe de Kairo: anillo abierto + punto ámbar (la misma geometría del ícono).
- * - Idle: respira lento.          - Armed: el punto late suave (esperando "Oye Kairo").
- * - Listening: el anillo se deforma con el nivel del micrófono y el punto crece.
- * - Thinking: el hueco gira.       - Speaking: ondas concéntricas al ritmo de la voz.
- * Con "Quitar animaciones" del sistema queda estático.
+ * The Kairo orb: open ring + amber dot (the same geometry as the icon).
+ * - Idle: breathes slowly.         - Armed: the dot pulses softly (waiting for the wake phrase).
+ * - Listening: the ring deforms with the microphone level and the dot grows.
+ * - Thinking: the gap rotates.     - Speaking: concentric waves to the rhythm of the voice.
+ * It is static when the system's "Remove animations" is on.
  */
 @Composable
 fun KairoOrb(
@@ -74,12 +76,12 @@ fun KairoOrb(
     val ripple by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1800, easing = LinearEasing)), label = "ripple")
 
     val description = when (state) {
-        OrbState.Idle -> "Kairo en reposo"
-        OrbState.Armed -> "Kairo atento a Oye Kairo"
-        OrbState.Listening -> "Kairo escuchando"
-        OrbState.Thinking -> "Kairo pensando"
-        OrbState.Speaking -> "Kairo hablando"
-        OrbState.Error -> "Kairo no pudo completar la acción"
+        OrbState.Idle -> stringResource(R.string.orb_idle)
+        OrbState.Armed -> stringResource(R.string.orb_armed, stringResource(R.string.wake_phrase))
+        OrbState.Listening -> stringResource(R.string.orb_listening)
+        OrbState.Thinking -> stringResource(R.string.orb_thinking)
+        OrbState.Speaking -> stringResource(R.string.orb_speaking)
+        OrbState.Error -> stringResource(R.string.orb_error)
     }
 
     Canvas(modifier.size(size).semantics { contentDescription = description }) {
@@ -92,7 +94,7 @@ fun KairoOrb(
         val breathScale = if (still) 1f else 1f + (breath - 0.5f) * 0.03f * (1f - active)
         val r = baseR * breathScale
 
-        // Ondas al hablar
+        // Waves while speaking
         if (!still && state == OrbState.Speaking) {
             for (i in 0 until 3) {
                 val p = (ripple + i / 3f) % 1f
@@ -106,14 +108,14 @@ fun KairoOrb(
         }
 
         val rotation = if (!still && state == OrbState.Thinking) spin else 0f
-        val gapCenter = -40f // grados en pantalla (arriba a la derecha), como en el ícono
+        val gapCenter = -40f // degrees on screen (top right), as in the icon
         val gapHalf = if (state == OrbState.Thinking && !still) 30f + 10f * sin(phase) else 30f
 
         rotate(rotation, center) {
             val wobble = if (still) 0f else (smoothLevel * 0.085f * active)
             drawOpenRing(center, r, stroke, ringColor, gapCenter + gapHalf, 360f - 2 * gapHalf, wobble, phase)
 
-            // Punto ámbar en el hueco
+            // Amber dot in the gap
             val a = Math.toRadians(gapCenter.toDouble())
             val dotR = stroke * 0.85f * (1f + smoothLevel * 0.55f * active) * (if (state == OrbState.Armed && !still) 0.92f + 0.12f * breath else 1f)
             val dotPos = Offset(center.x + r * cos(a).toFloat(), center.y + r * sin(a).toFloat())

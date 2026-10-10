@@ -12,7 +12,7 @@
         <item name="postSplashScreenTheme">@style/Theme.Kairo</item>
     </style>
 
-    <!-- Asistente superpuesto (pulsación larga, tile, widget) -->
+    <!-- Assistant overlay (long press, tile, widget) -->
     <style name="Theme.Kairo.Overlay" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>

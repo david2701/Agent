@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** Contenedor de dependencias de la app (inyección manual, sin reflexión). */
+/** Dependency container of the app (manual injection, no reflection). */
 class AppGraph(context: Context) {
     val app: Context = context.applicationContext
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -39,7 +39,7 @@ class AppGraph(context: Context) {
     })
 
     val family = FamilyStore(api, prefs, scope)
-    /** Manejador único de eventos del servidor (WebSocket y push). */
+    /** Single handler for server events (WebSocket and push). */
     val events = ServerEventHandler(app, api.json, family)
     val push = PushManager(app, api, scope)
 
@@ -52,7 +52,7 @@ class AppGraph(context: Context) {
     val recorder = RecorderController(app, api, scope)
 
     init {
-        // La familia se carga al abrir la app y al iniciar sesión, y se recarga con `entity.changed: family`
+        // The family is loaded on opening the app and on sign-in, and reloaded with `entity.changed: family`
         family.follow(events.changes)
         scope.launch { session.session.map { it?.user?.id }.distinctUntilChanged().collect { family.onSession(it) } }
     }

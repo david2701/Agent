@@ -1,5 +1,9 @@
 package app.kairo.android.ui
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
+import app.kairo.android.InviteLink
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -55,20 +59,20 @@ import app.kairo.android.ui.settings.SettingsScreen
 import app.kairo.android.ui.tasks.TasksScreen
 import app.kairo.core.session.Session
 
-enum class Destination(val label: String, val icon: ImageVector) {
-    Home("Hoy", Icons.Rounded.WbSunny),
-    Chat("Chat", Icons.Rounded.ChatBubbleOutline),
-    Tasks("Tareas", Icons.Rounded.TaskAlt),
-    Notes("Notas", Icons.Rounded.StickyNote2),
-    Reminders("Recordatorios", Icons.Rounded.NotificationsNone),
-    Calendar("Calendario", Icons.Rounded.CalendarMonth),
-    Lists("Listas", Icons.Rounded.ShoppingBasket),
-    Family("Familia", Icons.Rounded.Groups),
-    Memory("Memoria", Icons.Rounded.Psychology),
-    Recordings("Grabaciones", Icons.Rounded.GraphicEq),
-    Activity("Actividad", Icons.Rounded.History),
-    Settings("Ajustes", Icons.Rounded.Settings),
-    More("Más", Icons.Rounded.MoreHoriz);
+enum class Destination(@StringRes val label: Int, val icon: ImageVector) {
+    Home(R.string.nav_home, Icons.Rounded.WbSunny),
+    Chat(R.string.nav_chat, Icons.Rounded.ChatBubbleOutline),
+    Tasks(R.string.nav_tasks, Icons.Rounded.TaskAlt),
+    Notes(R.string.nav_notes, Icons.Rounded.StickyNote2),
+    Reminders(R.string.nav_reminders, Icons.Rounded.NotificationsNone),
+    Calendar(R.string.nav_calendar, Icons.Rounded.CalendarMonth),
+    Lists(R.string.nav_lists, Icons.Rounded.ShoppingBasket),
+    Family(R.string.nav_family, Icons.Rounded.Groups),
+    Memory(R.string.nav_memory, Icons.Rounded.Psychology),
+    Recordings(R.string.nav_recordings, Icons.Rounded.GraphicEq),
+    Activity(R.string.nav_activity, Icons.Rounded.History),
+    Settings(R.string.nav_settings, Icons.Rounded.Settings),
+    More(R.string.nav_more, Icons.Rounded.MoreHoriz);
 
     companion object {
         val compactBar = listOf(Home, Chat, Tasks, Notes, More)
@@ -107,16 +111,16 @@ enum class Destination(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun KairoAppUi(graph: AppGraph, deepLink: String?, onDeepLinkConsumed: () -> Unit) {
+fun KairoAppUi(graph: AppGraph, deepLink: String?, invite: InviteLink? = null, onDeepLinkConsumed: () -> Unit) {
     val session by graph.session.session.collectAsState(initial = LoadingSession)
     when (val s = session) {
         LoadingSession -> Box(Modifier.fillMaxSize())
-        null -> LoginScreen(graph)
+        null -> LoginScreen(graph, invite) { onDeepLinkConsumed() }
         else -> MainScaffold(graph, s, deepLink, onDeepLinkConsumed)
     }
 }
 
-/** Marcador mientras DataStore carga la sesión (evita parpadeo del login). */
+/** Placeholder while DataStore loads the session (avoids a login flash). */
 private val LoadingSession = Session("", app.kairo.core.model.User("", "", "", "", ""), "")
 
 @Composable
@@ -141,7 +145,7 @@ private fun MainScaffold(graph: AppGraph, session: Session, deepLink: String?, o
                     selected = selected == d,
                     onClick = { current = d },
                     icon = { Icon(d.icon, contentDescription = null) },
-                    label = { Text(d.label, style = MaterialTheme.typography.labelMedium) },
+                    label = { Text(stringResource(d.label), style = MaterialTheme.typography.labelMedium) },
                     alwaysShowLabel = !wide || adaptive.windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND),
                 )
             }

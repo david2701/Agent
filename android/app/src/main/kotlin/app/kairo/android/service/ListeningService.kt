@@ -22,9 +22,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Servicio en primer plano (tipo micrófono) que mantiene a Kairo atento a "Oye Kairo".
- * Android exige la notificación permanente y muestra el indicador verde del micrófono.
- * También mantiene la conexión en tiempo real para recibir avisos al instante.
+ * Foreground service (microphone type) that keeps Kairo listening for "Hey Kairo" / "Oye Kairo".
+ * Android requires the permanent notification and shows the green microphone indicator.
+ * It also keeps the realtime connection open to receive notices instantly.
  */
 class ListeningService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -47,7 +47,7 @@ class ListeningService : Service() {
         try {
             ServiceCompat.startForeground(this, Notifications.ID_LISTENING, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } catch (e: Exception) {
-            // Android 14+: no se puede iniciar el micrófono desde segundo plano
+            // Android 14+: the microphone cannot be started from the background
             stopSelf()
             return START_NOT_STICKY
         }
@@ -62,13 +62,15 @@ class ListeningService : Service() {
                 if (!inForeground && reply != null) {
                     Notifications.show(
                         this, Notifications.ID_ASSISTANT,
-                        Notifications.simple(this, Channels.ASSISTANT, transcript?.let { "\"$it\"" } ?: "Kairo", reply, destination = "chat"),
+                        Notifications.simple(this, Channels.ASSISTANT, transcript?.let { "\"$it\"" } ?: getString(R.string.assist_kairo), reply, destination = "chat"),
                     )
                 }
             }
         }
         scope.launch {
-            val phrase = runCatching { graph.api.settings().settings.wakeWord }.getOrDefault("oye kairo")
+            val phrase = runCatching { graph.api.settings().settings.wakeWord }.getOrDefault(getString(R.string.wake_phrase))
+            // Downloads the model for the app language if it is missing (a model for another language keeps working meanwhile)
+            if (!graph.wakeModel.isReady()) graph.wakeModel.ensure()
             graph.voice.startLoop(phrase)
         }
         return START_STICKY
@@ -87,15 +89,15 @@ class ListeningService : Service() {
     private fun notification() = NotificationCompat.Builder(this, Channels.LISTENING)
         .setSmallIcon(R.drawable.ic_stat_kairo)
         .setColor(0xFFF0A23B.toInt())
-        .setContentTitle("Kairo está atento")
-        .setContentText("Di \"Oye Kairo\" o toca Hablar")
+        .setContentTitle(getString(R.string.listen_title))
+        .setContentText(getString(R.string.listen_text, getString(R.string.wake_phrase)))
         .setOngoing(true)
         .setSilent(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         .setContentIntent(Notifications.openApp(this))
-        .addAction(0, "Hablar", PendingIntent.getService(this, 1, Intent(this, ListeningService::class.java).setAction(ACTION_TALK), PendingIntent.FLAG_IMMUTABLE))
-        .addAction(0, "Pausar", PendingIntent.getService(this, 2, Intent(this, ListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+        .addAction(0, getString(R.string.home_talk), PendingIntent.getService(this, 1, Intent(this, ListeningService::class.java).setAction(ACTION_TALK), PendingIntent.FLAG_IMMUTABLE))
+        .addAction(0, getString(R.string.listen_pause), PendingIntent.getService(this, 2, Intent(this, ListeningService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
         .build()
 
     companion object {

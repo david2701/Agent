@@ -12,19 +12,19 @@ import kotlinx.coroutines.flow.map
 private val Context.appStore by preferencesDataStore(name = "kairo_app")
 
 data class LocalSettings(
-    /** Escucha continua de "Oye Kairo" con el servicio en primer plano. */
+    /** Continuous listening for the wake phrase with the foreground service. */
     val wakeWordEnabled: Boolean = false,
-    /** Tras una pregunta de Kairo, escuchar la respuesta sin repetir "Oye Kairo". */
+    /** After a question from Kairo, listen for the answer without repeating the wake phrase. */
     val followUp: Boolean = true,
-    /** Leer en voz alta las respuestas del chat escrito. */
+    /** Read typed chat replies aloud. */
     val speakChatReplies: Boolean = false,
-    /** Sonidos breves al empezar y terminar de escuchar. */
+    /** Short sounds when listening starts and ends. */
     val earcons: Boolean = true,
-    /** Servicio ligero que mantiene el WebSocket abierto para recibir avisos sin ntfy ni "Oye Kairo". */
+    /** Light service that keeps the WebSocket open to receive notices without ntfy or the wake phrase. */
     val directConnection: Boolean = false,
 )
 
-/** Preferencias y cachés locales del teléfono (no viajan al servidor). */
+/** Preferences and local caches of the phone (they do not travel to the server). */
 class AppPrefs(private val context: Context) {
 
     val settings: Flow<LocalSettings> = context.appStore.data.map {
@@ -45,15 +45,15 @@ class AppPrefs(private val context: Context) {
     suspend fun setEarcons(v: Boolean) = context.appStore.edit { it[EARCONS] = v }
     suspend fun setDirectConnection(v: Boolean) = context.appStore.edit { it[DIRECT] = v }
 
-    /** Última familia recibida: los nombres aparecen al instante, incluso sin conexión. */
+    /** Last family received: names appear instantly, even offline. */
     suspend fun saveFamilyCache(json: String?) = context.appStore.edit { if (json == null) it.remove(FAMILY) else it[FAMILY] = json }
     suspend fun familyCache(): String? = context.appStore.data.first()[FAMILY]
 
-    /** Último "Hoy" recibido, para el widget. */
+    /** Last "Today" received, for the widget. */
     suspend fun saveTodayCache(json: String) = context.appStore.edit { it[TODAY] = json }
     suspend fun todayCache(): String? = context.appStore.data.first()[TODAY]
 
-    /** Ids de alarmas locales programadas (para cancelarlas cuando cambian). */
+    /** Ids of scheduled local alarms (to cancel them when they change). */
     suspend fun scheduledAlarms(): Set<String> = context.appStore.data.first()[ALARMS]?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
     suspend fun setScheduledAlarms(ids: Set<String>) = context.appStore.edit { it[ALARMS] = ids.joinToString(",") }
 
@@ -73,7 +73,7 @@ class AppPrefs(private val context: Context) {
     }
 }
 
-/** Registro de avisos ya mostrados: evita duplicar el de la alarma local y el del WebSocket. */
+/** Log of notices already shown: avoids duplicating the local alarm's and the WebSocket's. */
 class FiredLog(context: Context) {
     private val prefs = context.getSharedPreferences("kairo_fired", Context.MODE_PRIVATE)
 
@@ -83,12 +83,12 @@ class FiredLog(context: Context) {
         if (prefs.contains(key)) return false
         val now = System.currentTimeMillis()
         val editor = prefs.edit().putLong(key, now)
-        // Limpieza de entradas de más de 3 días
+        // Clean up entries older than 3 days
         prefs.all.forEach { (k, v) -> if (v is Long && now - v > 3 * 86_400_000L) editor.remove(k) }
         editor.apply()
         return true
     }
 
-    /** Avisos de la familia: el mismo id llega por WebSocket, push y sincronización; se muestra una vez. */
+    /** Family notices: the same id arrives by WebSocket, push and sync; it is shown once. */
     fun markNoticeIfNew(noticeId: String): Boolean = markIfNew("notice:$noticeId", 0)
 }

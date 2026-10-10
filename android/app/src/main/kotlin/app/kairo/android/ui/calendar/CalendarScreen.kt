@@ -1,5 +1,13 @@
 package app.kairo.android.ui.calendar
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
+import android.text.format.DateFormat
+import app.kairo.android.ui.common.longDateLabel
+import app.kairo.android.ui.common.clockLabel
+import app.kairo.android.ui.common.rememberFormatLocale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,8 +96,9 @@ import app.kairo.android.ui.theme.Kairo
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Event
 import app.kairo.core.net.KairoApi.Companion.obj
-import app.kairo.core.util.Spanish
-import app.kairo.core.util.longLabel
+import app.kairo.core.util.firstDayOfWeek
+import app.kairo.core.util.monthYearLabel
+import app.kairo.core.util.narrowLabel
 import app.kairo.core.util.timeLabel
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,10 +110,9 @@ import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
 
-/** Lo que guarda la hoja de evento. */
+/** What the event sheet saves. */
 data class EventEdit(val title: String, val start: Instant, val end: Instant, val allDay: Boolean, val location: String, val shared: Boolean)
 
 class CalendarViewModel(graph: AppGraph) : ResourceViewModel<List<Event>>(graph, setOf("event")) {
@@ -122,7 +130,7 @@ class CalendarViewModel(graph: AppGraph) : ResourceViewModel<List<Event>>(graph,
 
     fun setMonth(m: YearMonth) { if (m != month.value) { month.value = m; refresh() } }
 
-    fun save(existing: Event?, e: EventEdit) = mutate(if (existing == null) (if (e.shared) "Evento familiar creado" else "Evento creado") else "Evento guardado") {
+    fun save(existing: Event?, e: EventEdit) = mutate(if (existing == null) (if (e.shared) str(R.string.cal_created_family) else str(R.string.cal_created)) else str(R.string.cal_saved)) {
         if (existing == null) {
             graph.api.createEvent(obj {
                 put("title", e.title); put("startAt", e.start.toString()); put("endAt", e.end.toString())
@@ -132,14 +140,14 @@ class CalendarViewModel(graph: AppGraph) : ResourceViewModel<List<Event>>(graph,
         } else {
             graph.api.updateEvent(existing.id, obj {
                 put("title", e.title); put("location", e.location)
-                // En los recurrentes cada ocurrencia llega con el mismo id: la hora se cambia en la serie desde el dashboard
+                // For recurring events every occurrence arrives with the same id: the time is changed on the series from the dashboard
                 if (existing.rrule == null) { put("startAt", e.start.toString()); put("endAt", e.end.toString()); put("allDay", e.allDay) }
                 if (e.shared != existing.shared) put("shared", e.shared)
             })
         }
     }
 
-    fun delete(e: Event) = mutate("Evento eliminado. Puedes deshacerlo en Actividad.") { graph.api.deleteEvent(e.id) }
+    fun delete(e: Event) = mutate(str(R.string.cal_deleted)) { graph.api.deleteEvent(e.id) }
 }
 
 @Composable
@@ -167,7 +175,7 @@ fun CalendarScreen(graph: AppGraph) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { creating = true }, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Evento") },
+            ExtendedFloatingActionButton(onClick = { creating = true }, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text(stringResource(R.string.cal_event)) },
                 containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -175,12 +183,12 @@ fun CalendarScreen(graph: AppGraph) {
         Column(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    month.month.getDisplayName(TextStyle.FULL, Spanish).replaceFirstChar { it.uppercase() } + " " + month.year,
+                    month.monthYearLabel(rememberFormatLocale()),
                     style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { vm.setMonth(month.minusMonths(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Mes anterior") }
-                TextButton(onClick = { vm.setMonth(YearMonth.now()); selected = LocalDate.now().toString() }) { Text("Hoy") }
-                IconButton(onClick = { vm.setMonth(month.plusMonths(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Mes siguiente") }
+                IconButton(onClick = { vm.setMonth(month.minusMonths(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, stringResource(R.string.cal_prev_month)) }
+                TextButton(onClick = { vm.setMonth(YearMonth.now()); selected = LocalDate.now().toString() }) { Text(stringResource(R.string.cal_today)) }
+                IconButton(onClick = { vm.setMonth(month.plusMonths(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, stringResource(R.string.cal_next_month)) }
             }
             state.error?.let { ErrorBanner(it, Modifier.padding(16.dp), onRetry = { vm.refresh() }) }
             if (wide) {
@@ -205,41 +213,43 @@ fun CalendarScreen(graph: AppGraph) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val s = e.startAt.toInstantOrNull()
-                    Text(if (e.allDay) "Todo el día" else "${s?.timeLabel()} a ${e.endAt.toInstantOrNull()?.timeLabel()}", style = MonoStyle)
+                    Text(if (e.allDay) stringResource(R.string.all_day) else stringResource(R.string.time_range, s?.timeLabel() ?: "", e.endAt.toInstantOrNull()?.timeLabel() ?: ""), style = MonoStyle)
                     if (e.location.isNotBlank()) Text(e.location)
                     if (e.description.isNotBlank()) Text(e.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (e.shared) Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Groups, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(6.dp))
                         Text(
-                            if (family.owns(e.ownerId)) "Evento familiar" else "Evento familiar · agendado por ${family.firstNameOf(e.ownerId) ?: "otro miembro"}",
+                            if (family.owns(e.ownerId)) stringResource(R.string.cal_family_event) else stringResource(R.string.cal_family_event_by, family.firstNameOf(e.ownerId) ?: stringResource(R.string.tasks_another_member)),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (e.source == "google") Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Sync, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(6.dp))
-                        Text("Sincronizado con Google Calendar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.cal_synced), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             },
             confirmButton = {
                 Row {
-                    TextButton(onClick = { editing = e; detail = null }) { Text("Editar") }
-                    TextButton(onClick = { detail = null }) { Text("Cerrar") }
+                    TextButton(onClick = { editing = e; detail = null }) { Text(stringResource(R.string.common_edit)) }
+                    TextButton(onClick = { detail = null }) { Text(stringResource(R.string.common_close)) }
                 }
             },
-            dismissButton = { TextButton(onClick = { vm.delete(e); detail = null }) { Icon(Icons.Rounded.DeleteOutline, null); Spacer(Modifier.width(6.dp)); Text("Eliminar") } },
+            dismissButton = { TextButton(onClick = { vm.delete(e); detail = null }) { Icon(Icons.Rounded.DeleteOutline, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.common_delete)) } },
         )
     }
 }
 
 @Composable
 private fun MonthGrid(month: YearMonth, selected: LocalDate, count: (LocalDate) -> Int, modifier: Modifier, onSelect: (LocalDate) -> Unit) {
-    val first = month.atDay(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val locale = rememberFormatLocale()
+    val firstDay = locale.firstDayOfWeek()
+    val first = month.atDay(1).with(TemporalAdjusters.previousOrSame(firstDay))
     val today = LocalDate.now()
     Column(modifier.widthIn(max = 560.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            DayOfWeek.entries.forEach { d ->
-                Text(d.getDisplayName(TextStyle.NARROW, Spanish).uppercase(), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            (0L until 7L).map { firstDay.plus(it) }.forEach { d ->
+                Text(d.narrowLabel(locale), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -253,7 +263,7 @@ private fun MonthGrid(month: YearMonth, selected: LocalDate, count: (LocalDate) 
                     val isSel = d == selected
                     val n = count(d)
                     Box(Modifier.weight(1f).aspectRatio(1.1f).padding(2.dp), contentAlignment = Alignment.Center) {
-                        val label = d.longLabel() + when (n) { 0 -> ""; 1 -> ", 1 evento"; else -> ", $n eventos" }
+                        val label = if (n == 0) d.longDateLabel() else pluralStringResource(R.plurals.cal_day_cd, n, d.longDateLabel(), n)
                         Surface(
                             onClick = { onSelect(d) },
                             shape = CircleShape,
@@ -278,9 +288,9 @@ private fun MonthGrid(month: YearMonth, selected: LocalDate, count: (LocalDate) 
 @Composable
 private fun Agenda(day: LocalDate, events: List<Event>, loading: Boolean, family: FamilyInfo?, modifier: Modifier, onOpen: (Event) -> Unit) {
     LazyColumn(modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text(day.longLabel(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp)) }
+        item { Text(day.longDateLabel(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp)) }
         if (loading) item { SkeletonList(3) }
-        else if (events.isEmpty()) item { EmptyState(Icons.Rounded.CalendarMonth, "Día libre", "Dile a Kairo \"agéndame...\" para crear un evento.") }
+        else if (events.isEmpty()) item { EmptyState(Icons.Rounded.CalendarMonth, stringResource(R.string.cal_free_day), stringResource(R.string.cal_free_day_body)) }
         items(events, key = { it.id + it.startAt }) { e ->
             Surface(onClick = { onOpen(e) }, color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -289,15 +299,15 @@ private fun Agenda(day: LocalDate, events: List<Event>, loading: Boolean, family
                     Column(Modifier.weight(1f)) {
                         Text(e.title, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            if (e.allDay) "Todo el día" else "${e.startAt.toInstantOrNull()?.timeLabel()} a ${e.endAt.toInstantOrNull()?.timeLabel()}",
+                            if (e.allDay) stringResource(R.string.all_day) else stringResource(R.string.time_range, e.startAt.toInstantOrNull()?.timeLabel() ?: "", e.endAt.toInstantOrNull()?.timeLabel() ?: ""),
                             style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (e.location.isNotBlank()) Text(e.location, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        // Familiar: mismo color que el resto, marcado con el ícono y quién lo agendó
+                        // Family event: same color as the rest, marked with the icon and who scheduled it
                         if (e.shared) Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Groups, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(4.dp))
                             Text(
-                                if (family.owns(e.ownerId)) "Familiar" else "Familiar · agendado por ${family.firstNameOf(e.ownerId) ?: "otro miembro"}",
+                                if (family.owns(e.ownerId)) stringResource(R.string.shared_family) else stringResource(R.string.cal_family_by, family.firstNameOf(e.ownerId) ?: stringResource(R.string.tasks_another_member)),
                                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -327,34 +337,34 @@ private fun EventSheet(day: LocalDate, event: Event?, family: FamilyInfo?, onDis
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(if (event == null) "Nuevo evento" else "Editar evento", style = MaterialTheme.typography.titleLarge)
-            Labeled("Título") { OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
-            Labeled("Lugar") { OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
+            Text(if (event == null) stringResource(R.string.cal_new_event) else stringResource(R.string.cal_edit_event), style = MaterialTheme.typography.titleLarge)
+            Labeled(stringResource(R.string.field_title)) { OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
+            Labeled(stringResource(R.string.cal_f_location)) { OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), singleLine = true, shape = MaterialTheme.shapes.small) }
             if (recurring) {
-                Text("Se repite: la fecha y la hora de la serie se cambian desde el dashboard.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.cal_recurring_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Todo el día", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.all_day), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(allDay, { allDay = it })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { pick = "date" }) { Text(date.longLabel()) }
+                    TextButton(onClick = { pick = "date" }) { Text(date.longDateLabel()) }
                     if (!allDay) {
-                        TextButton(onClick = { pick = "start" }) { Text("%02d:%02d".format(start.hour, start.minute), style = MonoStyle) }
-                        Text("a")
-                        TextButton(onClick = { pick = "end" }) { Text("%02d:%02d".format(end.hour, end.minute), style = MonoStyle) }
+                        TextButton(onClick = { pick = "start" }) { Text(start.clockLabel(), style = MonoStyle) }
+                        Text(stringResource(R.string.time_to))
+                        TextButton(onClick = { pick = "end" }) { Text(end.clockLabel(), style = MonoStyle) }
                     }
                 }
             }
             if (family.hasOthers || event?.shared == true) {
                 if (!canUnshare && event?.shared == true) {
-                    SharedInfoRow("Lo agendó ${family.firstNameOf(event.ownerId) ?: "otro miembro"}; solo esa persona puede dejar de compartirlo.", title = "Evento familiar")
+                    SharedInfoRow(stringResource(R.string.cal_shared_by_other, family.firstNameOf(event.ownerId) ?: stringResource(R.string.tasks_another_member)), title = stringResource(R.string.cal_family_event))
                 } else {
-                    ShareRow(shared, { shared = it }, title = "Evento familiar", body = "Lo ven y editan todos; les avisamos si lo mueves o lo cancelas.")
+                    ShareRow(shared, { shared = it }, title = stringResource(R.string.cal_family_event), body = stringResource(R.string.cal_share_body))
                 }
             }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     enabled = title.isNotBlank(),
                     onClick = {
@@ -363,7 +373,7 @@ private fun EventSheet(day: LocalDate, event: Event?, family: FamilyInfo?, onDis
                         onSave(EventEdit(title.trim(), s, e, allDay, location.trim(), shared))
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                ) { Text(if (event == null) "Crear" else "Guardar") }
+                ) { Text(if (event == null) stringResource(R.string.rem_create) else stringResource(R.string.common_save)) }
             }
         }
     }
@@ -372,13 +382,13 @@ private fun EventSheet(day: LocalDate, event: Event?, family: FamilyInfo?, onDis
             val dp = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
             DatePickerDialog(
                 onDismissRequest = { pick = null },
-                confirmButton = { TextButton(onClick = { dp.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }; pick = null }) { Text("Listo") } },
-                dismissButton = { TextButton(onClick = { pick = null }) { Text("Cancelar") } },
+                confirmButton = { TextButton(onClick = { dp.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }; pick = null }) { Text(stringResource(R.string.common_done)) } },
+                dismissButton = { TextButton(onClick = { pick = null }) { Text(stringResource(R.string.common_cancel)) } },
             ) { DatePicker(dp) }
         }
         "start", "end" -> {
             val initial = if (pick == "start") start else end
-            val tp = rememberTimePickerState(initial.hour, initial.minute, is24Hour = true)
+            val tp = rememberTimePickerState(initial.hour, initial.minute, is24Hour = DateFormat.is24HourFormat(LocalContext.current))
             AlertDialog(
                 onDismissRequest = { pick = null },
                 confirmButton = {
@@ -386,9 +396,9 @@ private fun EventSheet(day: LocalDate, event: Event?, family: FamilyInfo?, onDis
                         val t = LocalTime.of(tp.hour, tp.minute)
                         if (pick == "start") { val dur = java.time.Duration.between(start, end); start = t; end = t.plus(if (dur.isNegative || dur.isZero) java.time.Duration.ofHours(1) else dur) } else end = t
                         pick = null
-                    }) { Text("Listo") }
+                    }) { Text(stringResource(R.string.common_done)) }
                 },
-                dismissButton = { TextButton(onClick = { pick = null }) { Text("Cancelar") } },
+                dismissButton = { TextButton(onClick = { pick = null }) { Text(stringResource(R.string.common_cancel)) } },
                 text = { TimePicker(tp) },
             )
         }

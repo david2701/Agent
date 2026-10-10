@@ -1,5 +1,8 @@
 package app.kairo.android.ui.family
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -122,8 +125,9 @@ import app.kairo.core.model.Member
 import app.kairo.core.model.Notice
 import app.kairo.core.model.NoticesResponse
 import app.kairo.core.session.Session
-import app.kairo.core.util.dayLabel
-import app.kairo.core.util.relativeLabel
+import app.kairo.android.ui.common.dayLabel
+import app.kairo.android.ui.common.relativeLabel
+import app.kairo.core.util.relativeDay
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -132,7 +136,7 @@ import java.time.ZoneId
 
 data class FamilyData(val info: FamilyInfo, val invites: List<Invitation>, val notices: NoticesResponse)
 
-/** Código recién creado para compartir: invitación nueva o código de acceso de [memberName]. */
+/** Newly created code to share: a new invitation or the access code of [memberName]. */
 data class CreatedCode(val created: InviteCreated, val memberName: String?)
 
 class FamilyViewModel(graph: AppGraph) : ResourceViewModel<FamilyData>(graph, setOf("family", "notice")) {
@@ -147,7 +151,7 @@ class FamilyViewModel(graph: AppGraph) : ResourceViewModel<FamilyData>(graph, se
 
     init { refresh() }
 
-    fun rename(name: String) = mutate("Nombre guardado") { graph.api.renameFamily(name) }
+    fun rename(name: String) = mutate(str(R.string.fam_name_saved)) { graph.api.renameFamily(name) }
 
     fun invite(name: String, role: String) = viewModelScope.launch {
         runCatching { graph.api.createInvite(name, role) }
@@ -161,14 +165,14 @@ class FamilyViewModel(graph: AppGraph) : ResourceViewModel<FamilyData>(graph, se
             .onFailure { say(it.friendly()) }
     }
 
-    fun revoke(inv: Invitation) = mutate("Invitación revocada") { graph.api.revokeInvite(inv.id) }
+    fun revoke(inv: Invitation) = mutate(str(R.string.fam_invite_revoked)) { graph.api.revokeInvite(inv.id) }
 
     fun setRole(m: Member, admin: Boolean) {
         val name = FamilyStore.firstNameOf(m.displayName)
-        mutate(if (admin) "$name ahora administra la familia" else "$name ya no administra la familia") { graph.api.setMemberRole(m.id, if (admin) "admin" else "member") }
+        mutate(if (admin) str(R.string.fam_now_admin, name) else str(R.string.fam_no_longer_admin, name)) { graph.api.setMemberRole(m.id, if (admin) "admin" else "member") }
     }
 
-    fun remove(m: Member) = mutate("${FamilyStore.firstNameOf(m.displayName)} ya no está en la familia") { graph.api.removeMember(m.id) }
+    fun remove(m: Member) = mutate(str(R.string.fam_removed, FamilyStore.firstNameOf(m.displayName))) { graph.api.removeMember(m.id) }
 
     fun send(text: String, to: List<String>?, onSent: () -> Unit) = viewModelScope.launch {
         sending.value = true
@@ -176,7 +180,7 @@ class FamilyViewModel(graph: AppGraph) : ResourceViewModel<FamilyData>(graph, se
             .onSuccess { n ->
                 val single = to?.singleOrNull() ?: state.value.data?.info?.others?.singleOrNull()?.id
                 val who = if (n == 1) graph.family.firstName(single) else null
-                say(if (who != null) "Aviso enviado a $who" else "Aviso enviado a $n personas")
+                say(if (who != null) str(R.string.fam_notice_sent_one, who) else graph.app.resources.getQuantityString(R.plurals.fam_notice_sent_many, n, n))
                 onSent()
             }
             .onFailure { say(it.friendly()) }
@@ -227,7 +231,7 @@ fun FamilyScreen(graph: AppGraph, session: Session, navigate: (Destination) -> U
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { inner ->
         val padding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp)
         if (wide) {
-            // Plegable abierto o tablet: la familia a la izquierda, avisos y novedades a la derecha
+            // Unfolded foldable or tablet: the family on the left, notices and news on the right
             Row(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {
                 LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     header(state.error, vm)
@@ -236,7 +240,7 @@ fun FamilyScreen(graph: AppGraph, session: Session, navigate: (Destination) -> U
                         privacyNote()
                     }
                 }
-                // Arranca a la altura del contenido de la izquierda (debajo del título)
+                // Starts level with the content on the left (below the title)
                 LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 56.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (info != null) {
                         composerSection(info, sending, vm)
@@ -258,32 +262,29 @@ fun FamilyScreen(graph: AppGraph, session: Session, navigate: (Destination) -> U
     }
 
     if (inviting) InviteSheet(onDismiss = { inviting = false }) { name, role -> vm.invite(name, role); inviting = false }
-    created?.let { c -> CodeSheet(c, info?.household?.name ?: "tu familia") { vm.created.value = null } }
+    created?.let { c -> CodeSheet(c, info?.household?.name ?: stringResource(R.string.notes_your_family)) { vm.created.value = null } }
     if (renaming && info != null) {
         var name by rememberSaveable { mutableStateOf(info.household.name) }
         AlertDialog(
             onDismissRequest = { renaming = false },
-            title = { Text("Nombre de la familia") },
+            title = { Text(stringResource(R.string.fam_rename_title)) },
             text = { OutlinedTextField(name, { name = it }, singleLine = true, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.rename(name.trim()); renaming = false } }, enabled = name.isNotBlank()) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.rename(name.trim()); renaming = false } }, enabled = name.isNotBlank()) { Text(stringResource(R.string.common_save)) } },
+            dismissButton = { TextButton(onClick = { renaming = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
     removing?.let { m ->
         val first = FamilyStore.firstNameOf(m.displayName)
         AlertDialog(
             onDismissRequest = { removing = null },
-            title = { Text("¿Quitar a $first de la familia?") },
+            title = { Text(stringResource(R.string.fam_remove_title, first)) },
             text = {
-                Text(
-                    "Se borran su cuenta y todo lo personal que tenga en Kairo: notas, tareas, recordatorios y conversaciones. " +
-                        "Lo que había compartido con la familia pasa a ser tuyo. No se puede deshacer.",
-                )
+                Text(stringResource(R.string.fam_remove_body))
             },
             confirmButton = {
-                TextButton(onClick = { vm.remove(m); removing = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Quitar") }
+                TextButton(onClick = { vm.remove(m); removing = null }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.common_remove)) }
             },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }
@@ -291,7 +292,7 @@ fun FamilyScreen(graph: AppGraph, session: Session, navigate: (Destination) -> U
 private class MemberActions(val onRole: (Member, Boolean) -> Unit, val onAccessCode: (Member) -> Unit, val onRemove: (Member) -> Unit)
 
 private fun LazyListScope.header(error: String?, vm: FamilyViewModel) {
-    item { Text("Familia", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp)) }
+    item { Text(stringResource(R.string.nav_family), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp)) }
     error?.let { item { ErrorBanner(it, onRetry = { vm.refresh() }) } }
 }
 
@@ -317,7 +318,7 @@ private fun Card(content: @Composable () -> Unit) {
     }
 }
 
-/** Hogar, miembros e invitaciones pendientes (estas como filas tenues, debajo de los miembros). */
+/** Household, members and pending invitations (these as faint rows, below the members). */
 private fun LazyListScope.householdSection(
     info: FamilyInfo,
     me: String,
@@ -332,10 +333,10 @@ private fun LazyListScope.householdSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(info.household.name, style = MaterialTheme.typography.titleLarge)
-                    val count = if (info.members.size == 1) "1 miembro" else "${info.members.size} miembros"
-                    Text(if (info.isAdmin) "$count · administras la familia" else count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val count = pluralStringResource(R.plurals.family_members, info.members.size, info.members.size)
+                    Text(if (info.isAdmin) count + " \u00B7 " + stringResource(R.string.family_admin_note) else count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (info.isAdmin) IconButton(onClick = onRename) { Icon(Icons.Rounded.Edit, "Cambiar el nombre de la familia") }
+                if (info.isAdmin) IconButton(onClick = onRename) { Icon(Icons.Rounded.Edit, stringResource(R.string.fam_rename_cd)) }
             }
             info.members.forEach { m ->
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -351,8 +352,8 @@ private fun LazyListScope.householdSection(
             if (info.others.isEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
-                    if (info.isAdmin) "Invita a quien vive contigo para compartir listas, eventos, tareas y notas. Lo personal de cada uno sigue siendo privado."
-                    else "Aún no hay nadie más en la familia.",
+                    if (info.isAdmin) stringResource(R.string.fam_empty_admin)
+                    else stringResource(R.string.fam_empty_member),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -361,14 +362,14 @@ private fun LazyListScope.householdSection(
                     onClick = onInvite, modifier = Modifier.padding(top = 4.dp).heightIn(min = 48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
                 ) {
-                    Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Invitar")
+                    Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.fam_invite_button))
                 }
             }
         }
     }
 }
 
-/** Invitación sin usar: aparece como un miembro por llegar, con su vencimiento. */
+/** Unused invitation: shown as a member to come, with its expiry. */
 @Composable
 private fun InviteRow(inv: Invitation, info: FamilyInfo, onRevoke: (Invitation) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -378,16 +379,16 @@ private fun InviteRow(inv: Invitation, info: FamilyInfo, onRevoke: (Invitation) 
         ) { Icon(if (inv.kind == "reset") Icons.Rounded.Key else Icons.Rounded.Schedule, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            val who = if (inv.kind == "reset") "Código de acceso de ${info.firstNameOfMember(inv.targetUserId)}" else inv.name.ifBlank { "Invitación sin nombre" }
+            val who = if (inv.kind == "reset") stringResource(R.string.fam_access_code_of, info.firstNameOfMember(inv.targetUserId) ?: stringResource(R.string.fam_member_fallback)) else inv.name.ifBlank { stringResource(R.string.fam_unnamed_invite) }
             Text(who, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val what = if (inv.kind == "reset") "Sin usar" else "Pendiente" + if (inv.role == "admin") " como admin" else ""
-            Text("$what · ${expiresLabel(inv.expiresAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val what = if (inv.kind == "reset") stringResource(R.string.fam_unused) else stringResource(if (inv.role == "admin") R.string.fam_pending_admin else R.string.fam_pending)
+            Text(stringResource(R.string.fam_status_expires, what, expiresLabel(inv.expiresAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        TextButton(onClick = { onRevoke(inv) }) { Text("Revocar") }
+        TextButton(onClick = { onRevoke(inv) }) { Text(stringResource(R.string.fam_revoke)) }
     }
 }
 
-private fun FamilyInfo.firstNameOfMember(id: String?): String = member(id)?.displayName?.let(FamilyStore::firstNameOf) ?: "un miembro"
+private fun FamilyInfo.firstNameOfMember(id: String?): String? = member(id)?.displayName?.let(FamilyStore::firstNameOf)
 
 @Composable
 private fun MemberRow(m: Member, isMe: Boolean, canManage: Boolean, actions: MemberActions) {
@@ -398,22 +399,22 @@ private fun MemberRow(m: Member, isMe: Boolean, canManage: Boolean, actions: Mem
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(m.displayName, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (isMe) Tag("Tú", strong = true)
-                Tag(if (m.role == "admin") "Admin" else "Miembro")
+                if (isMe) Tag(stringResource(R.string.fam_tag_you), strong = true)
+                Tag(if (m.role == "admin") stringResource(R.string.fam_tag_admin) else stringResource(R.string.fam_tag_member))
             }
             Text(m.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (canManage) {
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Opciones de ${m.displayName}") }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.fam_options_cd, m.displayName)) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text(if (m.role == "admin") "Quitar como administrador" else "Hacer administrador") },
+                        text = { Text(if (m.role == "admin") stringResource(R.string.fam_remove_as_admin) else stringResource(R.string.fam_make_admin)) },
                         onClick = { menu = false; actions.onRole(m, m.role != "admin") },
                     )
-                    DropdownMenuItem(text = { Text("Código de acceso") }, onClick = { menu = false; actions.onAccessCode(m) })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.fam_access_code)) }, onClick = { menu = false; actions.onAccessCode(m) })
                     DropdownMenuItem(
-                        text = { Text("Quitar de la familia", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.fam_remove_from), color = MaterialTheme.colorScheme.error) },
                         onClick = { menu = false; actions.onRemove(m) },
                     )
                 }
@@ -433,15 +434,17 @@ private fun Tag(text: String, strong: Boolean = false) {
     }
 }
 
+@Composable
 private fun expiresLabel(iso: String): String {
-    val day = iso.toInstantOrNull()?.atZone(ZoneId.systemDefault())?.toLocalDate()?.dayLabel() ?: return "vigente"
-    return if (day == "hoy" || day == "mañana") "vence $day" else "vence el $day"
+    val date = iso.toInstantOrNull()?.atZone(ZoneId.systemDefault())?.toLocalDate() ?: return stringResource(R.string.fam_expires_valid)
+    val day = date.dayLabel()
+    return if (date.relativeDay() != null) stringResource(R.string.fam_expires_relative, day) else stringResource(R.string.fam_expires_on, day)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 private fun LazyListScope.composerSection(info: FamilyInfo, sending: Boolean, vm: FamilyViewModel) {
     if (info.others.isEmpty()) return
-    item { SectionTitle("Avisar a la familia") }
+    item { SectionTitle(stringResource(R.string.fam_notify_title)) }
     item(key = "composer") {
         var text by rememberSaveable { mutableStateOf("") }
         var to by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -451,7 +454,7 @@ private fun LazyListScope.composerSection(info: FamilyInfo, sending: Boolean, vm
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextField(
                     value = text, onValueChange = { text = it.take(500) },
-                    placeholder = { Text("La cena está lista") },
+                    placeholder = { Text(stringResource(R.string.fam_composer_placeholder)) },
                     modifier = Modifier.weight(1f), shape = CircleShape, maxLines = 4,
                     colors = TextFieldDefaults.colors(
                         focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
@@ -464,11 +467,11 @@ private fun LazyListScope.composerSection(info: FamilyInfo, sending: Boolean, vm
                 FilledIconButton(
                     onClick = ::send, enabled = text.isNotBlank() && !sending, modifier = Modifier.size(52.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                ) { Icon(Icons.AutoMirrored.Rounded.Send, "Enviar aviso") }
+                ) { Icon(Icons.AutoMirrored.Rounded.Send, stringResource(R.string.fam_send_cd)) }
             }
             if (others.size > 1) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = to.isEmpty(), onClick = { to = emptyList() }, label = { Text("Todos") })
+                    FilterChip(selected = to.isEmpty(), onClick = { to = emptyList() }, label = { Text(stringResource(R.string.fam_everyone)) })
                     others.forEach { m ->
                         FilterChip(
                             selected = m.id in to,
@@ -478,22 +481,22 @@ private fun LazyListScope.composerSection(info: FamilyInfo, sending: Boolean, vm
                     }
                 }
             } else {
-                Text("Le llega a ${FamilyStore.firstNameOf(others.first().displayName)} al instante como notificación.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.fam_arrives_instantly, FamilyStore.firstNameOf(others.first().displayName)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 private fun LazyListScope.noticesSection(notices: NoticesResponse, info: FamilyInfo, vm: FamilyViewModel, onOpen: (Notice) -> Unit) {
-    item { SectionTitle("Novedades", action = if (notices.unread > 0) "Marcar todo leído" else null, onAction = vm::markAllRead) }
+    item { SectionTitle(stringResource(R.string.fam_news), action = if (notices.unread > 0) stringResource(R.string.fam_mark_all) else null, onAction = vm::markAllRead) }
     if (notices.notices.isEmpty()) {
-        item { EmptyState(Icons.Rounded.NotificationsNone, "Sin novedades", "Aquí verás lo que la familia comparte contigo, las tareas que te asignan y los avisos que te envían.") }
+        item { EmptyState(Icons.Rounded.NotificationsNone, stringResource(R.string.fam_news_empty_title), stringResource(R.string.fam_news_empty_body)) }
         return
     }
     items(notices.notices, key = { "n" + it.id }) { n -> NoticeRow(n, info, onOpen) }
 }
 
-/** Ícono de un aviso según su tipo. */
+/** Icon of a notice according to its kind. */
 fun noticeIcon(n: Notice) = when (n.kind) {
     "message" -> if (n.entityType == "family") Icons.Rounded.PersonAdd else Icons.Rounded.ChatBubbleOutline
     "assigned" -> Icons.Rounded.TaskAlt
@@ -531,7 +534,7 @@ private fun NoticeRow(n: Notice, info: FamilyInfo, onOpen: (Notice) -> Unit) {
 private fun LazyListScope.privacyNote() {
     item {
         Text(
-            "Lo que no marcas como familiar es privado, también para quien administra la familia.",
+            stringResource(R.string.fam_privacy),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
         )
@@ -545,26 +548,26 @@ private fun InviteSheet(onDismiss: () -> Unit, onCreate: (String, String) -> Uni
     var role by rememberSaveable { mutableStateOf("member") }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Invitar a la familia", style = MaterialTheme.typography.titleLarge)
-            Labeled("Nombre") { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().testTag("invite-name"), singleLine = true, placeholder = { Text("Sofía") }, shape = MaterialTheme.shapes.small) }
-            Labeled("Rol") {
+            Text(stringResource(R.string.fam_invite_title), style = MaterialTheme.typography.titleLarge)
+            Labeled(stringResource(R.string.lists_f_name)) { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().testTag("invite-name"), singleLine = true, placeholder = { Text(stringResource(R.string.fam_name_hint)) }, shape = MaterialTheme.shapes.small) }
+            Labeled(stringResource(R.string.fam_f_role)) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(role == "member", { role = "member" }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Miembro") }
-                    SegmentedButton(role == "admin", { role = "admin" }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Administrador") }
+                    SegmentedButton(role == "member", { role = "member" }, SegmentedButtonDefaults.itemShape(0, 2)) { Text(stringResource(R.string.fam_tag_member)) }
+                    SegmentedButton(role == "admin", { role = "admin" }, SegmentedButtonDefaults.itemShape(1, 2)) { Text(stringResource(R.string.fam_role_admin)) }
                 }
                 Text(
-                    if (role == "admin") "Podrá invitar, cambiar roles y quitar miembros. Lo personal de cada uno sigue siendo privado."
-                    else "Verá y editará lo familiar; lo tuyo personal sigue siendo privado.",
+                    if (role == "admin") stringResource(R.string.fam_role_admin_note)
+                    else stringResource(R.string.fam_role_member_note),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text("Recibirás un código de un solo uso que vence en 7 días.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.fam_one_time_code), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     onClick = { onCreate(name.trim(), role) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
-                ) { Text("Crear invitación") }
+                ) { Text(stringResource(R.string.fam_create_invite)) }
             }
         }
     }
@@ -579,10 +582,10 @@ private fun CodeSheet(c: CreatedCode, household: String, onDismiss: () -> Unit) 
     val first = c.memberName?.let(FamilyStore::firstNameOf)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(if (reset) "Código de acceso para $first" else "Invitación para ${inv.name.ifBlank { "un miembro nuevo" }}", style = MaterialTheme.typography.titleLarge)
+            Text(if (reset) stringResource(R.string.fam_code_title_reset, first ?: "") else stringResource(R.string.fam_code_title_invite, inv.name.ifBlank { stringResource(R.string.fam_new_member) }), style = MaterialTheme.typography.titleLarge)
             Text(
-                if (reset) "Con este código $first define una contraseña nueva y se cierran sus otras sesiones. Sirve una vez y ${expiresLabel(inv.expiresAt)}."
-                else "Compártelo con quien quieras sumar a $household. Sirve una sola vez y ${expiresLabel(inv.expiresAt)}.",
+                if (reset) stringResource(R.string.fam_code_body_reset, first ?: "", expiresLabel(inv.expiresAt))
+                else stringResource(R.string.fam_code_body_invite, household, expiresLabel(inv.expiresAt)),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
@@ -598,30 +601,30 @@ private fun CodeSheet(c: CreatedCode, household: String, onDismiss: () -> Unit) 
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
             ) {
                 Icon(Icons.Rounded.Share, null); Spacer(Modifier.width(8.dp))
-                Text(if (reset) "Compartir código" else "Compartir invitación")
+                Text(if (reset) stringResource(R.string.fam_share_code) else stringResource(R.string.fam_share_invite))
             }
             OutlinedButton(onClick = { copy(context, c.created.code) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Copiar código")
+                Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.fam_copy_code))
             }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Listo") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
             }
         }
     }
 }
 
-/** Hoja de compartir de Android con el enlace y el código. */
+/** Android share sheet with the link and the code. */
 private fun share(context: Context, c: CreatedCode, household: String) {
     val code = c.created.code
     val text = if (c.memberName != null) {
-        "Tu código de acceso a Kairo es $code. Ábrelo en ${c.created.link} o, en la app, toca \"Tengo un código\". Vence en 24 horas."
+        context.getString(R.string.fam_share_text_reset, code, c.created.link)
     } else {
-        "Te invito a $household en Kairo. Únete en ${c.created.link} o, en la app, toca \"Tengo un código\" y escribe $code. Vence en 7 días."
+        context.getString(R.string.fam_share_text_invite, household, c.created.link, code)
     }
-    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text).putExtra(Intent.EXTRA_SUBJECT, "Invitación a $household")
-    runCatching { context.startActivity(Intent.createChooser(send, if (c.memberName != null) "Compartir código" else "Compartir invitación").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text).putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.fam_share_subject, household))
+    runCatching { context.startActivity(Intent.createChooser(send, context.getString(if (c.memberName != null) R.string.fam_share_code else R.string.fam_share_invite)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 private fun copy(context: Context, code: String) {
-    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Código de Kairo", code))
+    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.fam_clip_label), code))
 }

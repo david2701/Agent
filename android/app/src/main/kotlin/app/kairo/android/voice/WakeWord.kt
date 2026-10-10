@@ -13,11 +13,25 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.Normalizer
+import java.util.Locale
 import java.util.zip.ZipInputStream
 
+/** Offline wake word models: one small Vosk model per language (Apache 2.0, ~40 MB each). */
+enum class WakeLanguage(val dirName: String, val modelUrl: String) {
+    Spanish("vosk-es", "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"),
+    English("vosk-en-us", "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip");
+
+    companion object {
+        /** Spanish UI -> the Spanish model; anything else -> the English one. */
+        fun forLocale(locale: Locale): WakeLanguage = if (locale.language == "es") Spanish else English
+    }
+}
+
 /**
- * Modelo de voz pequeño en español de Vosk (Apache 2.0, ~39 MB), descargado la primera vez.
- * Corre 100% en el teléfono: el audio no sale del dispositivo hasta que se detecta "Oye Kairo".
+ * Downloads and locates the small Vosk wake word model for the app language, on demand.
+ * Everything runs on the phone: audio does not leave the device until the wake phrase is detected.
+ * A model that was already downloaded for another language keeps working until the right one is available
+ * (the matcher accepts both "Hey Kairo" and "Oye Kairo" with whichever model is loaded).
  */
 class WakeModelManager(private val context: Context) {
     sealed interface Status {
@@ -27,20 +41,31 @@ class WakeModelManager(private val context: Context) {
         data class Failed(val message: String) : Status
     }
 
-    private val dir = File(context.filesDir, "vosk-es")
+    private fun language(): WakeLanguage = WakeLanguage.forLocale(context.resources.configuration.locales[0])
+    private fun dir(lang: WakeLanguage) = File(context.filesDir, lang.dirName)
+    private fun isReady(lang: WakeLanguage): Boolean = File(dir(lang), "am/final.mdl").exists() || File(dir(lang), "final.mdl").exists()
+
     private val _status = MutableStateFlow<Status>(if (isReady()) Status.Ready else Status.Missing)
     val status: StateFlow<Status> = _status
 
-    fun isReady(): Boolean = File(dir, "am/final.mdl").exists() || File(dir, "final.mdl").exists()
+    /** There is a usable model: the one for the app language or, failing that, another downloaded one. */
+    fun isReady(): Boolean = WakeLanguage.entries.any { isReady(it) }
 
-    fun path(): String = dir.absolutePath
+    /** Folder of the model to load: the app language's if downloaded, otherwise any downloaded one. */
+    fun path(): String {
+        val lang = language()
+        val chosen = if (isReady(lang)) lang else WakeLanguage.entries.firstOrNull { isReady(it) } ?: lang
+        return dir(chosen).absolutePath
+    }
 
+    /** Downloads the model for the app language if it is missing. */
     suspend fun ensure(): Boolean = withContext(Dispatchers.IO) {
-        if (isReady()) { _status.value = Status.Ready; return@withContext true }
+        val lang = language()
+        if (isReady(lang)) { _status.value = Status.Ready; return@withContext true }
         runCatching {
             _status.value = Status.Downloading(0f)
             val tmp = File(context.cacheDir, "vosk.zip")
-            val conn = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply { connectTimeout = 20_000; readTimeout = 60_000 }
+            val conn = (URL(lang.modelUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 20_000; readTimeout = 60_000 }
             val total = conn.contentLengthLong.takeIf { it > 0 } ?: 40_000_000L
             conn.inputStream.use { input ->
                 tmp.outputStream().use { out ->
@@ -55,11 +80,11 @@ class WakeModelManager(private val context: Context) {
                     }
                 }
             }
-            val staging = File(context.filesDir, "vosk-es.tmp").apply { deleteRecursively(); mkdirs() }
+            val staging = File(context.filesDir, "${lang.dirName}.tmp").apply { deleteRecursively(); mkdirs() }
             ZipInputStream(tmp.inputStream().buffered()).use { zip ->
                 while (true) {
                     val e = zip.nextEntry ?: break
-                    // El zip trae una carpeta raíz (vosk-model-small-es-0.42/); la quitamos
+                    // The zip has a root folder (vosk-model-small-.../); strip it
                     val rel = e.name.substringAfter('/', "")
                     if (rel.isEmpty()) continue
                     val f = File(staging, rel)
@@ -68,47 +93,76 @@ class WakeModelManager(private val context: Context) {
                 }
             }
             tmp.delete()
-            dir.deleteRecursively()
-            staging.renameTo(dir)
-            check(isReady()) { "Modelo incompleto" }
+            dir(lang).deleteRecursively()
+            staging.renameTo(dir(lang))
+            check(isReady(lang)) { "Incomplete model" }
             _status.value = Status.Ready
             true
         }.getOrElse {
-            _status.value = Status.Failed(it.message ?: "No se pudo descargar el modelo")
+            _status.value = Status.Failed(it.message ?: "Could not download the model")
             false
         }
     }
 
     fun delete() {
-        dir.deleteRecursively()
+        WakeLanguage.entries.forEach { dir(it).deleteRecursively() }
         _status.value = Status.Missing
-    }
-
-    companion object {
-        const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
     }
 }
 
 /**
- * Detector de la frase de activación con una gramática cerrada: Vosk solo puede reconocer
- * las frases de activación o "[unk]", lo que lo hace liviano y con pocos falsos positivos.
- * "Kairo" no existe en el vocabulario del modelo, pero "cairo" sí y suena igual.
+ * Pure text matching for the wake phrase, shared by the detector and the unit tests.
+ * Both "Hey Kairo" (English) and "Oye Kairo" (Spanish) are accepted whichever model is loaded.
+ * "Kairo" is not in the models' vocabularies but "cairo" is and sounds the same.
  */
-class WakeWordDetector(modelPath: String, phrase: String) : AutoCloseable {
+object WakeMatcher {
+    private val GREETINGS = listOf("oye", "hey", "ey", "ok")
+
+    private fun normalize(text: String): String =
+        Normalizer.normalize(text.lowercase().trim(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
+
+    /** The assistant name as the models spell it ("Hey Kairo" -> "cairo"). */
+    fun nameOf(phrase: String): String = normalize(phrase).split(' ').last().replace("k", "c")
+
+    /** Phrases for the closed grammar: every greeting in both languages followed by the name. */
+    fun variants(phrase: String): List<String> {
+        val name = nameOf(phrase)
+        return GREETINGS.map { "$it $name" }
+    }
+
+    /**
+     * True if the recognizer output has a greeting right before the name, or is just the name:
+     * with a closed grammar a model may drop a greeting that is missing from its vocabulary
+     * (for example "oye" in the English model) and recognize only "cairo".
+     */
+    fun matches(text: String, phrase: String): Boolean {
+        val name = nameOf(phrase)
+        val tokens = normalize(text).replace("k", "c").split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val idx = tokens.indexOf(name)
+        if (idx < 0) return false
+        if (idx > 0 && tokens[idx - 1] in GREETINGS) return true
+        return tokens.size == 1
+    }
+}
+
+/**
+ * Wake phrase detector with a closed grammar: Vosk can only recognize the wake phrases or "[unk]",
+ * which keeps it light and with few false positives.
+ */
+class WakeWordDetector(modelPath: String, private val phrase: String) : AutoCloseable {
     private val model = Model(modelPath)
-    private val phrases = variants(phrase)
     private val recognizer = Recognizer(
         model,
         AudioSpec.SAMPLE_RATE.toFloat(),
-        (phrases.map { "\"$it\"" } + "\"[unk]\"").joinToString(",", "[", "]"),
+        (WakeMatcher.variants(phrase).map { "\"$it\"" } + "\"[unk]\"").joinToString(",", "[", "]"),
     )
 
-    /** Devuelve true cuando escuchó la frase. */
+    /** Returns true when the phrase was heard. */
     fun accept(frame: ShortArray, len: Int): Boolean {
         val final = recognizer.acceptWaveForm(frame, len)
         val text = if (final) JSONObject(recognizer.result).optString("text") else JSONObject(recognizer.partialResult).optString("partial")
         if (text.isBlank()) return false
-        val hit = phrases.any { text.contains(it) }
+        val hit = WakeMatcher.matches(text, phrase)
         if (hit || final) recognizer.reset()
         return hit
     }
@@ -118,13 +172,5 @@ class WakeWordDetector(modelPath: String, phrase: String) : AutoCloseable {
     override fun close() {
         recognizer.close()
         model.close()
-    }
-
-    companion object {
-        fun variants(phrase: String): List<String> {
-            val p = Normalizer.normalize(phrase.lowercase().trim(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
-            val name = p.split(' ').last().replace("k", "c")
-            return listOf("oye $name", "hey $name", "ey $name", "ok $name").distinct()
-        }
     }
 }

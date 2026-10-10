@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
 
-/** Última ubicación conocida sin Google Play Services (para "guarda este lugar" y el clima). */
+/** Last known location without Google Play Services (for "save this place" and the weather). */
 class LocationProvider(private val context: Context) {
     private val lm = context.getSystemService(LocationManager::class.java)
 
@@ -20,7 +20,7 @@ class LocationProvider(private val context: Context) {
         val best = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.FUSED_PROVIDER, LocationManager.PASSIVE_PROVIDER)
             .mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
             .maxByOrNull { it.time } ?: return null
-        // Ubicaciones de más de 2 horas no sirven para guardar un lugar
+        // Locations older than 2 hours are no good for saving a place
         if (System.currentTimeMillis() - best.time > 2 * 3600_000) return null
         return best.latitude to best.longitude
     }

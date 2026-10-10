@@ -1,5 +1,7 @@
 package app.kairo.android.ui.activity
 
+import app.kairo.android.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,7 +42,7 @@ import app.kairo.android.ui.components.SkeletonList
 import app.kairo.android.ui.components.entityIcon
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Activity
-import app.kairo.core.util.dayLabel
+import app.kairo.android.ui.common.dayLabel
 import app.kairo.core.util.timeLabel
 import app.kairo.core.util.toInstantOrNull
 import java.time.ZoneId
@@ -50,12 +52,21 @@ class ActivityViewModel(graph: AppGraph) : ResourceViewModel<List<Activity>>(
 ) {
     override suspend fun load() = graph.api.activity(100)
     init { refresh() }
-    fun undo(a: Activity) = mutate("Deshecho") { graph.api.undo(a.id) }
+    fun undo(a: Activity) = mutate(str(R.string.act_undone_toast)) { graph.api.undo(a.id) }
 }
 
-private fun sourceLabel(s: String) = when (s) {
-    "voice" -> "por voz"; "chat" -> "en el chat"; "share" -> "al compartir"; "app" -> "en la app"; "dashboard" -> "en el dashboard"
-    "system" -> "automático"; "recording" -> "grabación"; "undo" -> "deshacer"; "wear" -> "desde el reloj"; else -> s
+@Composable
+private fun sourceLabel(s: String): String = when (s) {
+    "voice" -> stringResource(R.string.act_src_voice)
+    "chat" -> stringResource(R.string.act_src_chat)
+    "share" -> stringResource(R.string.act_src_share)
+    "app" -> stringResource(R.string.act_src_app)
+    "dashboard" -> stringResource(R.string.act_src_dashboard)
+    "system" -> stringResource(R.string.act_src_system)
+    "recording" -> stringResource(R.string.act_src_recording)
+    "undo" -> stringResource(R.string.act_src_undo)
+    "wear" -> stringResource(R.string.act_src_wear)
+    else -> s
 }
 
 @Composable
@@ -71,13 +82,13 @@ fun ActivityScreen(graph: AppGraph) {
         LazyColumn(Modifier.fillMaxSize().padding(inner).statusBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item {
                 Column(Modifier.padding(start = 4.dp, bottom = 8.dp)) {
-                    Text("Actividad", style = MaterialTheme.typography.headlineSmall)
-                    Text("Todo lo que Kairo y tú cambiaron. Las creaciones y borrados se pueden deshacer.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.nav_activity), style = MaterialTheme.typography.headlineSmall)
+                    Text(stringResource(R.string.act_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             state.error?.let { item { ErrorBanner(it, onRetry = { vm.refresh() }) } }
             if (state.loading && state.data == null) item { SkeletonList(8) }
-            else if (state.data.isNullOrEmpty()) item { EmptyState(Icons.Rounded.History, "Sin actividad", "Aquí verás cada acción de Kairo.") }
+            else if (state.data.isNullOrEmpty()) item { EmptyState(Icons.Rounded.History, stringResource(R.string.act_empty_title), stringResource(R.string.act_empty_body)) }
             byDay.forEach { (day, list) ->
                 item(key = "d$day") { SectionHeader(day?.dayLabel()?.replaceFirstChar { it.uppercase() } ?: "") }
                 items(list, key = { it.id }) { a ->
@@ -86,9 +97,9 @@ fun ActivityScreen(graph: AppGraph) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(a.summary, style = MaterialTheme.typography.bodyMedium, color = if (a.undoneAt != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-                            Text("${a.createdAt.toInstantOrNull()?.timeLabel() ?: ""}  ·  ${sourceLabel(a.source)}" + if (a.undoneAt != null) "  ·  deshecho" else "", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${a.createdAt.toInstantOrNull()?.timeLabel() ?: ""}  \u00B7  ${sourceLabel(a.source)}" + if (a.undoneAt != null) "  \u00B7  " + stringResource(R.string.act_undone_tag) else "", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        if (a.undoable) TextButton(onClick = { vm.undo(a) }) { Text("Deshacer") }
+                        if (a.undoable) TextButton(onClick = { vm.undo(a) }) { Text(stringResource(R.string.act_undo)) }
                     }
                 }
             }

@@ -1,5 +1,7 @@
 package app.kairo.android.voice
 
+import app.kairo.android.R
+import app.kairo.android.ui.common.friendly
 import app.kairo.core.voice.AudioSpec
 import app.kairo.core.voice.EndOfSpeech
 import app.kairo.core.voice.PcmBuffer
@@ -47,11 +49,13 @@ data class VoiceState(
 )
 
 /**
- * Coordina la voz de Kairo con un solo dueño del micrófono:
- * - Modo continuo (servicio en primer plano): escucha "Oye Kairo" en el teléfono con Vosk.
- * - Pulsar para hablar (app, asistente, tile, widget): captura una frase.
- * Tras capturar, envía el audio a /voice/turn (Whisper + agente), ejecuta acciones del
- * dispositivo y lee la respuesta con Kokoro. Si Kairo pregunta algo, vuelve a escuchar.
+ * Coordinates Kairo's voice with a single owner of the microphone:
+ * - Continuous mode (foreground service): listens for "Hey Kairo" / "Oye Kairo" on the phone with Vosk.
+ * - Push to talk (app, assistant, tile, widget): captures one phrase.
+ * After capturing, it sends the audio to /voice/turn (Whisper + agent), runs device actions and reads
+ * the reply with Kokoro. Speech recognition and the voice use the account language (`settings.language`,
+ * default from the app language at sign-up); the client sends its Accept-Language with every request.
+ * If Kairo asks a question, it listens again.
  */
 class VoiceEngine(
     private val context: Context,
@@ -64,7 +68,7 @@ class VoiceEngine(
     private val _state = MutableStateFlow(VoiceState())
     val state: StateFlow<VoiceState> = _state
 
-    /** Lo usa el servicio para notificar el resultado cuando la app está en segundo plano. */
+    /** The service uses it to notify the result when the app is in the background. */
     var onTurnFinished: ((transcript: String?, reply: String?) -> Unit)? = null
 
     private val tts = TtsPlayer(context)
@@ -74,17 +78,17 @@ class VoiceEngine(
     private val captureRequested = AtomicBoolean(false)
     private val mode = AtomicInteger(MODE_WAKE)
     private var lastTurnAt = 0L
-    /** Conversación elegida desde la pantalla de chat para el próximo turno de voz. */
+    /** Conversation picked from the chat screen for the next voice turn. */
     @Volatile private var forcedConversation: String? = null
 
     fun hasMicPermission() = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    // ------------------------------------------------------------ Modo continuo
+    // ------------------------------------------------------------ Continuous mode
 
     fun startLoop(phrase: String) {
         if (loopJob?.isActive == true) return
         if (!wakeModel.isReady()) {
-            _state.update { it.copy(error = "Falta descargar el modelo de activación") }
+            _state.update { it.copy(error = context.getString(R.string.voice_err_no_model)) }
             return
         }
         loopJob = scope.launch(Dispatchers.IO) {
@@ -94,7 +98,7 @@ class VoiceEngine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(error = "El micrófono no está disponible: ${e.message}") }
+                _state.update { it.copy(error = context.getString(R.string.voice_err_mic_detail, e.message ?: "")) }
             } finally {
                 _state.update { it.copy(loopActive = false, phase = if (it.phase == VoicePhase.Armed) VoicePhase.Off else it.phase, level = 0f) }
             }
@@ -107,12 +111,12 @@ class VoiceEngine(
         _state.update { it.copy(loopActive = false, phase = VoicePhase.Off, level = 0f) }
     }
 
-    // ------------------------------------------------------------ Pulsar para hablar
+    // ------------------------------------------------------------ Push to talk
 
     fun talk(conversationId: String? = null) {
         forcedConversation = conversationId
         if (!hasMicPermission()) {
-            _state.update { it.copy(error = "Kairo necesita permiso de micrófono") }
+            _state.update { it.copy(error = context.getString(R.string.voice_err_mic_permission)) }
             return
         }
         stopSpeaking()
@@ -129,7 +133,7 @@ class VoiceEngine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(phase = VoicePhase.Off, error = "El micrófono no está disponible", level = 0f) }
+                _state.update { it.copy(phase = VoicePhase.Off, error = context.getString(R.string.voice_err_mic), level = 0f) }
             }
         }
     }
@@ -146,7 +150,7 @@ class VoiceEngine(
 
     fun clearResult() = _state.update { it.copy(transcript = null, reply = null, partialReply = "", actions = emptyList(), attachments = emptyList(), error = null, working = null) }
 
-    /** Lee un texto en voz alta (por ejemplo el resumen del día). */
+    /** Reads a text aloud (for example the daily briefing). */
     fun say(text: String) {
         turnJob?.cancel()
         stopSpeaking()
@@ -159,24 +163,24 @@ class VoiceEngine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(error = "No pude leerlo en voz alta") }
+                _state.update { it.copy(error = context.getString(R.string.voice_err_read_aloud)) }
             } finally {
                 _state.update { it.copy(phase = if (it.loopActive) VoicePhase.Armed else VoicePhase.Off, level = 0f) }
             }
         }
     }
 
-    /** Prueba una voz de Kokoro desde Ajustes. */
+    /** Tries a Kokoro voice from Settings. */
     fun preview(voice: String) {
         scope.launch {
             runCatching {
-                val mp3 = api.speak("Hola, soy Kairo. Así sonaré cuando te responda.", voice)
+                val mp3 = api.speak(context.getString(R.string.voice_preview_text), voice)
                 tts.play(mp3) { }
-            }.onFailure { _state.update { it.copy(error = "No se pudo reproducir la voz") } }
+            }.onFailure { _state.update { it.copy(error = context.getString(R.string.voice_err_preview)) } }
         }
     }
 
-    /** Pregunta escrita desde la pantalla Hoy. */
+    /** Typed question from the Today screen. */
     fun ask(text: String, speak: Boolean) {
         turnJob?.cancel()
         stopSpeaking()
@@ -186,18 +190,18 @@ class VoiceEngine(
         }
     }
 
-    // ------------------------------------------------------------ Bucle del micrófono
+    // ------------------------------------------------------------ Microphone loop
 
     @SuppressLint("MissingPermission")
     private suspend fun runMic(continuous: Boolean, phrase: String?) {
-        if (!hasMicPermission()) throw IllegalStateException("Sin permiso de micrófono")
+        if (!hasMicPermission()) throw IllegalStateException("Microphone permission missing")
         val minBuf = AudioRecord.getMinBufferSize(AudioSpec.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val rec = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION, AudioSpec.SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, AudioSpec.FRAME * 8),
         )
-        check(rec.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord no se pudo iniciar" }
-        val detector = if (continuous) WakeWordDetector(wakeModel.path(), phrase ?: "oye kairo") else null
+        check(rec.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord could not start" }
+        val detector = if (continuous) WakeWordDetector(wakeModel.path(), phrase ?: context.getString(R.string.wake_phrase)) else null
         val frame = ShortArray(AudioSpec.FRAME)
         val pcm = PcmBuffer()
         val eos = EndOfSpeech()
@@ -237,7 +241,7 @@ class VoiceEngine(
                             EndOfSpeech.Verdict.Continue -> Unit
                             EndOfSpeech.Verdict.NoSpeech -> {
                                 if (runCatchingPrefs { it.earcons }) Earcon.error()
-                                _state.update { it.copy(phase = if (continuous) VoicePhase.Armed else VoicePhase.Off, level = 0f, error = "No te escuché") }
+                                _state.update { it.copy(phase = if (continuous) VoicePhase.Armed else VoicePhase.Off, level = 0f, error = context.getString(R.string.voice_err_not_heard)) }
                                 if (continuous) mode.set(MODE_WAKE) else return
                             }
                             EndOfSpeech.Verdict.Done -> {
@@ -248,7 +252,7 @@ class VoiceEngine(
                                 if (continuous) {
                                     turnJob = scope.launch { voiceTurn(wav, continuous = true) }
                                 } else {
-                                    // Libera el micrófono antes de procesar
+                                    // Release the microphone before processing
                                     rec.stop()
                                     turnJob = scope.launch { voiceTurn(wav, continuous = false) }
                                     return
@@ -256,7 +260,7 @@ class VoiceEngine(
                             }
                         }
                     }
-                    else -> Unit // MODE_BUSY: se descarta el audio mientras Kairo piensa o habla
+                    else -> Unit // MODE_BUSY: audio is discarded while Kairo thinks or speaks
                 }
             }
         } finally {
@@ -267,7 +271,7 @@ class VoiceEngine(
     }
 
     private suspend fun voiceTurn(wav: ByteArray, continuous: Boolean) {
-        runTurn(api.voiceTurn(wav, "audio/wav", "voz.wav", currentConversation()), speak = true, continuous = continuous)
+        runTurn(api.voiceTurn(wav, "audio/wav", "voice.wav", currentConversation()), speak = true, continuous = continuous)
     }
 
     private suspend fun runTurn(events: kotlinx.coroutines.flow.Flow<AgentEvent>, speak: Boolean, continuous: Boolean) {
@@ -301,7 +305,7 @@ class VoiceEngine(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _state.update { it.copy(error = e.message ?: "Algo salió mal") }
+            _state.update { it.copy(error = e.friendly(context)) }
         } finally {
             onTurnFinished?.invoke(_state.value.transcript, finalReply ?: _state.value.error)
             val followUp = speak && runCatchingPrefs { it.followUp } && finalReply?.trim()?.endsWith("?") == true
@@ -314,7 +318,7 @@ class VoiceEngine(
         }
     }
 
-    /** Mantiene la conversación de voz si el último turno fue hace menos de 5 minutos. */
+    /** Keeps the voice conversation going if the last turn was less than 5 minutes ago. */
     private fun currentConversation(): String? = forcedConversation
         ?: if (System.currentTimeMillis() - lastTurnAt < 5 * 60_000) _state.value.conversationId else null
 

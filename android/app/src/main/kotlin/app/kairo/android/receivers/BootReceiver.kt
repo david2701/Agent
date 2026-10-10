@@ -1,5 +1,6 @@
 package app.kairo.android.receivers
 
+import app.kairo.android.R
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,8 +17,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Tras reiniciar o actualizar la app: reprograma alarmas, vuelve a abrir la conexión directa si
- * estaba activa y, si la escucha estaba activa, la reactiva o avisa.
+ * After a reboot or app update: reschedules alarms, reopens the direct connection if it was
+ * on and, if listening was on, turns it back on or prompts.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,14 +30,14 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val local = context.graph.prefs.current()
-                // specialUse puede arrancar desde el arranque del sistema (a diferencia del micrófono)
+                // specialUse can start from boot (unlike the microphone)
                 if (local.directConnection && context.graph.session.current() != null) ConnectionService.start(context)
                 if (boot && local.wakeWordEnabled) {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         ListeningService.start(context)
                     } else {
-                        // Android 14+ no permite abrir el micrófono desde el arranque: un toque lo reactiva
-                        val n = Notifications.simple(context, Channels.LISTENING, "Reactiva \"Oye Kairo\"", "Toca para que Kairo vuelva a escuchar después del reinicio.", destination = "rearm")
+                        // Android 14+ does not allow opening the microphone from boot: a tap turns it back on
+                        val n = Notifications.simple(context, Channels.LISTENING, context.getString(R.string.boot_rearm_title, context.getString(R.string.wake_phrase)), context.getString(R.string.boot_rearm_text), destination = "rearm")
                         Notifications.show(context, Notifications.ID_REARM, n)
                     }
                 }

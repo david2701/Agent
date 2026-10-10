@@ -7,7 +7,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Tokens de design/DESIGN.md. Un solo acento: ámbar.
+// Tokens from design/DESIGN.md. A single accent: amber.
 object KairoPalette {
     val Ink = Color(0xFF0E1013)
     val Bone = Color(0xFFECE8E1)
@@ -96,7 +96,7 @@ val KairoLightScheme: ColorScheme = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE6E9EC),
 )
 
-/** Colores semánticos que Material no cubre. */
+/** Semantic colors that Material does not cover. */
 @Immutable
 data class KairoExtraColors(
     val success: Color,

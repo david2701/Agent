@@ -19,9 +19,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * "Conexión directa con tu servidor": servicio en primer plano ligero (tipo `specialUse`) para quien
- * no instala ntfy ni usa "Oye Kairo". Solo mantiene abierto el WebSocket de [app.kairo.android.sync.RealtimeHub]
- * para que los avisos lleguen al instante. Lo activa la persona en Ajustes; nunca arranca solo.
+ * "Direct connection to your server": a light foreground service (`specialUse` type) for people who
+ * do not install ntfy or use the wake word. It only keeps the WebSocket of [app.kairo.android.sync.RealtimeHub]
+ * open so notices arrive instantly. The person turns it on in Settings; it never starts by itself.
  */
 class ConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -57,14 +57,14 @@ class ConnectionService : Service() {
     private fun notification() = NotificationCompat.Builder(this, Channels.CONNECTION)
         .setSmallIcon(R.drawable.ic_stat_kairo)
         .setColor(0xFFF0A23B.toInt())
-        .setContentTitle("Kairo conectado")
-        .setContentText("Recibes los avisos al instante desde tu servidor")
+        .setContentTitle(getString(R.string.conn_title))
+        .setContentText(getString(R.string.conn_text))
         .setOngoing(true)
         .setSilent(true)
         .setShowWhen(false)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .setContentIntent(Notifications.openApp(this, "settings"))
-        .addAction(0, "Desactivar", PendingIntent.getService(this, 3, Intent(this, ConnectionService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+        .addAction(0, getString(R.string.conn_disable), PendingIntent.getService(this, 3, Intent(this, ConnectionService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
         .build()
 
     companion object {

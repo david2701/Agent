@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import kotlin.coroutines.resume
 
-/** Reproduce el audio de Kokoro (mp3) con foco de audio transitorio y nivel para el orbe. */
+/** Plays Kokoro audio (mp3) with transient audio focus and a level for the orb. */
 class TtsPlayer(private val context: Context) {
     private val audio = context.getSystemService(AudioManager::class.java)
     private var player: MediaPlayer? = null

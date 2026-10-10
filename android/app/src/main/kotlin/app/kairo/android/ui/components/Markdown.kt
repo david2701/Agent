@@ -22,7 +22,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.kairo.android.ui.theme.GeistMono
 
-/** Markdown ligero (títulos, listas, casillas, negritas, cursivas y código) para notas y respuestas. */
+/** Lightweight markdown (headings, lists, checkboxes, bold, italics and code) for notes and replies. */
 @Composable
 fun MarkdownText(markdown: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyLarge, color: Color = MaterialTheme.colorScheme.onSurface) {
     val codeBg = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -86,9 +86,9 @@ private fun inline(text: String, codeBg: Color): AnnotatedString = buildAnnotate
     }
 }
 
-/** Primera(s) línea(s) de una nota sin marcas de markdown, para vistas previas. */
+/** First line(s) of a note without markdown marks, for previews. */
 fun plainPreview(content: String, title: String = "", maxLines: Int = 2): String = content.lineSequence()
     .map { it.trim().replace(Regex("^#{1,6}\\s*"), "").replace(Regex("^[-*•]\\s+(\\[( |x|X)]\\s+)?"), "").replace("**", "").replace("`", "").replace(Regex("(?<![A-Za-z0-9])[*_]([^*_]+)[*_]"), "$1").trim() }
     .filter { it.isNotBlank() && !it.equals(title.trim(), ignoreCase = true) }
     .take(maxLines)
-    .joinToString("  ·  ")
+    .joinToString("  \u00B7  ")
