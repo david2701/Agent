@@ -41,3 +41,4 @@ android/build/
 
 # Copias de trabajo temporales de herramientas
 .claude/worktrees/
+*.tsbuildinfo
