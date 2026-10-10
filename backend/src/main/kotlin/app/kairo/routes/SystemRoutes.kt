@@ -207,7 +207,9 @@ fun Route.systemRoutes(s: Services) {
         get { call.respond<GoogleStatus>(s.google.status(call.userId())) }
         post("/auth-url") {
             if (!s.config.googleEnabled) badRequest("Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en el servidor")
-            call.respond(GoogleAuthUrl(s.google.authUrl(call.userId())))
+            // El callback sólo vale en este navegador: el nonce va en una cookie HttpOnly y firmado en `state`
+            val nonce = call.issueGoogleOAuthNonce(s.config.publicUrl.startsWith("https"))
+            call.respond(GoogleAuthUrl(s.google.authUrl(call.userId(), nonce)))
         }
         post("/sync") {
             val r = runCatching { s.google.sync(call.userId()) }.getOrElse { badRequest(it.message ?: "Fallo de sincronización") }
@@ -275,15 +277,16 @@ fun Route.systemRoutes(s: Services) {
 
     // ------------------------------------------------------------ Tiempo real
     webSocket("/ws") {
-        val userId = call.principal<JWTPrincipal>()?.subject?.let(UUID::fromString) ?: return@webSocket
-        val pinger = launch {
-            while (isActive) {
-                delay(25_000)
-                send(Frame.Text("""{"type":"ping","data":{}}"""))
-            }
-        }
+        val principal = call.principal<JWTPrincipal>() ?: return@webSocket
+        val userId = principal.subject?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return@webSocket
+        val deviceId = principal.getClaim("did", String::class) ?: return@webSocket
+        val expiresAt = principal.expiresAt?.time ?: return@webSocket
         val forward = launch {
             s.bus.flow(userId).collect { ev -> send(Frame.Text(ApiJson.encodeToString(ServerEvent.serializer(), ev))) }
+        }
+        // Ping cada 25 s; se cierra si revocan el dispositivo o cuando vence el access token
+        val pinger = launch {
+            keepAliveWhileValid(expiresAt, { s.auth.deviceStatus(deviceId, userId.toString()) != false }) { forward.cancel() }
         }
         try {
             incoming.consumeEach { frame -> if (frame is Frame.Text && frame.readText() == "ping") send(Frame.Text("""{"type":"pong","data":{}}""")) }
@@ -304,14 +307,16 @@ fun Route.publicRoutes(s: Services) {
         val sig = call.request.queryParameters["sig"] ?: throw ApiException(HttpStatusCode.Forbidden, "Enlace inválido")
         if (!s.files.verify(id, exp, sig)) throw ApiException(HttpStatusCode.Forbidden, "Enlace expirado")
         val f = s.files.get(id) ?: notFound("Archivo")
-        call.response.header(HttpHeaders.CacheControl, "private, max-age=86400")
-        call.respondBytes(f.bytes, ContentType.parse(f.contentType))
+        // Sandbox CSP; en línea sólo imágenes rasterizadas y audio, lo demás como adjunto
+        call.respondStoredFile(f.bytes, f.contentType)
     }
 
     get("/integrations/google/callback") {
         val state = call.request.queryParameters["state"] ?: badRequest("Falta state")
         val code = call.request.queryParameters["code"]
-        val userId = s.google.verifyState(state) ?: badRequest("Estado OAuth inválido o expirado")
+        val nonce = call.takeGoogleOAuthNonce(s.config.publicUrl.startsWith("https"))
+        val userId = s.google.verifyState(state, nonce)
+            ?: badRequest("Estado OAuth inválido o expirado. Vuelve a conectar desde Ajustes, en este mismo navegador.")
         if (code == null) {
             call.respondRedirect("/ajustes?google=cancelado")
             return@get

@@ -2,8 +2,26 @@
 # Caddy obtiene el certificado HTTPS, reenvía WebSocket y transmite las respuestas
 # en streaming (text/event-stream) sin búfer. No uses "encode" aquí: Kairo ya comprime
 # sus respuestas y comprimir el streaming lo retrasaría.
+#
+# Kairo toma la IP del cliente del último valor de X-Forwarded-For (el que añade Caddy) para
+# limitar los intentos de inicio de sesión. Por eso el puerto 8080 sólo debe escuchar en
+# localhost o en la red de Docker (como en docker-compose.yml), nunca expuesto a Internet.
+# Si pones otro proxy delante de Caddy (Cloudflare, un balanceador), decláralo con
+# "trusted_proxies" en las opciones globales de Caddy.
 
 kairo.tudominio.com {
+
+    # Sólo HTTPS durante un año (Kairo también la envía si KAIRO_PUBLIC_URL empieza por https).
+    # "defer" deja una sola cabecera aunque la mande también Kairo.
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        defer
+    }
+
+    # Tope por petición: audios largos y fotos caben de sobra; corta cuerpos gigantes antes de Kairo.
+    request_body {
+        max_size 50MB
+    }
 
     # Caddy en el host:
     reverse_proxy 127.0.0.1:8080

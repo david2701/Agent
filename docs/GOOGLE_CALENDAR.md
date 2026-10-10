@@ -45,10 +45,18 @@ Reinicia: `docker compose up -d`.
 Dashboard > **Ajustes > Google Calendar > Conectar**. Acepta los permisos y vuelve a Kairo.
 Puedes elegir qué calendario usar (por defecto, el principal) y desconectar cuando quieras.
 
+La conexión se hace desde el dashboard y termina en **el mismo navegador** donde pulsaste *Conectar*
+(en 10 minutos como mucho): Kairo deja una cookie temporal en ese navegador y el regreso desde Google sólo
+vale con ella. Si abres el enlace de Google en otro navegador o dispositivo verás "Estado OAuth inválido";
+vuelve a pulsar *Conectar*. Las apps de Android e iPhone usan la conexión que hagas desde el dashboard.
+
 ## Seguridad
 
 - El refresh token de Google se guarda **cifrado** (AES-256-GCM con `KAIRO_ENCRYPTION_KEY`).
 - Kairo solo pide acceso a eventos y a la lista de calendarios; no lee tu correo ni tus contactos.
+- El regreso de Google (`state`) va firmado y atado a una cookie HttpOnly del navegador que inició la
+  conexión, y sirve una sola vez: nadie puede conectar su Google a tu cuenta (ni el tuyo a la suya)
+  mandándote un enlace.
 - Al desconectar, Kairo revoca el token en Google y lo borra.
 
 ## Detalles

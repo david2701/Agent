@@ -3,6 +3,11 @@
 Base: `https://<tu-dominio>/api`. JSON UTF-8. Fechas-hora en ISO 8601 UTC (`2026-10-11T14:00:00Z`),
 fechas en `YYYY-MM-DD`. Los campos nulos se envían como `null`. Errores: `{"error": "mensaje"}` con código HTTP.
 
+- Los cuerpos JSON deben ir con `Content-Type: application/json` (415 si no). `/auth/refresh` lo exige
+  siempre, también cuando el cuerpo es `{}` y el refresh token va en la cookie.
+- Tamaño máximo: 16 KB en `/auth/*` y `PATCH /me`, 1 MB en el resto de cuerpos JSON, 30 MB por subida
+  multipart (20 MB en `/capture`, 16 partes como mucho). Más grande: 413.
+
 ## Autenticación
 
 | Método | Ruta | Cuerpo | Respuesta |
@@ -24,7 +29,14 @@ fechas en `YYYY-MM-DD`. Los campos nulos se envían como `null`. Errores: `{"err
   Los códigos son `XXXX-XXXX` (se aceptan en minúsculas, sin guion o con espacios). 400 si no vale.
 - Web: el refresh token va en cookie httpOnly `kairo_rt` (path `/api/auth`), `refreshToken` llega `null`.
 - App: guarda `refreshToken` cifrado; se rota en cada `/auth/refresh` (guarda el nuevo).
-- Peticiones: `Authorization: Bearer <accessToken>`. WebSocket: `?access_token=<accessToken>`.
+  - Reenviar el mismo refresh token antes de 60 s devuelve el mismo token nuevo (dos pestañas, reintentos).
+    Reutilizar uno ya rotado pasados esos 60 s cierra la sesión de ese dispositivo (señal de robo).
+  - Un dispositivo sin renovar su sesión en 90 días la pierde (401 y hay que volver a entrar).
+- `/auth/password` cierra las demás sesiones del usuario (la actual sigue abierta).
+- `/auth/login`: tras 10 intentos fallidos en 15 minutos con el mismo correo, se rechaza un rato con el mismo
+  error genérico (401). `/auth/pair`: 20 códigos fallidos en 5 minutos anulan todos los códigos vigentes;
+  pedir un código nuevo anula el anterior del mismo usuario.
+- Peticiones: `Authorization: Bearer <accessToken>`. Sólo el WebSocket (`/ws`) acepta `?access_token=<accessToken>`.
 - 401 => refrescar y reintentar una vez; si falla, volver a login.
 
 Cabeceras opcionales de cliente:
@@ -88,7 +100,9 @@ con un máximo de 512 KB y 12 s; si no se puede, el agente recibe sólo el enlac
 
 Todo es personal salvo lo que se marca `shared: true` (familiar): eventos, listas, tareas, notas y lugares.
 Lo familiar lo ven y editan todos los miembros del hogar; sólo quien lo creó (`ownerId`) puede dejar de
-compartirlo (400 si lo intenta otro). Lo personal es privado, también para el administrador.
+compartirlo (400 si lo intenta otro). Lo personal no se expone a otras cuentas, tampoco a la del administrador;
+pero un administrador puede generar un código de acceso que restablece la contraseña de un miembro (y eso se
+avisa a toda la familia, ver *Familia*).
 
 **Note** `{id, title, content, tags[], pinned, source, attachments: [{id,url,contentType}], createdAt, updatedAt, score|null, shared, ownerId}`
 - `GET /notes?q=&tag=&limit=&offset=` · `GET /notes/search?q=` (semántica) · `GET /notes/tags` -> `{tags}`
@@ -139,6 +153,7 @@ compartirlo (400 si lo intenta otro). Lo personal es privado, también para el a
   `link = <KAIRO_PUBLIC_URL>/unirse?codigo=XXXX-XXXX`
 - `DELETE /family/invites/{id}` (admin)
 - `POST /family/members/{id}/access-code` (admin) -> `{invitation, code, link}`: código de 24 h para que ese miembro defina una contraseña nueva
+  (toda la familia, también ese miembro, recibe un `family.notice` al generarlo y otro cuando se usa)
 - `PATCH /family/members/{id} {role}` (admin; siempre queda al menos un admin)
 - `DELETE /family/members/{id}` (admin): borra la cuenta y lo personal; lo que había compartido pasa a quien lo quita
 - `POST /family/message {text, to?: [userId]}` -> `{sent}`: aviso a la familia (sin `to`, a todos menos a ti)
@@ -212,7 +227,8 @@ Contenido de cada push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expi
 - `GET /sync/device` -> `{serverTime, reminders[] (programados), places[], eventAlerts[] (próximos 7 días: {eventId, title, startAt, alertAt, minutes, location, shared}), briefingEnabled, briefingTime, notices[] (sin leer, últimas 48 h), pushRegistered}` (para alarmas locales, avisos de eventos, resumen matinal, geovallas y los avisos de la familia que no llegaron por push)
 - `GET /export` -> JSON con todos los datos
 - Google: `GET /integrations/google` -> `{available, connected, calendarId, familyCalendarId, lastSyncAt, lastError, redirectUri}`,
-  `POST /integrations/google/auth-url` -> `{url}`, `POST /integrations/google/sync`, `GET /integrations/google/calendars`,
+  `POST /integrations/google/auth-url` -> `{url}` (deja una cookie HttpOnly `kairo_google_oauth`: abre la URL en el mismo navegador),
+  `POST /integrations/google/sync`, `GET /integrations/google/calendars`,
   `POST /integrations/google/calendar {calendarId}`, `POST /integrations/google/family-calendar {calendarId|null}`
   (calendario de Google compartido con la familia donde van los eventos familiares que creas), `DELETE /integrations/google`
 - MCP: `GET|POST /mcp-servers {name, url, headers?}`, `PATCH /mcp-servers/{id} {enabled}`, `DELETE /mcp-servers/{id}`, `POST /mcp-servers/{id}/test` -> `{tools}`
@@ -235,7 +251,8 @@ antes de cada petición:
   credenciales nunca comparten sesión.
 
 ## Tiempo real (WebSocket)
-`GET /ws?access_token=...` envía `{type, data}`:
+`GET /ws?access_token=...` envía `{type, data}`. El servidor cierra la conexión (código 1008) cuando vence el
+access token o se revoca el dispositivo: reconecta con un token vigente (refrescando si hace falta).
 - `entity.changed` `{entity, id?, op}`: recargar esa colección.
 - `entity.changed` también llega a toda la familia cuando cambia algo compartido (`entity` puede ser `family` o `notice`).
 - `reminder.fire` `{id, text, fireAt, recurring, createdBy?}`: mostrar notificación (deduplicar por `id+fireAt` con la alarma local).

@@ -58,7 +58,7 @@ fun Route.authRoutes(s: Services) {
     route("/auth") {
         rateLimit(RateLimitName("auth")) {
             post("/login") {
-                val req = call.receiveBody<LoginRequest>()
+                val req = call.receiveBody<LoginRequest>(MAX_AUTH_BODY)
                 val (user, tokens) = try {
                     s.auth.login(req.email, req.password, req.deviceName, req.platform.lowercase())
                 } catch (e: AuthException) {
@@ -71,7 +71,7 @@ fun Route.authRoutes(s: Services) {
             }
 
             post("/pair") {
-                val req = call.receiveBody<PairRequest>()
+                val req = call.receiveBody<PairRequest>(MAX_AUTH_BODY)
                 val (user, tokens) = try {
                     s.auth.completePairing(req.code, req.deviceName, req.platform.lowercase().take(20))
                 } catch (e: AuthException) {
@@ -87,15 +87,26 @@ fun Route.authRoutes(s: Services) {
             }
 
             post("/join") {
-                val req = call.receiveBody<JoinRequest>()
+                val req = call.receiveBody<JoinRequest>(MAX_AUTH_BODY)
                 val platform = req.platform.lowercase().take(20)
-                val (user, tokens, isNew) = try {
+                val (user, tokens, isNew, createdBy) = try {
                     s.auth.join(req.code, req.email, req.password, req.displayName, req.deviceName, platform, req.timezone)
                 } catch (e: AuthException) {
                     badRequest(e.message ?: "No se pudo usar el código")
                 }
                 if (isNew) {
                     s.notifier.everyone(user.id, app.kairo.domain.NoticeKinds.MESSAGE, "${user.displayName} se unió a la familia", "Ya puede ver lo que compartes.", "family", user.id)
+                } else {
+                    // Código de acceso usado: la cuenta tiene contraseña nueva. Que lo sepa toda la familia,
+                    // para que nadie pueda entrar en silencio a la cuenta de otro.
+                    val by = createdBy?.takeIf { it != user.id }?.let { s.notifier.firstName(it) }
+                    s.notifier.everyone(
+                        user.id, app.kairo.domain.NoticeKinds.MESSAGE,
+                        "Se usó un código de acceso para la cuenta de ${user.displayName}",
+                        "La cuenta tiene una contraseña nueva" + (by?.let { " (el código lo generó $it)" } ?: "") +
+                            " y se cerraron sus otras sesiones. Si no fue ${user.displayName}, avisa a quien administra la familia.",
+                        "family", user.id,
+                    )
                 }
                 // Nuevo miembro o código de acceso usado: la familia (y las invitaciones pendientes) cambió
                 s.bus.entityChanged(s.family.memberIds(user.id), "family", user.id, "updated")
@@ -106,7 +117,10 @@ fun Route.authRoutes(s: Services) {
         // Límite propio: cada carga de página renueva la sesión y no debe agotar el de inicio de sesión.
         rateLimit(RateLimitName("refresh")) {
             post("/refresh") {
-                val body = runCatching { call.receiveBody<RefreshRequest>() }.getOrNull()
+                // Siempre JSON (los clientes mandan "{}" o {"refreshToken": ...}): así otra página no puede
+                // disparar la renovación con la cookie usando un formulario o un fetch sin CORS.
+                if (!call.isJsonRequest()) throw ApiException(HttpStatusCode.UnsupportedMediaType, "El cuerpo debe ser JSON (Content-Type: application/json)")
+                val body = runCatching { call.receiveBody<RefreshRequest>(MAX_AUTH_BODY) }.getOrNull()
                 val token = body?.refreshToken ?: call.request.cookies[COOKIE] ?: throw ApiException(HttpStatusCode.Unauthorized, "Sin sesión")
                 val fromCookie = body?.refreshToken == null
                 val (user, tokens) = try {
@@ -127,12 +141,18 @@ fun Route.authRoutes(s: Services) {
                 call.respond(OkResponse())
             }
             post("/pair-code") {
-                call.respond(PairCodeResponse(s.auth.createPairCode(call.userId())))
+                val code = try {
+                    s.auth.createPairCode(call.userId())
+                } catch (e: AuthException) {
+                    throw ApiException(HttpStatusCode.ServiceUnavailable, e.message ?: "Intenta de nuevo")
+                }
+                call.respond(PairCodeResponse(code))
             }
             post("/password") {
-                val req = call.receiveBody<PasswordChange>()
+                val req = call.receiveBody<PasswordChange>(MAX_AUTH_BODY)
                 try {
-                    s.auth.changePassword(call.userId(), req.currentPassword, req.newPassword)
+                    // Cierra las demás sesiones: si alguien más conocía la contraseña anterior, queda fuera
+                    s.auth.changePassword(call.userId(), call.deviceId(), req.currentPassword, req.newPassword)
                 } catch (e: AuthException) {
                     badRequest(e.message ?: "No se pudo cambiar la contraseña")
                 }
@@ -146,8 +166,10 @@ fun Route.authRoutes(s: Services) {
             call.respond(UserResponse(s.users.byId(call.userId()) ?: notFound("Usuario")))
         }
         patch("/me") {
-            val p = call.receiveBody<ProfilePatch>()
+            val p = call.receiveBody<ProfilePatch>(MAX_AUTH_BODY)
             p.timezone?.let { tz -> if (runCatching { java.time.ZoneId.of(tz) }.isFailure) badRequest("Zona horaria inválida") }
+            // El nombre se limpia en UsersRepo.update: sin saltos de línea ni caracteres de control, 60 como mucho
+            // (aparece en los prompts del asistente de los demás miembros).
             call.respond(UserResponse(s.users.update(call.userId(), p.displayName, p.timezone) ?: notFound("Usuario")))
         }
     }

@@ -65,9 +65,24 @@ fun Route.familyRoutes(s: Services) {
             call.respond(OkResponse())
         }
 
-        /** Código para que un miembro que olvidó su contraseña defina una nueva (vence en 24 horas). */
+        /**
+         * Código para que un miembro que olvidó su contraseña defina una nueva (vence en 24 horas).
+         * Quien tenga el código puede entrar a esa cuenta, así que se avisa al miembro y a toda la familia:
+         * un administrador no puede usarlo en silencio para leer lo personal de otro.
+         */
         post("/members/{id}/access-code") {
-            val (inv, code) = s.family.createInvite(call.userId(), "", "member", call.uuidParam())
+            val me = call.userId()
+            val target = call.uuidParam()
+            val (inv, code) = s.family.createInvite(me, "", "member", target)
+            val admin = s.notifier.firstName(me)
+            val member = s.users.byId(target)?.displayName ?: "un miembro"
+            s.notifier.everyone(
+                me, NoticeKinds.MESSAGE,
+                "$admin generó un código de acceso para $member",
+                "Con ese código se define una contraseña nueva para la cuenta de $member y se cierran sus sesiones. " +
+                    "Vale 24 horas. Si $member no lo pidió, hablen en familia.",
+                "family", target,
+            )
             call.respond(HttpStatusCode.Created, InviteCreated(inv, code, joinLink(s, code)))
         }
         patch("/members/{id}") {
