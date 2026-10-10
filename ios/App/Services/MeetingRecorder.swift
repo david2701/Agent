@@ -125,13 +125,16 @@ final class MeetingRecorder {
     private func updateActivity(processing: Bool) {
         guard let activity, let startedAt else { return }
         let state = RecordingActivityAttributes.ContentState(startedAt: startedAt, segments: segments, paused: false, processing: processing)
-        Task { await activity.update(.init(state: state, staleDate: nil)) }
+        // Activity no es Sendable en el SDK; sus métodos son seguros desde cualquier hilo.
+        nonisolated(unsafe) let live = activity
+        Task { await live.update(.init(state: state, staleDate: nil)) }
     }
 
     private func endActivity() {
         guard let a = activity, let startedAt else { return }
         activity = nil
         let state = RecordingActivityAttributes.ContentState(startedAt: startedAt, segments: segments, paused: false, processing: true)
-        Task { await a.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(.now.addingTimeInterval(5))) }
+        nonisolated(unsafe) let live = a
+        Task { await live.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(.now.addingTimeInterval(5))) }
     }
 }

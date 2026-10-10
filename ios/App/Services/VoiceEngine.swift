@@ -326,13 +326,16 @@ final class VoiceActivityController {
     func update(phase: String, transcript: String, reply: String, working: String?) {
         guard let activity else { return }
         let state = VoiceActivityAttributes.ContentState(phase: phase, transcript: String(transcript.prefix(160)), reply: String(reply.prefix(240)), working: working)
-        Task { await activity.update(.init(state: state, staleDate: nil)) }
+        // Activity no es Sendable en el SDK; sus métodos son seguros desde cualquier hilo.
+        nonisolated(unsafe) let live = activity
+        Task { await live.update(.init(state: state, staleDate: nil)) }
     }
 
     func end(reply: String? = nil) {
         guard let a = activity else { return }
         activity = nil
         let state = VoiceActivityAttributes.ContentState(phase: "done", transcript: "", reply: String((reply ?? "").prefix(240)), working: nil)
-        Task { await a.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(.now.addingTimeInterval(reply == nil ? 0 : 6))) }
+        nonisolated(unsafe) let live = a
+        Task { await live.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(.now.addingTimeInterval(reply == nil ? 0 : 6))) }
     }
 }
