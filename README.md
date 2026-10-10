@@ -103,6 +103,8 @@ Abre `https://kairo.tudominio.com`, entra con tu correo y la contraseña inicial
 - El contenedor sólo escucha en `127.0.0.1:8080`; el acceso público pasa por Caddy. Cambia el puerto con `KAIRO_HOST_PORT`.
 - Datos persistentes en el volumen `kairo-db`. Copia de seguridad: `docker compose exec db pg_dump -U kairo kairo > kairo.sql`, o *Ajustes > Datos* en el dashboard (JSON con todo).
 - Actualizar: `git pull && docker compose up -d --build`. Las migraciones de la base de datos se aplican solas.
+- Si al compilar Maven Central responde `429 Too Many Requests`, usa un espejo:
+  `MAVEN_MIRROR=https://maven-central.storage-download.googleapis.com/maven2/ docker compose build`.
 - La CI publica la imagen en `ghcr.io/<tu-usuario>/kairo` en cada push a `main`, por si prefieres no compilar en el servidor.
 
 ### Google Calendar (opcional)

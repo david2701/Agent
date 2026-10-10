@@ -1,0 +1,16 @@
+// Sólo se usa al construir la imagen con --build-arg MAVEN_MIRROR=<url>: pone ese espejo de Maven Central
+// delante de los repositorios de plugins y dependencias (útil si repo.maven.apache.org responde 429).
+def mirror = System.getenv("MAVEN_MIRROR")
+if (mirror) {
+    settingsEvaluated { s ->
+        [s.pluginManagement.repositories, s.dependencyResolutionManagement.repositories].each { repos ->
+            repos.all { r ->
+                if (r instanceof MavenArtifactRepository && r.url.toString().contains("repo.maven.apache.org")) r.url = mirror
+            }
+        }
+        def plugins = s.pluginManagement.repositories
+        def first = plugins.maven { url = mirror; name = "mavenMirror" }
+        plugins.remove(first)
+        plugins.add(0, first)
+    }
+}
