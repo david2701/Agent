@@ -6,6 +6,7 @@ import app.kairo.routes.IA_LIMIT
 import app.kairo.routes.iaLimited
 import app.kairo.routes.userLimitKey
 import app.kairo.util.ApiJson
+import app.kairo.util.M
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.client.request.header
@@ -33,14 +34,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
-/** Los límites de las rutas que llaman a Nan son por persona, no por IP (la familia comparte la conexión). */
+/** The limits of the routes that call Nan are per person, not per IP (the family shares the connection). */
 class RateLimitTest {
 
-    private val algorithm = Algorithm.HMAC256("prueba-de-limites")
+    private val algorithm = Algorithm.HMAC256("rate-limit-test")
     private fun token(user: UUID) = JWT.create().withSubject(user.toString()).sign(algorithm)
 
     @Test
-    fun `el tope es por persona y responde 429 en espanol`() = testApplication {
+    fun `the cap is per person and answers 429`() = testApplication {
         application {
             install(ContentNegotiation) { json(ApiJson) }
             install(Authentication) {
@@ -54,23 +55,23 @@ class RateLimitTest {
                 register(IA_HOURLY_LIMIT) { rateLimiter(limit = 100, refillPeriod = 60.minutes); requestKey { userLimitKey(it) } }
             }
             install(StatusPages) {
-                status(HttpStatusCode.TooManyRequests) { call, code -> call.respond(code, ApiError("Demasiadas peticiones seguidas")) }
+                status(HttpStatusCode.TooManyRequests) { call, code -> call.respond(code, ApiError(M.TOO_MANY_REQUESTS.en)) }
             }
             routing {
                 authenticate("jwt") { iaLimited { post("/chat") { call.respondText("ok") } } }
             }
         }
-        val ana = token(UUID.randomUUID())
-        val luis = token(UUID.randomUUID())
+        val anna = token(UUID.randomUUID())
+        val louis = token(UUID.randomUUID())
         repeat(3) {
-            assertEquals(HttpStatusCode.OK, client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $ana") }.status)
+            assertEquals(HttpStatusCode.OK, client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $anna") }.status)
         }
-        val blocked = client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $ana") }
+        val blocked = client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $anna") }
         assertEquals(HttpStatusCode.TooManyRequests, blocked.status)
-        assertTrue(blocked.bodyAsText().contains("Demasiadas peticiones"))
-        // Otra persona desde la misma IP no se ve afectada
-        assertEquals(HttpStatusCode.OK, client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $luis") }.status)
-        // Sin sesión no se llega al límite: primero responde la autenticación
+        assertTrue(blocked.bodyAsText().contains("Too many requests"))
+        // Another person from the same IP is not affected
+        assertEquals(HttpStatusCode.OK, client.post("/chat") { header(HttpHeaders.Authorization, "Bearer $louis") }.status)
+        // Without a session the limit is not reached: authentication answers first
         assertEquals(HttpStatusCode.Unauthorized, client.post("/chat").status)
     }
 }

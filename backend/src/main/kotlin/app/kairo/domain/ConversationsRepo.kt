@@ -53,7 +53,7 @@ class ConversationsRepo(private val db: Db) {
         ) { it.uuid("id") }!!
     }
 
-    /** Mensajes visibles en la UI (usuario, asistente y tarjetas de acciones). */
+    /** Messages visible in the UI (user, assistant and action cards). */
     suspend fun messages(userId: UUID, conversationId: UUID, limit: Int = 200): List<StoredMessage> = db.read {
         query(
             """select m.* from messages m join conversations c on c.id = m.conversation_id
@@ -74,8 +74,8 @@ class ConversationsRepo(private val db: Db) {
     }
 
     /**
-     * Historial para el modelo: últimos mensajes, comenzando siempre en un mensaje de usuario para
-     * no cortar una secuencia assistant(tool_calls) -> tool.
+     * History for the model: the latest messages, always starting at a user message so an
+     * assistant(tool_calls) -> tool sequence is never cut.
      */
     suspend fun history(conversationId: UUID, maxMessages: Int = 24): List<ChatMessage> {
         val rows = db.read {

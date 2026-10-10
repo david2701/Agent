@@ -11,8 +11,14 @@ import app.kairo.db.strOrNull
 import app.kairo.db.textList
 import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
+import app.kairo.services.NoticeText
 import app.kairo.services.Notifier
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.localized
+import app.kairo.util.say
 import app.kairo.util.humanDate
+import app.kairo.util.requireInput
 import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDate
@@ -32,7 +38,7 @@ data class TaskPatch(
     val tags: List<String>? = null,
     val sort: Double? = null,
     val shared: Boolean? = null,
-    /** Miembro de la familia responsable; asignar a otro la vuelve familiar. */
+    /** Responsible family member; assigning someone else makes it a family task. */
     val assigneeId: UUID? = null,
     val clearAssignee: Boolean = false,
 )
@@ -97,14 +103,14 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
             ) { it.uuid("id") }!!
             getTx(userId, id)!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.TASK, task.id, "Tarea: ${task.title}", source, shared = task.shared)
+        activity.record(userId, Kinds.CREATED, EntityTypes.TASK, task.id, say(M.ACT_TASK, task.title), source, shared = task.shared)
         if (task.shared) {
-            val name = notifier.firstName(userId)
-            val detail = task.title + (task.dueDate?.let { " · ${humanDate(it)}" } ?: "")
+            val who = notifier.who(userId)
+            val detail = localized { lang -> task.title + (task.dueDate?.let { " · ${humanDate(it, lang = lang)}" } ?: "") }
             val assignee = task.assigneeId?.takeIf { it != userId }
-            assignee?.let { notifier.family(userId, listOf(it), NoticeKinds.ASSIGNED, "$name te asignó una tarea", detail, EntityTypes.TASK, task.id) }
+            assignee?.let { notifier.family(userId, listOf(it), NoticeKinds.ASSIGNED, NoticeText(say(M.NOTICE_TASK_ASSIGNED, who), detail), EntityTypes.TASK, task.id) }
             val others = notifier.members(userId).toSet() - setOfNotNull(assignee)
-            notifier.family(userId, others, NoticeKinds.SHARED, "$name agregó una tarea familiar", detail, EntityTypes.TASK, task.id)
+            notifier.family(userId, others, NoticeKinds.SHARED, NoticeText(say(M.NOTICE_TASK_ADDED, who), detail), EntityTypes.TASK, task.id)
         }
         return task
     }
@@ -112,7 +118,7 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
     suspend fun update(userId: UUID, id: UUID, patch: TaskPatch, source: String): Task? {
         val current = get(userId, id) ?: return null
         if (patch.shared != null && patch.shared != current.shared && current.ownerId != userId) {
-            throw FamilyException("Solo quien creó la tarea puede cambiar si se comparte")
+            throw FamilyException(M.ONLY_OWNER_SHARE_TASK)
         }
         if (!patch.clearProject && patch.projectId != null && patch.projectId != current.projectId) requireOwnProject(userId, patch.projectId)
         val newStatus = patch.status?.let(::normalizeStatus) ?: current.status
@@ -141,19 +147,19 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
             getTx(userId, id)
         } ?: return null
         val kind = if (newStatus == "done" && current.status != "done") Kinds.COMPLETED else Kinds.UPDATED
-        val summary = if (kind == Kinds.COMPLETED) "Tarea completada: ${task.title}" else "Tarea editada: ${task.title}"
+        val summary = say(if (kind == Kinds.COMPLETED) M.ACT_TASK_DONE else M.ACT_TASK_EDITED, task.title)
         activity.record(userId, kind, EntityTypes.TASK, id, summary, source, shared = task.shared || current.shared)
         if (task.shared) {
-            val name = notifier.firstName(userId)
+            val who = notifier.who(userId)
             if (task.assigneeId != null && task.assigneeId != current.assigneeId && task.assigneeId != userId) {
-                notifier.family(userId, listOf(task.assigneeId), NoticeKinds.ASSIGNED, "$name te asignó una tarea", task.title, EntityTypes.TASK, id)
+                notifier.family(userId, listOf(task.assigneeId), NoticeKinds.ASSIGNED, NoticeText(say(M.NOTICE_TASK_ASSIGNED, who), Plain(task.title)), EntityTypes.TASK, id)
             }
             if (kind == Kinds.COMPLETED) {
-                // A quien la creó y a quien estaba asignada les interesa saber que ya está hecha
-                notifier.family(userId, listOfNotNull(task.ownerId, task.assigneeId), NoticeKinds.UPDATED, "$name completó una tarea", task.title, EntityTypes.TASK, id)
+                // Whoever created it and whoever it was assigned to want to know it is done
+                notifier.family(userId, listOfNotNull(task.ownerId, task.assigneeId), NoticeKinds.UPDATED, NoticeText(say(M.NOTICE_TASK_DONE, who), Plain(task.title)), EntityTypes.TASK, id)
             }
             if (!current.shared) {
-                notifier.family(userId, notifier.members(userId).toSet() - setOfNotNull(task.assigneeId), NoticeKinds.SHARED, "$name compartió una tarea", task.title, EntityTypes.TASK, id)
+                notifier.family(userId, notifier.members(userId).toSet() - setOfNotNull(task.assigneeId), NoticeKinds.SHARED, NoticeText(say(M.NOTICE_TASK_SHARED, who), Plain(task.title)), EntityTypes.TASK, id)
             }
         }
         return task
@@ -162,14 +168,14 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
     suspend fun delete(userId: UUID, id: UUID, source: String): Task? {
         val task = get(userId, id) ?: return null
         db.tx { exec("update tasks set deleted_at = now() where ${visibleTo()} and id = ?", userId, userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.TASK, id, "Tarea eliminada: ${task.title}", source, shared = task.shared)
+        activity.record(userId, Kinds.DELETED, EntityTypes.TASK, id, say(M.ACT_TASK_DELETED, task.title), source, shared = task.shared)
         return task
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
         db.tx { exec("update tasks set deleted_at = null where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
-    /** Tareas abiertas cuyo título se parece al texto (para que el agente resuelva "la tarea del pasaporte"). */
+    /** Open tasks whose title resembles the text (so the agent can resolve "the passport task"). */
     suspend fun findOpen(userId: UUID, text: String, limit: Int = 5): List<Task> = db.read {
         query(
             """$select where ${visibleTo("t.")} and t.deleted_at is null and t.status <> 'done'
@@ -179,12 +185,12 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
         ) { map(it) }
     }
 
-    // --- Proyectos ---
+    // --- Projects ---
 
-    /** Los proyectos son personales: sólo se puede usar uno propio y no borrado. */
+    /** Projects are personal: only one of the user's own that is not deleted can be used. */
     private suspend fun requireOwnProject(userId: UUID, projectId: UUID) {
         val ok = db.read { one("select 1 as ok from projects where id = ? and user_id = ? and deleted_at is null", projectId, userId) { true } } ?: false
-        require(ok) { "Ese proyecto no existe" }
+        requireInput(ok, M.PROJECT_NOT_FOUND)
     }
 
     suspend fun projects(userId: UUID): List<Project> = db.read {
@@ -238,7 +244,7 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
 
     companion object {
         fun normalizeStatus(s: String): String = when (s.lowercase().trim()) {
-            "doing", "in_progress", "en curso", "en progreso", "haciendo" -> "doing"
+            "doing", "in_progress", "in progress", "en curso", "en progreso", "haciendo" -> "doing"
             "done", "completed", "hecho", "hecha", "completada", "terminada" -> "done"
             else -> "todo"
         }

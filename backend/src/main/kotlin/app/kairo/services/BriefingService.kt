@@ -17,7 +17,10 @@ import app.kairo.integrations.WeatherService
 import app.kairo.nan.ChatMessage
 import app.kairo.nan.ChatOptions
 import app.kairo.nan.NanClient
+import app.kairo.util.Lang
+import app.kairo.util.M
 import app.kairo.util.humanDate
+import app.kairo.util.humanTime
 import app.kairo.util.zoneOf
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -39,7 +42,7 @@ data class TodayData(
     val weather: WeatherReport?,
 )
 
-/** Arma el panorama del día y redacta el resumen matutino. */
+/** Builds the day overview and writes the morning summary. */
 class BriefingService(
     private val events: EventsRepo,
     private val tasks: TasksRepo,
@@ -58,18 +61,19 @@ class BriefingService(
         val start = day.atStartOfDay(zone).toInstant()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant()
         val s = settings.get(user.id)
-        // Las tareas familiares asignadas a otra persona no son pendientes de este usuario
+        // Family tasks assigned to someone else are not this user's pending items
         val allTasks = tasks.list(user.id, includeDone = false).filter { it.assigneeId == null || it.assigneeId == user.id }
         val open = allTasks.filter { it.status != "done" }
         val rem = reminders.list(user.id, listOf("scheduled", "fired"))
+        val lang = settings.langOf(s)
         val w = if (s.homeLatitude != null && s.homeLongitude != null) {
-            weather.forecast(s.homeLatitude, s.homeLongitude, s.homeCity ?: "Casa")
+            weather.forecast(s.homeLatitude, s.homeLongitude, s.homeCity ?: M.DEFAULT_HOME_NAME.t(lang), lang = lang)
         } else null
         val hour = now.atZone(zone).hour
         return TodayData(
             date = day.toString(),
-            dateLabel = humanDate(day).replaceFirstChar { it.uppercase() },
-            greeting = when (hour) { in 5..11 -> "Buenos días"; in 12..18 -> "Buenas tardes"; else -> "Buenas noches" },
+            dateLabel = humanDate(day, lang = lang).replaceFirstChar { it.uppercase() },
+            greeting = when (hour) { in 5..11 -> M.GREETING_MORNING.t(lang); in 12..18 -> M.GREETING_AFTERNOON.t(lang); else -> M.GREETING_EVENING.t(lang) },
             events = events.range(user.id, start, end),
             tasksDueToday = open.filter { it.dueDate == day || (it.dueAt != null && it.dueAt >= start && it.dueAt < end) },
             tasksOverdue = open.filter { (it.dueDate != null && it.dueDate < day) || (it.dueAt != null && it.dueAt < start) },
@@ -82,34 +86,37 @@ class BriefingService(
         )
     }
 
-    /** Texto breve, apto para leerse en voz alta. */
+    /** Short text, fit to be read aloud, written in the user's language. */
     suspend fun generate(user: User): String {
         val data = today(user)
         val s = settings.get(user.id)
+        val lang = settings.langOf(s)
+        val zone = zoneOf(user.timezone)
+        // The data block is for the model (English labels); dates and times inside it follow the user's language
         val compact = buildString {
-            appendLine("Fecha: ${data.dateLabel}")
+            appendLine("Date: ${data.dateLabel}")
             data.weather?.let { w ->
                 val d = w.days.firstOrNull()
-                appendLine("Clima en ${w.place}: ${w.description}, ${w.temperature.toInt()} grados" + (d?.let { ", máxima ${it.max.toInt()}, mínima ${it.min.toInt()}, lluvia ${it.rainChance ?: 0}%" } ?: ""))
+                appendLine("Weather in ${w.place}: ${w.description}, ${w.temperature.toInt()} degrees" + (d?.let { ", high ${it.max.toInt()}, low ${it.min.toInt()}, rain ${it.rainChance ?: 0}%" } ?: ""))
             }
-            appendLine("Eventos: " + data.events.joinToString("; ") { e -> if (e.allDay) "${e.title} (todo el día)" else "${e.title} a las ${app.kairo.util.humanTime(e.startAt, zoneOf(user.timezone))}" }.ifEmpty { "ninguno" })
-            appendLine("Tareas para hoy: " + data.tasksDueToday.joinToString("; ") { it.title }.ifEmpty { "ninguna" })
-            appendLine("Tareas vencidas: " + data.tasksOverdue.joinToString("; ") { it.title }.ifEmpty { "ninguna" })
-            appendLine("En curso: " + data.tasksInProgress.joinToString("; ") { it.title }.ifEmpty { "ninguna" })
-            appendLine("Recordatorios de hoy: " + data.reminders.joinToString("; ") { r -> r.text + (r.nextFireAt?.let { " a las " + app.kairo.util.humanTime(it, zoneOf(user.timezone)) } ?: "") }.ifEmpty { "ninguno" })
+            appendLine("Events: " + data.events.joinToString("; ") { e -> if (e.allDay) "${e.title} (all day)" else "${e.title} at ${humanTime(e.startAt, zone, lang)}" }.ifEmpty { "none" })
+            appendLine("Tasks due today: " + data.tasksDueToday.joinToString("; ") { it.title }.ifEmpty { "none" })
+            appendLine("Overdue tasks: " + data.tasksOverdue.joinToString("; ") { it.title }.ifEmpty { "none" })
+            appendLine("In progress: " + data.tasksInProgress.joinToString("; ") { it.title }.ifEmpty { "none" })
+            appendLine("Today's reminders: " + data.reminders.joinToString("; ") { r -> r.text + (r.nextFireAt?.let { " at " + humanTime(it, zone, lang) } ?: "") }.ifEmpty { "none" })
         }
         val result = nan.chat(
             listOf(
                 ChatMessage.system(
-                    "Eres Kairo, asistente personal de ${user.displayName}. Redacta el resumen de la mañana en español, " +
-                        "en un solo párrafo de máximo 90 palabras, cálido y directo, sin markdown, sin listas y sin emojis. " +
-                        "Empieza con un saludo breve. Menciona primero lo más importante (eventos con hora y tareas vencidas). " +
-                        "Si no hay nada, dilo con naturalidad.",
+                    "You are Kairo, ${user.displayName}'s personal assistant. Write the morning summary in ${lang.englishName}, " +
+                        "in a single paragraph of at most 90 words, warm and direct, with no markdown, no lists and no emojis. " +
+                        "Start with a short greeting. Mention the most important things first (timed events and overdue tasks). " +
+                        "If there is nothing, say so naturally.",
                 ),
                 ChatMessage.user(compact),
             ),
             opts = ChatOptions(model = s.chatModel, maxTokens = 400, reasoningEffort = "none"),
         )
-        return result.message.text.trim().ifEmpty { "${data.greeting}. Hoy no tienes nada programado." }
+        return result.message.text.trim().ifEmpty { M.BRIEFING_NOTHING.t(lang, data.greeting) }
     }
 }

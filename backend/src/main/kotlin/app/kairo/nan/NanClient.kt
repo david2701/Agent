@@ -77,7 +77,7 @@ data class ChatMessage(
             ChatMessage("assistant", JsonPrimitive(text), toolCalls?.takeIf { it.isNotEmpty() }, reasoningContent = reasoning)
         fun tool(callId: String, name: String, result: String) = ChatMessage("tool", JsonPrimitive(result), toolCallId = callId, name = name)
 
-        /** Mensaje de usuario con imagen (data URL o URL) para modelos de visión. */
+        /** User message with an image (data URL or URL) for vision models. */
         fun userWithImage(text: String, imageUrl: String) = ChatMessage(
             "user",
             buildJsonArray {
@@ -112,7 +112,7 @@ data class ChatResult(
     val completionTokens: Int?,
 )
 
-/** Fragmentos emitidos durante el streaming. */
+/** Fragments emitted during streaming. */
 sealed interface ChatChunk {
     data class Content(val text: String) : ChatChunk
     data class Reasoning(val text: String) : ChatChunk
@@ -122,8 +122,8 @@ sealed interface ChatChunk {
 data class RerankHit(val index: Int, val score: Double)
 
 /**
- * Cliente de Nan (API compatible con OpenAI). Nan está detrás de Cloudflare y rechaza
- * user-agents genéricos (error 1010), por eso fijamos uno propio.
+ * Nan client (OpenAI-compatible API). Nan sits behind Cloudflare and rejects generic
+ * user agents (error 1010), so we set our own.
  */
 class NanClient(private val baseUrl: String, private val apiKey: String) {
     private val log = LoggerFactory.getLogger(NanClient::class.java)
@@ -187,7 +187,7 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         )
     }
 
-    /** Chat en streaming (SSE). Reconstruye las llamadas a herramientas a partir de los deltas. */
+    /** Streaming chat (SSE). Rebuilds the tool calls from the deltas. */
     fun chatStream(messages: List<ChatMessage>, tools: List<ToolSpec> = emptyList(), opts: ChatOptions): Flow<ChatChunk> = flow {
         val content = StringBuilder()
         val reasoning = StringBuilder()
@@ -253,8 +253,8 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
 
     private class PartialCall(var id: String? = null, val name: StringBuilder = StringBuilder(), val args: StringBuilder = StringBuilder())
 
-    /** Voz a texto con Whisper. */
-    suspend fun transcribe(audio: ByteArray, fileName: String, contentType: String, language: String? = "es", model: String = "whisper"): Transcription {
+    /** Speech to text with Whisper. [language] is the hint from the user's setting (`en`, `es`); null lets Whisper detect it. */
+    suspend fun transcribe(audio: ByteArray, fileName: String, contentType: String, language: String? = null, model: String = "whisper"): Transcription {
         val resp = ensureOk(http.submitFormWithBinaryData(
             url = "$baseUrl/audio/transcriptions",
             formData = formData {
@@ -275,7 +275,7 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         )
     }
 
-    /** Texto a voz con Kokoro. Devuelve el audio (mp3 por defecto). */
+    /** Text to speech with Kokoro. Returns the audio (mp3 by default). */
     suspend fun speech(text: String, voice: String, model: String = "kokoro", format: String = "mp3", speed: Double = 1.0): ByteArray {
         val resp = ensureOk(http.post("$baseUrl/audio/speech") {
             contentType(ContentType.Application.Json)
@@ -323,7 +323,7 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         }
     }
 
-    /** Genera una imagen y devuelve su URL temporal. */
+    /** Generates an image and returns its temporary URL. */
     suspend fun generateImage(prompt: String, model: String = "flux-2-klein", size: String = "1024x1024"): String {
         val resp = ensureOk(http.post("$baseUrl/images/generations") {
             contentType(ContentType.Application.Json)
@@ -337,25 +337,25 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         val first = KairoJson.parseToJsonElement(resp.bodyAsText()).jsonObject["data"]!!.jsonArray.first().jsonObject
         return first["url"]?.jsonPrimitive?.content
             ?: first["b64_json"]?.jsonPrimitive?.content?.let { "data:image/png;base64,$it" }
-            ?: throw NanException(500, "Respuesta de imagen sin datos")
+            ?: throw NanException(500, "Image response without data")
     }
 
-    /** Cliente sin credenciales: nunca enviar la clave de Nan a hosts de terceros (p. ej. el storage de imágenes). */
+    /** Client without credentials: never send the Nan key to third-party hosts (e.g. the image storage). */
     private val plainHttp = HttpClient(CIO) {
         engine { proxyFromEnv()?.let { proxy = it } }
         install(HttpTimeout) { requestTimeoutMillis = 60_000 }
         expectSuccess = false
-        followRedirects = false // safeGet valida cada salto
+        followRedirects = false // safeGet validates every hop
     }
 
-    /** Descarga la imagen que devolvió Nan: sólo https a hosts públicos, como mucho 20 MB y sólo imágenes. */
+    /** Downloads the image Nan returned: https only, public hosts only, 20 MB at most and images only. */
     suspend fun download(url: String): Pair<ByteArray, String> {
-        require(url.startsWith("https://")) { "Solo se permiten descargas https" }
+        require(url.startsWith("https://")) { "Only https downloads are allowed" }
         val r = plainHttp.safeGet(url, SafeUrl.Policy(), maxBytes = MAX_IMAGE_BYTES)
-        if (r.status !in 200..299) throw NanException(r.status, "No se pudo descargar la imagen")
-        if (r.truncated) throw NanException(502, "La imagen es demasiado grande")
+        if (r.status !in 200..299) throw NanException(r.status, "Could not download the image")
+        if (r.truncated) throw NanException(502, "The image is too large")
         val type = r.contentType?.substringBefore(';')?.trim()?.lowercase() ?: "image/png"
-        if (!type.startsWith("image/")) throw NanException(502, "La respuesta no es una imagen")
+        if (!type.startsWith("image/")) throw NanException(502, "The response is not an image")
         return r.body to type
     }
 

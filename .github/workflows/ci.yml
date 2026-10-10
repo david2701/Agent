@@ -19,7 +19,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Pruebas del backend
+      - name: Backend tests
         working-directory: backend
         run: ./gradlew test --no-daemon
 
@@ -32,7 +32,7 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
-      - name: Tipos y build
+      - name: Types and build
         working-directory: dashboard
         run: |
           npm ci
@@ -48,17 +48,17 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
-      # Firma con tu keystore si defines los secretos ANDROID_KEYSTORE_BASE64 y ANDROID_KEYSTORE_PASSWORD
-      # (y opcionalmente ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD); si no, con la clave de depuración.
-      # La variable del repositorio KAIRO_SERVER_URL fija tu servidor (el reloj se vincula contra él).
-      - name: Keystore de release
+      # Signs with your keystore if you define the secrets ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD
+      # (and optionally ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD); otherwise with the debug key.
+      # The repository variable KAIRO_SERVER_URL sets your server (the watch pairs against it).
+      - name: Release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then echo "Sin keystore: el release se firma con la clave de depuración"; exit 0; fi
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "No keystore: the release is signed with the debug key"; exit 0; fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kairo-release.jks"
           {
             echo "KAIRO_KEYSTORE_FILE=$RUNNER_TEMP/kairo-release.jks"
@@ -66,7 +66,7 @@ jobs:
             [ -n "$KEY_ALIAS" ] && echo "KAIRO_KEY_ALIAS=$KEY_ALIAS"
             [ -n "$KEY_PASSWORD" ] && echo "KAIRO_KEY_PASSWORD=$KEY_PASSWORD"
           } >> "$GITHUB_ENV"
-      - name: APK del teléfono y del reloj
+      - name: Phone and watch APKs
         working-directory: android
         env:
           KAIRO_SERVER_URL: ${{ vars.KAIRO_SERVER_URL }}
@@ -95,7 +95,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Imagen Docker
+      - name: Docker image
         uses: docker/build-push-action@v6
         with:
           context: .

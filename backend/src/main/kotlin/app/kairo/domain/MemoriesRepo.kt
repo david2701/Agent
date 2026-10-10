@@ -5,10 +5,12 @@ import app.kairo.db.Vec
 import app.kairo.db.instant
 import app.kairo.db.str
 import app.kairo.db.uuid
+import app.kairo.util.M
+import app.kairo.util.say
 import java.sql.ResultSet
 import java.util.UUID
 
-/** Memoria a largo plazo: datos duraderos sobre el usuario que Kairo usa como contexto. */
+/** Long-term memory: lasting facts about the user that Kairo uses as context. */
 class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, private val embedder: Embedder) {
 
     suspend fun list(userId: UUID): List<Memory> = db.read {
@@ -20,7 +22,7 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
     }
 
     suspend fun create(userId: UUID, content: String, category: String, source: String): Memory {
-        // Evita duplicados casi idénticos
+        // Avoid nearly identical duplicates
         val vec = embedder.embed(content)
         if (vec != null) {
             val dup = db.read {
@@ -41,7 +43,7 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
                 userId, content.trim(), normalizeCategory(category), vec?.let { Vec(it) },
             ) { map(it) }!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.MEMORY, m.id, "Recordado: ${m.content}", source)
+        activity.record(userId, Kinds.CREATED, EntityTypes.MEMORY, m.id, say(M.ACT_MEMORY_SAVED, m.content), source)
         return m
     }
 
@@ -53,21 +55,21 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
             ) { map(it) }
         } ?: return null
         if (content != null) embedder.scheduleMemory(m.id, m.content)
-        activity.record(userId, Kinds.UPDATED, EntityTypes.MEMORY, id, "Memoria actualizada: ${m.content}", source)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.MEMORY, id, say(M.ACT_MEMORY_UPDATED, m.content), source)
         return m
     }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): Memory? {
         val m = get(userId, id) ?: return null
         db.tx { exec("update memories set deleted_at = now() where id = ?", id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.MEMORY, id, "Olvidado: ${m.content}", source)
+        activity.record(userId, Kinds.DELETED, EntityTypes.MEMORY, id, say(M.ACT_MEMORY_FORGOTTEN, m.content), source)
         return m
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
         db.tx { exec("update memories set deleted_at = null where user_id = ? and id = ?", userId, id) } > 0
 
-    /** Memorias relevantes para el mensaje actual + las de perfil, para el prompt del sistema. */
+    /** Memories relevant to the current message + the profile ones, for the system prompt. */
     suspend fun relevant(userId: UUID, query: String?, k: Int = 6): List<Memory> {
         val profile = db.read {
             query("select * from memories where user_id = ? and deleted_at is null and category = 'perfil' order by updated_at desc limit 8", userId) { map(it) }
@@ -110,6 +112,10 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
     )
 
     companion object {
+        /**
+         * Category ids as stored (part of the API: the dashboard and the apps label them). They stay in
+         * Spanish for compatibility with existing data; [normalizeCategory] also accepts English names.
+         */
         val CATEGORIES = listOf("perfil", "preferencias", "personas", "salud", "trabajo", "hogar", "general")
 
         fun normalizeCategory(c: String): String {

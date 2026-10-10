@@ -9,6 +9,10 @@ import app.kairo.domain.McpServer
 import app.kairo.integrations.McpClient
 import app.kairo.util.logSafe
 import app.kairo.util.Crypto
+import app.kairo.util.M
+import app.kairo.util.invalid
+import app.kairo.util.requireInput
+import app.kairo.util.say
 import app.kairo.util.KairoJson
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -18,7 +22,7 @@ import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
-/** Servidores MCP configurados por el usuario; sus herramientas se suman a las del agente. */
+/** MCP servers configured by the user; their tools are added to the agent's. */
 class McpRegistry(private val db: Db, private val crypto: Crypto, private val client: McpClient) {
     private val log = LoggerFactory.getLogger(McpRegistry::class.java)
 
@@ -35,11 +39,11 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
     }
 
     suspend fun create(userId: UUID, name: String, url: String, headers: Map<String, String>): McpServer {
-        // Protección SSRF (ver SafeUrl): sólo hosts públicos salvo KAIRO_MCP_ALLOW_PRIVATE / KAIRO_MCP_ALLOWED_HOSTS
+        // SSRF protection (see SafeUrl): public hosts only unless KAIRO_MCP_ALLOW_PRIVATE / KAIRO_MCP_ALLOWED_HOSTS
         client.validateUrl(url.trim())
-        require(name.none { it.isISOControl() }) { "El nombre no puede tener saltos de línea ni caracteres de control" }
-        val headerName = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$") // token de RFC 9110
-        require(headers.all { (k, v) -> headerName.matches(k) && v.none { it == '\r' || it == '\n' || it == '\u0000' } }) { "Cabeceras inválidas" }
+        requireInput(name.none { it.isISOControl() }, M.MCP_BAD_NAME)
+        val headerName = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$") // RFC 9110 token
+        requireInput(headers.all { (k, v) -> headerName.matches(k) && v.none { it == '\r' || it == '\n' || it == '\u0000' } }, M.MCP_BAD_HEADERS)
         val enc = headers.takeIf { it.isNotEmpty() }?.let { crypto.encrypt(KairoJson.encodeToString(MapSerializer(String.serializer(), String.serializer()), it)) }
         val id = db.tx { one("insert into mcp_servers(user_id, name, url, headers) values (?, ?, ?, ?) returning id", userId, name.trim(), url.trim(), enc) { it.uuid("id") }!! }
         return list(userId).first { it.id == id }
@@ -56,17 +60,17 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
     }
 
     suspend fun test(userId: UUID, id: UUID): List<String> {
-        val row = rows(userId).firstOrNull { it.server.id == id } ?: throw IllegalArgumentException("Servidor no encontrado")
+        val row = rows(userId).firstOrNull { it.server.id == id } ?: invalid(M.NF_SERVER)
         client.invalidate(row.server.url)
         return client.listTools(row.server.url, row.headers).map { it.name }
     }
 
-    /** Herramientas MCP como herramientas del agente, con nombre `mcp_<servidor>_<herramienta>`. */
+    /** MCP tools as agent tools, named `mcp_<server>_<tool>`. */
     suspend fun tools(userId: UUID): List<Tool> {
         val out = ArrayList<Tool>()
         for (row in rows(userId).filter { it.server.enabled }) {
             val remote = runCatching { client.listTools(row.server.url, row.headers) }
-                .onFailure { log.warn("MCP {} no disponible: {}", logSafe(row.server.name, 60), logSafe(it.message)) }
+                .onFailure { log.warn("MCP {} unavailable: {}", logSafe(row.server.name, 60), logSafe(it.message)) }
                 .getOrNull() ?: continue
             val prefix = "mcp_" + slug(row.server.name) + "_"
             remote.forEach { t ->
@@ -75,12 +79,12 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
                     name = name,
                     description = "[${row.server.name}] ${t.description}".take(1000),
                     parameters = t.inputSchema,
-                    label = "Usando ${row.server.name}",
+                    label = say(M.TOOL_USING_MCP, row.server.name),
                 ) { args ->
                     val text = client.callTool(row.server.url, row.headers, t.name, args)
                     ToolResult(
                         buildJsonObject { put("result", JsonPrimitive(text)) }, "${row.server.name}: ${t.name}",
-                        untrusted = "resultado del servidor externo ${row.server.name}",
+                        untrusted = "result from the external server ${row.server.name}",
                     )
                 }
             }

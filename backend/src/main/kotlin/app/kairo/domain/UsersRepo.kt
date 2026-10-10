@@ -9,8 +9,11 @@ import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.util.KairoJson
+import app.kairo.util.Lang
+import app.kairo.util.M
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import java.sql.ResultSet
 import java.time.Instant
@@ -18,7 +21,7 @@ import java.util.UUID
 
 class UserWithHash(val user: User, val passwordHash: String)
 
-/** Sesión de un dispositivo vista desde su refresh token. */
+/** Session of a device as seen from its refresh token. */
 class DeviceSession(val id: UUID, val userId: UUID, val lastSeenAt: Instant, val refreshedAt: Instant?)
 
 class UsersRepo(private val db: Db) {
@@ -33,20 +36,36 @@ class UsersRepo(private val db: Db) {
 
     suspend fun byId(id: UUID): User? = db.read { one("select * from users where id = ?", id) { map(it) } }
 
-    /** Varias operaciones (de este repositorio y de otros) en una sola transacción. */
+    /** Several operations (from this repository and others) in a single transaction. */
     suspend fun <T> transaction(block: Tx.() -> T): T = db.tx(block)
 
-    /** Crea un usuario. Sin [householdId] se crea también su propio hogar y queda como administrador. */
-    suspend fun create(email: String, name: String, passwordHash: String, timezone: String, householdId: UUID? = null, role: String = "admin"): User =
-        db.tx { create(this, email, name, passwordHash, timezone, householdId, role) }
+    /**
+     * Creates a user. Without [householdId] its own household is created too and the user becomes its administrator.
+     * With a [language] the account starts with that `language` setting (and the household gets a name in it).
+     */
+    suspend fun create(
+        email: String, name: String, passwordHash: String, timezone: String,
+        householdId: UUID? = null, role: String = "admin", language: Lang? = null,
+    ): User = db.tx { create(this, email, name, passwordHash, timezone, householdId, role, language) }
 
-    fun create(tx: Tx, email: String, name: String, passwordHash: String, timezone: String, householdId: UUID? = null, role: String = "admin"): User = with(tx) {
+    fun create(
+        tx: Tx, email: String, name: String, passwordHash: String, timezone: String,
+        householdId: UUID? = null, role: String = "admin", language: Lang? = null,
+    ): User = with(tx) {
         val clean = cleanDisplayName(name) ?: email.trim().substringBefore('@').take(MAX_DISPLAY_NAME)
-        val hh = householdId ?: one("insert into households(name) values (?) returning id", "Familia de $clean") { it.uuid("id") }!!
-        one(
+        val hh = householdId
+            ?: one("insert into households(name) values (?) returning id", M.HOUSEHOLD_DEFAULT_NAME.t(language ?: Lang.DEFAULT, clean)) { it.uuid("id") }!!
+        val user = one(
             "insert into users(email, display_name, password_hash, timezone, household_id, role) values (?, ?, ?, ?, ?, ?) returning *",
             email.trim().lowercase(), clean, passwordHash, timezone, hh, if (householdId == null) "admin" else role,
         ) { map(it) }!!
+        if (language != null) {
+            exec(
+                "insert into user_settings(user_id, data) values (?, ?) on conflict (user_id) do nothing",
+                user.id, Jsonb(JsonObject(mapOf("language" to JsonPrimitive(language.code))).toString()),
+            )
+        }
+        user
     }
 
     suspend fun emailTaken(email: String): Boolean = db.read { emailTaken(this, email) }
@@ -56,7 +75,7 @@ class UsersRepo(private val db: Db) {
 
     fun byId(tx: Tx, id: UUID): User? = tx.one("select * from users where id = ?", id) { map(it) }
 
-    /** [displayName] se limpia (sin saltos de línea ni caracteres de control, 60 como mucho); vacío = sin cambios. */
+    /** [displayName] is cleaned (no line breaks or control characters, 60 at most); empty = no change. */
     suspend fun update(id: UUID, displayName: String?, timezone: String?): User? = db.tx {
         one(
             "update users set display_name = coalesce(?, display_name), timezone = coalesce(?, timezone) where id = ? returning *",
@@ -68,7 +87,7 @@ class UsersRepo(private val db: Db) {
 
     fun setPassword(tx: Tx, id: UUID, hash: String) = tx.exec("update users set password_hash = ? where id = ?", hash, id)
 
-    // --- Settings (jsonb libre, con valores por defecto en Settings.kt) ---
+    // --- Settings (free-form jsonb, with defaults in Settings.kt) ---
 
     suspend fun settings(userId: UUID): JsonObject = db.read {
         one("select data from user_settings where user_id = ?", userId) { KairoJson.parseToJsonElement(it.str("data")).jsonObject }
@@ -85,7 +104,7 @@ class UsersRepo(private val db: Db) {
         return merged
     }
 
-    // --- Dispositivos / sesiones ---
+    // --- Devices / sessions ---
 
     suspend fun createDevice(userId: UUID, name: String, platform: String, refreshHash: String): UUID =
         db.tx { createDevice(this, userId, name, platform, refreshHash) }
@@ -99,12 +118,12 @@ class UsersRepo(private val db: Db) {
         one("select * from devices where refresh_token_hash = ? and revoked_at is null", hash) { mapSession(it) }
     }
 
-    /** Dispositivo vigente cuyo refresh token *anterior* es [hash] (un token ya rotado que alguien vuelve a usar). */
+    /** Active device whose *previous* refresh token is [hash] (an already rotated token that someone uses again). */
     suspend fun deviceByPreviousRefresh(hash: String): DeviceSession? = db.read {
         one("select * from devices where prev_refresh_token_hash = ? and revoked_at is null", hash) { mapSession(it) }
     }
 
-    /** Rota el refresh token y recuerda el anterior para detectar si alguien lo reutiliza. */
+    /** Rotates the refresh token and remembers the previous one to detect whether someone reuses it. */
     suspend fun rotateRefresh(deviceId: UUID, newHash: String) = db.tx {
         exec(
             """update devices set prev_refresh_token_hash = refresh_token_hash, refresh_token_hash = ?,
@@ -115,7 +134,7 @@ class UsersRepo(private val db: Db) {
 
     suspend fun touchDevice(deviceId: UUID) = db.tx { exec("update devices set last_seen_at = now() where id = ?", deviceId) }
 
-    /** ¿El dispositivo sigue vigente *y* es de [userId]? (un JWT con el `did` de otra persona no vale). */
+    /** Is the device still active *and* does it belong to [userId]? (a JWT with someone else's `did` is not valid). */
     suspend fun isDeviceActive(deviceId: UUID, userId: UUID): Boolean = db.read {
         one("select 1 from devices where id = ? and user_id = ? and revoked_at is null", deviceId, userId) { true } ?: false
     }
@@ -132,7 +151,7 @@ class UsersRepo(private val db: Db) {
         exec("update devices set revoked_at = now() where user_id = ? and id = ?", userId, deviceId) > 0
     }
 
-    /** Cierra todas las sesiones de un usuario (tras definir una contraseña nueva con un código de acceso). */
+    /** Closes all of a user's sessions (after setting a new password with an access code). */
     suspend fun revokeAllDevices(userId: UUID) = db.tx { revokeAllDevices(this, userId) }
 
     fun revokeAllDevices(tx: Tx, userId: UUID) = with(tx) {
@@ -141,7 +160,7 @@ class UsersRepo(private val db: Db) {
         exec("update devices set revoked_at = now() where user_id = ? and revoked_at is null", userId)
     }
 
-    /** Cierra las demás sesiones del usuario y deja abierta [keepDeviceId] (tras cambiar la contraseña). */
+    /** Closes the user's other sessions and keeps [keepDeviceId] open (after changing the password). */
     suspend fun revokeOtherDevices(userId: UUID, keepDeviceId: UUID?): Int = db.tx {
         if (keepDeviceId == null) return@tx revokeAllDevices(this, userId)
         exec("delete from push_endpoints where user_id = ? and (device_id is null or device_id <> ?)", userId, keepDeviceId)
@@ -161,9 +180,9 @@ class UsersRepo(private val db: Db) {
         const val MAX_DISPLAY_NAME = 60
 
         /**
-         * Nombre visible seguro: va dentro de los prompts del asistente de los demás miembros, así que no
-         * puede traer saltos de línea ni caracteres de control o de formato (que fingirían otras instrucciones).
-         * Junta los espacios, recorta a 60 caracteres y devuelve null si queda vacío.
+         * Safe display name: it goes inside the assistant prompts of the other members, so it cannot carry
+         * line breaks or control or formatting characters (which would fake other instructions).
+         * It collapses spaces, trims to 60 characters and returns null if nothing is left.
          */
         fun cleanDisplayName(raw: String): String? {
             val sb = StringBuilder()
@@ -183,7 +202,7 @@ class UsersRepo(private val db: Db) {
             }
             val clean = sb.toString().trim()
             if (clean.isEmpty()) return null
-            // Recorta por puntos de código para no partir un emoji a la mitad
+            // Trim by code points so an emoji is not split in half
             val count = clean.codePointCount(0, clean.length)
             return if (count <= MAX_DISPLAY_NAME) clean else clean.substring(0, clean.offsetByCodePoints(0, MAX_DISPLAY_NAME)).trimEnd()
         }

@@ -4,13 +4,13 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * Contador de fallos en una ventana deslizante (p. ej. "20 códigos de vinculación fallidos en 5 minutos").
- * Sólo guarda los [limit] fallos más recientes: no crece aunque lleguen miles de intentos.
+ * Failure counter over a sliding window (e.g. "20 failed pairing codes in 5 minutes").
+ * It only keeps the [limit] most recent failures: it does not grow even if thousands of attempts arrive.
  */
 class FailureWindow(private val limit: Int, private val windowMs: Long) {
     private val stamps = ArrayDeque<Long>()
 
-    /** Anota un fallo y devuelve cuántos hay dentro de la ventana (contando éste). */
+    /** Records a failure and returns how many are inside the window (counting this one). */
     @Synchronized
     fun record(now: Long): Int {
         prune(now)
@@ -19,7 +19,7 @@ class FailureWindow(private val limit: Int, private val windowMs: Long) {
         return stamps.size
     }
 
-    /** ¿Se alcanzó el límite dentro de la ventana? */
+    /** Was the limit reached inside the window? */
     @Synchronized
     fun reached(now: Long): Boolean {
         prune(now)
@@ -35,9 +35,9 @@ class FailureWindow(private val limit: Int, private val windowMs: Long) {
 }
 
 /**
- * Fallos por clave (correo de inicio de sesión). Con [limit] fallos dentro de la ventana la clave queda
- * bloqueada hasta que el más antiguo salga de la ventana. Guarda como mucho [maxKeys] claves: si se llena,
- * descarta la que lleva más tiempo sin fallar.
+ * Failures per key (login email). With [limit] failures inside the window the key stays blocked until the
+ * oldest one leaves the window. It keeps at most [maxKeys] keys: when full, it drops the one that has gone
+ * longest without failing.
  */
 class KeyedFailureCounter(private val limit: Int, private val windowMs: Long, private val maxKeys: Int = 10_000) {
     private val windows = object : LinkedHashMap<String, FailureWindow>(16, 0.75f, true) {
@@ -60,24 +60,25 @@ class KeyedFailureCounter(private val limit: Int, private val windowMs: Long, pr
 }
 
 object SessionPolicy {
-    /** Un dispositivo que no se usa en 90 días pierde la sesión (igual que la cookie del navegador). */
+    /** A device that is not used for 90 days loses its session (same as the browser cookie). */
     val MAX_IDLE: Duration = Duration.ofDays(90)
 
     fun idleExpired(lastSeenAt: Instant, now: Instant, maxIdle: Duration = MAX_IDLE): Boolean =
         lastSeenAt.isBefore(now.minus(maxIdle))
 
     /**
-     * Un refresh token ya rotado que vuelve a aparecer pasada la gracia es una señal de robo:
-     * o lo usó otro, o lo usa otro ahora. Dentro de la gracia es un reintento normal (dos pestañas, la red).
+     * An already rotated refresh token that shows up again after the grace period is a sign of theft:
+     * either someone else used it, or someone else is using it now. Within the grace period it is a normal
+     * retry (two tabs, the network).
      */
     fun reuseIsSuspicious(rotatedAt: Instant?, now: Instant, graceMs: Long): Boolean =
         rotatedAt == null || now.toEpochMilli() - rotatedAt.toEpochMilli() > graceMs
 }
 
 /**
- * Clave del límite de peticiones por cliente: la IP tal cual para IPv4 y el prefijo /64 para IPv6
- * (cada conexión doméstica recibe un /64 entero y podría rotar direcciones dentro de él).
- * No resuelve nombres: si no es una IP literal, devuelve el texto en minúsculas.
+ * Key of the per-client rate limit: the IP as is for IPv4 and the /64 prefix for IPv6
+ * (every home connection gets a whole /64 and could rotate addresses inside it).
+ * It does not resolve names: if it is not a literal IP, it returns the lowercase text.
  */
 fun rateLimitKey(address: String): String {
     var a = address.trim().lowercase()
@@ -85,14 +86,14 @@ fun rateLimitKey(address: String): String {
     a = a.substringBefore('%')
     if (!a.contains(':')) return a
     val hextets = expandIpv6(a) ?: return a
-    // ::ffff:a.b.c.d (IPv4 mapeada) es una IPv4
+    // ::ffff:a.b.c.d (mapped IPv4) is an IPv4
     if (hextets.take(5).all { it == 0 } && hextets[5] == 0xffff) {
         return "${hextets[6] shr 8}.${hextets[6] and 0xff}.${hextets[7] shr 8}.${hextets[7] and 0xff}"
     }
     return hextets.take(4).joinToString(":") { Integer.toHexString(it) } + "::/64"
 }
 
-/** Expande una IPv6 literal a sus 8 grupos de 16 bits, o null si no es válida. */
+/** Expands a literal IPv6 into its 8 groups of 16 bits, or null if it is not valid. */
 internal fun expandIpv6(raw: String): List<Int>? {
     fun isHex(g: String) = g.length in 1..4 && g.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
     fun groups(part: String): List<Int>? {
@@ -104,7 +105,7 @@ internal fun expandIpv6(raw: String): List<Int>? {
     var tail = emptyList<Int>()
     val lastColon = s.lastIndexOf(':')
     if (lastColon < 0) return null
-    // IPv4 incrustada al final (::ffff:1.2.3.4, 64:ff9b::1.2.3.4): ocupa los dos últimos grupos
+    // IPv4 embedded at the end (::ffff:1.2.3.4, 64:ff9b::1.2.3.4): it takes the last two groups
     val last = s.substring(lastColon + 1)
     if ('.' in last) {
         val b = parseIpv4(last) ?: return null
@@ -119,7 +120,7 @@ internal fun expandIpv6(raw: String): List<Int>? {
         2 -> {
             val head = groups(parts[0]) ?: return null
             val body = groups(parts[1]) ?: return null
-            // "::" vale al menos un grupo de ceros
+            // "::" stands for at least one group of zeros
             if (head.size + body.size > needed - 1) return null
             head + List(needed - head.size - body.size) { 0 } + body
         }

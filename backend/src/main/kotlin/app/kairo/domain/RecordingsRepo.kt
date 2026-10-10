@@ -8,12 +8,14 @@ import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
 import app.kairo.util.KairoJson
+import app.kairo.util.M
+import app.kairo.util.say
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import java.sql.ResultSet
 import java.util.UUID
 
-/** Grabaciones (reuniones, notas de voz largas) transcritas por segmentos. */
+/** Recordings (meetings, long voice notes) transcribed in segments. */
 class RecordingsRepo(private val db: Db, private val activity: ActivityRepo) {
 
     private val select = "select r.*, (select count(*) from recording_segments s where s.recording_id = r.id) as segs from recordings r"
@@ -26,9 +28,9 @@ class RecordingsRepo(private val db: Db, private val activity: ActivityRepo) {
         one("$select where r.user_id = ? and r.id = ? and r.deleted_at is null", userId, id) { map(it, withTranscript = true) }
     }
 
-    suspend fun create(userId: UUID, title: String, source: String): Recording {
-        val id = db.tx { one("insert into recordings(user_id, title) values (?, ?) returning id", userId, title.ifBlank { "Grabación" }) { it.uuid("id") }!! }
-        activity.record(userId, Kinds.CREATED, EntityTypes.RECORDING, id, "Grabación iniciada", source)
+    suspend fun create(userId: UUID, title: String, source: String, defaultTitle: String = M.DEFAULT_RECORDING_TITLE.en): Recording {
+        val id = db.tx { one("insert into recordings(user_id, title) values (?, ?) returning id", userId, title.ifBlank { defaultTitle }) { it.uuid("id") }!! }
+        activity.record(userId, Kinds.CREATED, EntityTypes.RECORDING, id, say(M.ACT_RECORDING_STARTED), source)
         return get(userId, id)!!
     }
 

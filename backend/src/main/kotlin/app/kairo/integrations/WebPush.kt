@@ -7,10 +7,13 @@ import app.kairo.db.uuid
 import app.kairo.realtime.ServerEvent
 import app.kairo.util.ApiJson
 import app.kairo.util.Crypto
+import app.kairo.util.InvalidInput
+import app.kairo.util.M
 import app.kairo.util.SafeUrl
 import app.kairo.util.bypassProxy
 import app.kairo.util.logSafe
 import app.kairo.util.proxyFromEnv
+import app.kairo.util.requireInput
 import app.kairo.util.readCapped
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -55,8 +58,8 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Cifrado de mensajes Web Push (RFC 8291, `aes128gcm` de RFC 8188) con claves P-256.
- * Es lo que descifra el conector UnifiedPush de la app; ningún intermediario (ntfy, etc.) puede leer el contenido.
+ * Web Push message encryption (RFC 8291, `aes128gcm` of RFC 8188) with P-256 keys.
+ * It is what the app's UnifiedPush connector decrypts; no intermediary (ntfy, etc.) can read the content.
  */
 object WebPushCrypto {
     private val random = SecureRandom()
@@ -68,11 +71,11 @@ object WebPushCrypto {
 
     fun generateKeyPair(): KeyPair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1"), random) }.generateKeyPair()
 
-    /** Punto público sin comprimir: 0x04 || X || Y (65 bytes). */
+    /** Uncompressed public point: 0x04 || X || Y (65 bytes). */
     fun encodePublic(key: ECPublicKey): ByteArray = byteArrayOf(0x04) + fixed(key.w.affineX) + fixed(key.w.affineY)
 
     fun decodePublic(bytes: ByteArray): ECPublicKey {
-        require(bytes.size == 65 && bytes[0] == 0x04.toByte()) { "Clave pública P-256 inválida" }
+        require(bytes.size == 65 && bytes[0] == 0x04.toByte()) { "Invalid P-256 public key" }
         val point = ECPoint(BigInteger(1, bytes.copyOfRange(1, 33)), BigInteger(1, bytes.copyOfRange(33, 65)))
         return KeyFactory.getInstance("EC").generatePublic(ECPublicKeySpec(point, curve)) as ECPublicKey
     }
@@ -83,8 +86,8 @@ object WebPushCrypto {
         KeyFactory.getInstance("EC").generatePrivate(ECPrivateKeySpec(BigInteger(1, d), curve)) as ECPrivateKey
 
     /**
-     * Cifra [plaintext] para el agente de usuario con clave pública [uaPublic] (65 bytes) y secreto [authSecret] (16 bytes).
-     * [serverKeys] y [salt] sólo se fijan en pruebas; en uso real son aleatorios en cada mensaje.
+     * Encrypts [plaintext] for the user agent with public key [uaPublic] (65 bytes) and secret [authSecret] (16 bytes).
+     * [serverKeys] and [salt] are only fixed in tests; in real use they are random for every message.
      */
     fun encrypt(
         plaintext: ByteArray,
@@ -93,7 +96,7 @@ object WebPushCrypto {
         serverKeys: KeyPair = generateKeyPair(),
         salt: ByteArray = ByteArray(16).also { random.nextBytes(it) },
     ): ByteArray {
-        require(plaintext.size + 1 + 16 <= RECORD_SIZE) { "Mensaje demasiado grande para Web Push" }
+        require(plaintext.size + 1 + 16 <= RECORD_SIZE) { "Message too large for Web Push" }
         val asPublic = encodePublic(serverKeys.public as ECPublicKey)
         val ecdh = KeyAgreement.getInstance("ECDH").apply {
             init(serverKeys.private)
@@ -106,7 +109,7 @@ object WebPushCrypto {
         return header + ciphertext
     }
 
-    /** Descifra un cuerpo `aes128gcm` (lo usa la prueba; en producción descifra el teléfono). */
+    /** Decrypts an `aes128gcm` body (used by the test; in production the phone decrypts). */
     fun decrypt(body: ByteArray, uaPrivate: ECPrivateKey, uaPublic: ByteArray, authSecret: ByteArray): ByteArray {
         val salt = body.copyOfRange(0, 16)
         val idLen = body[20].toInt() and 0xff
@@ -120,7 +123,7 @@ object WebPushCrypto {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, SecretKeySpec(cek, "AES"), GCMParameterSpec(128, nonce)) }
         val padded = cipher.doFinal(ciphertext)
         val end = padded.indexOfLast { it != 0.toByte() }
-        require(end >= 0 && padded[end] == 0x02.toByte()) { "Relleno inválido" }
+        require(end >= 0 && padded[end] == 0x02.toByte()) { "Invalid padding" }
         return padded.copyOfRange(0, end)
     }
 
@@ -139,7 +142,7 @@ object WebPushCrypto {
 
     private fun int32(v: Int) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
 
-    /** Entero sin signo en 32 bytes big-endian. */
+    /** Unsigned integer in 32 big-endian bytes. */
     private fun fixed(n: BigInteger): ByteArray {
         val raw = n.toByteArray()
         return when {
@@ -155,13 +158,13 @@ object WebPushCrypto {
 }
 
 /**
- * Push propio sin Firebase: envía Web Push cifrado a los endpoints UnifiedPush que registran los teléfonos
- * (por ejemplo un ntfy autoalojado). Firma con VAPID (RFC 8292) usando una clave que se genera una vez
- * y se guarda cifrada en la base de datos.
+ * Own push without Firebase: sends encrypted Web Push to the UnifiedPush endpoints the phones register
+ * (for example a self-hosted ntfy). It signs with VAPID (RFC 8292) using a key that is generated once
+ * and stored encrypted in the database.
  *
- * El endpoint lo elige el teléfono, así que se valida contra SSRF ([SafeUrl]) al registrarlo y antes de cada envío:
- * sólo hosts públicos, salvo el ntfy propio (host de NTFY_PUBLIC_URL o NTFY_URL, que puede estar en la red local)
- * o con KAIRO_PUSH_ALLOW_PRIVATE=true (cualquier host de la red privada; nunca loopback ni enlace local).
+ * The endpoint is chosen by the phone, so it is validated against SSRF ([SafeUrl]) when it is registered and before every send:
+ * public hosts only, except the own ntfy (host of NTFY_PUBLIC_URL or NTFY_URL, which may be on the local network)
+ * or with KAIRO_PUSH_ALLOW_PRIVATE=true (any private-network host; never loopback or link-local).
  */
 class PushService(private val db: Db, private val crypto: Crypto, private val cfg: AppConfig, env: Map<String, String> = System.getenv()) {
     private val log = LoggerFactory.getLogger(PushService::class.java)
@@ -171,13 +174,13 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
         followRedirects = false
         expectSuccess = false
     }
-    /** Sin proxy: sólo para el ntfy propio cuando está en la red local o en NO_PROXY. */
+    /** No proxy: only for the own ntfy when it is on the local network or in NO_PROXY. */
     private val direct = HttpClient(CIO) {
         install(HttpTimeout) { requestTimeoutMillis = 15_000 }
         followRedirects = false
         expectSuccess = false
     }
-    /** Hosts del ntfy que configuró el operador. */
+    /** ntfy hosts the operator configured. */
     private val ntfyHosts: Set<String> = ntfyHosts(env["NTFY_PUBLIC_URL"], cfg.ntfyUrl)
     private val endpointPolicy = SafeUrl.Policy(
         allowPrivate = env["KAIRO_PUSH_ALLOW_PRIVATE"]?.trim()?.toBooleanStrictOrNull() ?: false,
@@ -186,7 +189,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
     private val keyLock = Mutex()
     @Volatile private var vapid: Pair<KeyPair, String>? = null
 
-    /** Clave pública VAPID (base64url, 87 caracteres) que la app pasa al registrarse en su distribuidor. */
+    /** VAPID public key (base64url, 87 characters) the app hands to its distributor when registering. */
     suspend fun vapidPublicKey(): String = keys().second
 
     private suspend fun keys(): Pair<KeyPair, String> = vapid ?: keyLock.withLock {
@@ -198,7 +201,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
                     put("d", WebPushCrypto.b64u(WebPushCrypto.encodePrivate(kp.private as ECPrivateKey)))
                 }.toString()
                 db.tx { exec("insert into server_secrets(name, value) values ('vapid', ?) on conflict (name) do nothing", crypto.encrypt(value)) }
-                // Si otra instancia la creó al mismo tiempo, gana la que quedó guardada
+                // If another instance created it at the same time, the one that got stored wins
                 keysFromDb() ?: kp
             }
             (pair to WebPushCrypto.b64u(WebPushCrypto.encodePublic(pair.public as ECPublicKey))).also { vapid = it }
@@ -215,31 +218,29 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
     }
 
     /**
-     * Comprueba un endpoint: https (o http con KAIRO_PUSH_ALLOW_HTTP) y destino permitido.
-     * Devuelve la URL ya analizada; lanza IllegalArgumentException si no sirve.
+     * Checks an endpoint: https (or http with KAIRO_PUSH_ALLOW_HTTP) and an allowed destination.
+     * Returns the parsed URL; throws an [InvalidInput] (message for the user) if it is not usable.
      */
     private suspend fun checkEndpoint(endpoint: String): Url {
         val checked = try {
             SafeUrl.check(endpoint, endpointPolicy)
         } catch (e: SafeUrl.UnsafeUrlException) {
-            throw IllegalArgumentException(
-                if (e.blockedAddress) "El endpoint de push apunta a una dirección no permitida (red local o privada)" else "El endpoint de push debe ser una URL https",
-            )
+            throw InvalidInput(if (e.blockedAddress) M.PUSH_ENDPOINT_BLOCKED else M.PUSH_ENDPOINT_NOT_HTTPS)
         }
         val scheme = checked.url.protocol.name
-        require(scheme == "https" || (cfg.pushAllowHttp && scheme == "http")) { "El endpoint de push debe ser una URL https" }
+        requireInput(scheme == "https" || (cfg.pushAllowHttp && scheme == "http"), M.PUSH_ENDPOINT_NOT_HTTPS)
         return checked.url
     }
 
     suspend fun register(userId: UUID, deviceId: UUID?, endpoint: String, p256dh: String, auth: String) {
         checkEndpoint(endpoint)
         val pub = runCatching { WebPushCrypto.unb64u(p256dh) }.getOrNull()
-        require(pub != null && runCatching { WebPushCrypto.decodePublic(pub) }.isSuccess) { "Clave pública de push inválida" }
+        requireInput(pub != null && runCatching { WebPushCrypto.decodePublic(pub) }.isSuccess, M.PUSH_BAD_KEY)
         val sec = runCatching { WebPushCrypto.unb64u(auth) }.getOrNull()
-        require(sec != null && sec.size == 16) { "Secreto de push inválido" }
+        requireInput(sec != null && sec.size == 16, M.PUSH_BAD_SECRET)
         db.tx {
             if (deviceId != null) exec("delete from push_endpoints where device_id = ? and endpoint <> ?", deviceId, endpoint)
-            // Un endpoint de otra cuenta no se reasigna: así nadie puede quitarle el push a otro ni recibir el suyo
+            // An endpoint of another account is not reassigned: this way nobody can take someone else's push away or receive theirs
             val n = exec(
                 """insert into push_endpoints(user_id, device_id, endpoint, p256dh, auth) values (?, ?, ?, ?, ?)
                    on conflict (endpoint) do update set device_id = excluded.device_id,
@@ -247,7 +248,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
                    where push_endpoints.user_id = excluded.user_id""",
                 userId, deviceId, endpoint, p256dh, auth,
             )
-            require(n > 0) { "Ese endpoint de push ya está registrado por otra cuenta" }
+            requireInput(n > 0, M.PUSH_ENDPOINT_TAKEN)
         }
     }
 
@@ -258,7 +259,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
     suspend fun registeredDevices(userId: UUID): Int =
         db.read { one("select count(*) as n from push_endpoints where user_id = ?", userId) { it.getInt("n") } } ?: 0
 
-    /** Envía el evento a todos los teléfonos del usuario con push registrado. Devuelve cuántos lo aceptaron. */
+    /** Sends the event to all the user's phones with registered push. Returns how many accepted it. */
     suspend fun send(userId: UUID, event: ServerEvent, urgency: String = "high", ttlSeconds: Int = 24 * 3600): Int {
         val targets = db.read {
             query("select id, endpoint, p256dh, auth from push_endpoints where user_id = ?", userId) {
@@ -271,7 +272,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
         var ok = 0
         for (t in targets) {
             val result = runCatching {
-                // Se vuelve a validar en cada envío: el DNS puede haber cambiado desde el registro
+                // Validated again on every send: DNS may have changed since registration
                 val url = checkEndpoint(t.endpoint)
                 val body = WebPushCrypto.encrypt(payload, WebPushCrypto.unb64u(t.p256dh), WebPushCrypto.unb64u(t.auth))
                 val client = if (useDirect(url.host)) direct else http
@@ -283,7 +284,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
                     header("Authorization", "vapid t=${vapidJwt(t.endpoint, kp)}, k=$pubB64")
                     setBody(body)
                 }.execute { resp ->
-                    // Sólo interesa el código; del cuerpo se lee como mucho MAX_RESPONSE_BYTES y se descarta
+                    // Only the code matters; at most MAX_RESPONSE_BYTES of the body are read and discarded
                     resp.bodyAsChannel().readCapped(MAX_RESPONSE_BYTES)
                     resp.status.value
                 }
@@ -296,7 +297,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
                 }
                 status == 404 || status == 410 -> db.tx { exec("delete from push_endpoints where id = ?", t.id) }
                 else -> {
-                    log.warn("Push a {} falló: {}", logSafe(runCatching { Url(t.endpoint).host }.getOrDefault("?"), 120), logSafe(status ?: result.exceptionOrNull()?.message))
+                    log.warn("Push to {} failed: {}", logSafe(runCatching { Url(t.endpoint).host }.getOrDefault("?"), 120), logSafe(status ?: result.exceptionOrNull()?.message))
                     db.tx { exec("update push_endpoints set failures = failures + 1 where id = ?", t.id) }
                     db.tx { exec("delete from push_endpoints where id = ? and failures > 50", t.id) }
                 }
@@ -316,7 +317,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
             .sign(Algorithm.ECDSA256(kp.public as ECPublicKey, kp.private as ECPrivateKey))
     }
 
-    /** Sin proxy sólo para el ntfy propio (y si además es local o está en NO_PROXY); el resto, por el proxy si lo hay. */
+    /** No proxy only for the own ntfy (and only if it is local or in NO_PROXY); everything else goes through the proxy if there is one. */
     private fun useDirect(host: String): Boolean = SafeUrl.normalizeHost(host) in ntfyHosts && bypassProxy(host)
 
     private data class PushTarget(val id: UUID, val endpoint: String, val p256dh: String, val auth: String)
@@ -324,10 +325,10 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
     companion object {
         const val MAX_RESPONSE_BYTES = 64 * 1024
 
-        /** Hosts de las URLs de ntfy configuradas (NTFY_PUBLIC_URL para los teléfonos, NTFY_URL para el servidor). */
+        /** Hosts of the configured ntfy URLs (NTFY_PUBLIC_URL for the phones, NTFY_URL for the server). */
         fun ntfyHosts(vararg urls: String?): Set<String> = urls.filterNotNull()
             .mapNotNull { raw ->
-                // java.net.URI y no Url de Ktor: Ktor completa un texto que no es URL con "localhost"
+                // java.net.URI and not Ktor's Url: Ktor completes a text that is not a URL with "localhost"
                 runCatching { java.net.URI(raw.trim()) }.getOrNull()
                     ?.takeIf { it.scheme?.lowercase() in setOf("http", "https") }
                     ?.host?.let(SafeUrl::normalizeHost)

@@ -10,7 +10,12 @@ import app.kairo.db.textList
 import app.kairo.db.uuid
 import app.kairo.db.uuidList
 import app.kairo.nan.NanClient
+import app.kairo.services.NoticeText
 import app.kairo.services.Notifier
+import app.kairo.util.Lang
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.say
 import java.sql.ResultSet
 import java.util.UUID
 
@@ -68,7 +73,7 @@ class NotesRepo(
             ) { map(it) }!!
         }
         embedder.scheduleNote(note.id, note.title, note.content)
-        activity.record(userId, Kinds.CREATED, EntityTypes.NOTE, note.id, "Nota: ${note.title}", source, shared = note.shared)
+        activity.record(userId, Kinds.CREATED, EntityTypes.NOTE, note.id, say(M.ACT_NOTE, note.title), source, shared = note.shared)
         if (note.shared) announce(userId, note)
         return note
     }
@@ -76,7 +81,7 @@ class NotesRepo(
     suspend fun update(userId: UUID, id: UUID, patch: NotePatch, source: String): Note? {
         val current = get(userId, id) ?: return null
         if (patch.shared != null && patch.shared != current.shared && current.ownerId != userId) {
-            throw FamilyException("Solo quien creó la nota puede cambiar si se comparte")
+            throw FamilyException(M.ONLY_OWNER_SHARE_NOTE)
         }
         val note = db.tx {
             one(
@@ -92,8 +97,8 @@ class NotesRepo(
             ) { map(it) }
         } ?: return null
         if (patch.title != null || patch.content != null) embedder.scheduleNote(note.id, note.title, note.content)
-        // Si deja de compartirse, también tiene que desaparecer de las pantallas de los demás
-        activity.record(userId, Kinds.UPDATED, EntityTypes.NOTE, id, "Nota editada: ${note.title}", source, shared = note.shared || current.shared)
+        // If it stops being shared, it also has to disappear from the others' screens
+        activity.record(userId, Kinds.UPDATED, EntityTypes.NOTE, id, say(M.ACT_NOTE_EDITED, note.title), source, shared = note.shared || current.shared)
         if (note.shared && !current.shared) announce(userId, note)
         return note
     }
@@ -101,7 +106,7 @@ class NotesRepo(
     suspend fun delete(userId: UUID, id: UUID, source: String): Note? {
         val note = get(userId, id) ?: return null
         db.tx { exec("update notes set deleted_at = now() where ${visibleTo()} and id = ?", userId, userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.NOTE, id, "Nota eliminada: ${note.title}", source, shared = note.shared)
+        activity.record(userId, Kinds.DELETED, EntityTypes.NOTE, id, say(M.ACT_NOTE_DELETED, note.title), source, shared = note.shared)
         return note
     }
 
@@ -109,11 +114,13 @@ class NotesRepo(
         db.tx { exec("update notes set deleted_at = null where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
     private suspend fun announce(userId: UUID, note: Note) =
-        notifier.everyone(userId, NoticeKinds.SHARED, "${notifier.firstName(userId)} compartió una nota", note.title, EntityTypes.NOTE, note.id)
+        notifier.everyone(userId, NoticeKinds.SHARED, NoticeText(say(M.NOTICE_NOTE_SHARED, notifier.who(userId)), Plain(note.title)), EntityTypes.NOTE, note.id)
 
     /**
-     * Búsqueda híbrida: similitud semántica (pgvector) + texto (full-text en español y trigramas),
-     * reordenada con el modelo `rerank` de Nan. Incluye las notas que la familia compartió.
+     * Hybrid search: semantic similarity (pgvector) + text (Spanish full-text and trigrams),
+     * reordered with Nan's `rerank` model. It includes the notes the family shared.
+     * (The full-text index uses the `spanish` configuration; English notes still match through the
+     * trigram, `ilike` and semantic paths.)
      */
     suspend fun search(userId: UUID, query: String, limit: Int = 5): List<Note> {
         val q = query.trim()
@@ -143,8 +150,8 @@ class NotesRepo(
         val docs = candidates.values.toList()
         val hits = runCatching { nan.rerank(q, docs.map { "${it.title}\n${it.content}" }) }.getOrNull()
             ?: return docs.take(limit)
-        // El reranker es muy estricto con sinónimos ("impuestos" frente a "declaración de renta"):
-        // también se conservan las notas muy cercanas en significado y las que contienen el texto literal.
+        // The reranker is very strict with synonyms ("taxes" versus "income tax return"):
+        // notes that are very close in meaning and the ones containing the literal text are kept too.
         return hits.sortedByDescending { it.score }
             .filter { h ->
                 val d = docs[h.index]
@@ -178,8 +185,8 @@ class NotesRepo(
     )
 
     companion object {
-        fun deriveTitle(content: String): String {
-            val firstLine = content.lineSequence().map { it.trim().trimStart('#', '-', '*', ' ') }.firstOrNull { it.isNotEmpty() } ?: "Nota"
+        fun deriveTitle(content: String, lang: Lang = Lang.DEFAULT): String {
+            val firstLine = content.lineSequence().map { it.trim().trimStart('#', '-', '*', ' ') }.firstOrNull { it.isNotEmpty() } ?: M.DEFAULT_NOTE_TITLE.t(lang)
             return if (firstLine.length <= 60) firstLine else firstLine.take(57).trimEnd() + "..."
         }
 

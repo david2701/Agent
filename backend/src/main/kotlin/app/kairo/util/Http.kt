@@ -10,15 +10,15 @@ import java.net.InetSocketAddress
 import java.net.ProxySelector
 import java.net.http.HttpClient
 
-/** Proxy de salida opcional tomado de HTTPS_PROXY (útil si el servidor sale por un proxy corporativo). */
+/** Optional outbound proxy taken from HTTPS_PROXY (useful if the server goes out through a corporate proxy). */
 fun proxyFromEnv(): ProxyConfig? {
     val raw = System.getenv("HTTPS_PROXY") ?: System.getenv("https_proxy") ?: return null
     return runCatching { ProxyBuilder.http(Url(raw)) }.getOrNull()
 }
 
 /**
- * Lo mismo que [proxyFromEnv] para el cliente HTTP del JDK (APNs necesita HTTP/2, que el motor CIO no tiene).
- * Sin HTTPS_PROXY usa el selector por defecto de la JVM (propiedades https.proxyHost, etc.).
+ * Same as [proxyFromEnv] for the JDK HTTP client (APNs needs HTTP/2, which the CIO engine does not have).
+ * Without HTTPS_PROXY it uses the JVM default selector (https.proxyHost properties, etc.).
  */
 fun jdkProxySelector(): ProxySelector =
     (proxyFromEnv()?.address() as? InetSocketAddress)?.let { ProxySelector.of(it) }
@@ -26,9 +26,9 @@ fun jdkProxySelector(): ProxySelector =
         ?: HttpClient.Builder.NO_PROXY
 
 /**
- * true si a [host] hay que llegar sin proxy: está en NO_PROXY o es una dirección local/privada
- * (un ntfy en la misma red, por ejemplo). Sólo debe usarse con hosts que configuró el operador
- * (el ntfy propio): nunca con URLs elegidas por un usuario.
+ * true if [host] must be reached without a proxy: it is in NO_PROXY or is a local/private address
+ * (an ntfy on the same network, for example). It must only be used with hosts the operator configured
+ * (their own ntfy): never with URLs chosen by a user.
  */
 fun bypassProxy(host: String): Boolean {
     val h = host.lowercase().trim('[', ']')
@@ -41,12 +41,12 @@ fun bypassProxy(host: String): Boolean {
 }
 
 /**
- * Lee como mucho [max] bytes del canal, sin cargar el resto en memoria.
- * Devuelve los bytes y si quedaba más contenido (truncated).
+ * Reads at most [max] bytes from the channel, without loading the rest in memory.
+ * Returns the bytes and whether more content was left (truncated).
  */
 suspend fun ByteReadChannel.readCapped(max: Int): Pair<ByteArray, Boolean> {
     require(max >= 0)
-    val limit = max.toLong() + 1 // un byte de más para saber si se recortó
+    val limit = max.toLong() + 1 // one extra byte to know whether it was trimmed
     val out = ByteArrayOutputStream(minOf(limit, 64L * 1024).toInt())
     val buf = ByteArray(8 * 1024)
     while (out.size() < limit) {
@@ -59,8 +59,8 @@ suspend fun ByteReadChannel.readCapped(max: Int): Pair<ByteArray, Boolean> {
 }
 
 /**
- * Texto apto para el log: escapa CR/LF y otros caracteres de control (evita inyectar líneas falsas en el log)
- * y lo recorta a [max] caracteres.
+ * Text fit for the log: escapes CR/LF and other control characters (prevents injecting fake lines into the log)
+ * and trims it to [max] characters.
  */
 fun logSafe(value: Any?, max: Int = 300): String {
     val s = value?.toString() ?: return "null"

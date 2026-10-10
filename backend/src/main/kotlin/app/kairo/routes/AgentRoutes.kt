@@ -7,6 +7,7 @@ import app.kairo.agent.AgentEvent
 import app.kairo.agent.AgentRequest
 import app.kairo.domain.SettingsService
 import app.kairo.domain.VoiceOption
+import app.kairo.util.M
 import app.kairo.util.UUIDSerializer
 import io.ktor.http.ContentType
 import io.ktor.http.content.PartData
@@ -37,14 +38,13 @@ import java.util.UUID
 class Upload(val fields: Map<String, String>, val file: ByteArray?, val fileName: String?, val contentType: String?)
 
 /**
- * Lee un formulario multipart con un archivo. Topes: [maxBytes] en total (archivo y campos), 16 partes,
- * y el archivo se lee sin pasar del tope. Si el archivo es una imagen, su tipo sale de los bytes (no del
- * cliente) y sólo se aceptan JPEG, PNG, WebP, GIF y HEIC/HEIF: un SVG o un HTML disfrazado se rechaza.
+ * Reads a multipart form with a file. Caps: [maxBytes] in total (file and fields), 16 parts,
+ * and the file is read without going over the cap. If the file is an image, its type comes from the bytes
+ * (not from the client) and only JPEG, PNG, WebP, GIF and HEIC/HEIF are accepted: a disguised SVG or HTML is rejected.
  */
 suspend fun ApplicationCall.receiveUpload(maxBytes: Long = 30L * 1024 * 1024): Upload {
-    val tooLarge = "El archivo es demasiado grande"
-    // Margen para las cabeceras de cada parte y los campos de texto
-    declaredContentLength()?.let { if (it > maxBytes + 64 * 1024) payloadTooLarge(tooLarge) }
+    // Margin for the headers of each part and the text fields
+    declaredContentLength()?.let { if (it > maxBytes + 64 * 1024) payloadTooLarge(M.FILE_TOO_LARGE) }
     val fields = HashMap<String, String>()
     var bytes: ByteArray? = null
     var name: String? = null
@@ -54,21 +54,21 @@ suspend fun ApplicationCall.receiveUpload(maxBytes: Long = 30L * 1024 * 1024): U
     try {
         receiveMultipart(formFieldLimit = maxBytes).forEachPart { part ->
             try {
-                if (++parts > 16) payloadTooLarge("Demasiadas partes en el formulario")
+                if (++parts > 16) payloadTooLarge(M.TOO_MANY_PARTS)
                 when (part) {
                     is PartData.FormItem -> {
                         total += part.value.length
-                        if (total > maxBytes) payloadTooLarge(tooLarge)
+                        if (total > maxBytes) payloadTooLarge(M.FILE_TOO_LARGE)
                         part.name?.let { fields[it] = part.value }
                     }
                     is PartData.FileItem -> if (bytes == null) {
                         val data = part.provider().readAtMost(maxBytes + 1)
                         total += data.size
-                        if (total > maxBytes) payloadTooLarge(tooLarge)
+                        if (total > maxBytes) payloadTooLarge(M.FILE_TOO_LARGE)
                         val declared = part.contentType?.toString()
                         val sniffed = sniffImageType(data)
                         if (sniffed == null && declared?.lowercase()?.startsWith("image/") == true) {
-                            unsupportedMediaType("Solo se aceptan imágenes JPEG, PNG, WebP, GIF o HEIC")
+                            unsupportedMediaType(M.ONLY_SOME_IMAGES)
                         }
                         bytes = data
                         name = part.originalFileName
@@ -81,8 +81,8 @@ suspend fun ApplicationCall.receiveUpload(maxBytes: Long = 30L * 1024 * 1024): U
             }
         }
     } catch (e: java.io.IOException) {
-        // El parser de Ktor corta las partes que pasan de formFieldLimit
-        if (e.message?.startsWith("Multipart content length exceeds limit") == true) payloadTooLarge(tooLarge)
+        // Ktor's parser cuts the parts that go over formFieldLimit
+        if (e.message?.startsWith("Multipart content length exceeds limit") == true) payloadTooLarge(M.FILE_TOO_LARGE)
         throw e
     }
     return Upload(fields, bytes, name, type)
@@ -95,7 +95,7 @@ fun Route.agentRoutes(s: Services) {
     iaLimited {
         post("/chat") {
             val b = call.receiveBody<ChatRequest>()
-            if (b.message.isBlank()) badRequest("Mensaje vacío")
+            if (b.message.isBlank()) badRequest(M.EMPTY_MESSAGE)
             val user = s.users.byId(call.userId())!!
             call.streamAgent(
                 s.agent.run(
@@ -108,34 +108,35 @@ fun Route.agentRoutes(s: Services) {
             )
         }
 
-        // ------------------------------------------------------------ Voz
+        // ------------------------------------------------------------ Voice
         post("/voice/transcribe") {
             val up = call.receiveUpload()
-            val audio = up.file ?: badRequest("Falta el archivo de audio")
+            val audio = up.file ?: badRequest(M.MISSING_AUDIO_FILE)
             val t = s.voice.transcribe(call.userId(), audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4")
             call.respond(TranscriptionResponse(if (s.voice.isNoise(t.text)) "" else t.text, t.language, t.durationSeconds))
         }
 
-        /** Turno de voz completo: audio -> Whisper -> agente (SSE). El cliente pide luego /voice/speak con el texto. */
+        /** Full voice turn: audio -> Whisper -> agent (SSE). The client then asks /voice/speak with the text. */
         post("/voice/turn") {
             val up = call.receiveUpload()
-            val audio = up.file ?: badRequest("Falta el archivo de audio")
+            val audio = up.file ?: badRequest(M.MISSING_AUDIO_FILE)
             val userId = call.userId()
             val user = s.users.byId(userId)!!
             val conversationId = up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
             val channel = up.fields["channel"]?.takeIf { it in CHANNELS } ?: "voice"
             val location = call.clientLocation()
             val caps = call.clientCapabilities()
+            val lang = call.lang(s)
             call.streamAgent(flow {
                 val t = runCatching { s.voice.transcribe(userId, audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4") }.getOrElse {
-                    // El detalle (respuesta de Nan) sólo va al log; al cliente, un mensaje genérico
+                    // The detail (Nan's response) goes only to the log; the client gets a generic message
                     org.slf4j.LoggerFactory.getLogger("app.kairo.routes.AgentRoutes")
-                        .warn("Transcripción fallida: {}", app.kairo.util.logSafe(it.message ?: it.javaClass.simpleName))
-                    emit(AgentEvent.Error("No pude transcribir el audio. Intenta de nuevo."))
+                        .warn("Transcription failed: {}", app.kairo.util.logSafe(it.message ?: it.javaClass.simpleName))
+                    emit(AgentEvent.Error(M.TRANSCRIBE_FAILED.t(lang)))
                     return@flow
                 }
                 if (s.voice.isNoise(t.text)) {
-                    emit(AgentEvent.Error("No te escuché bien. ¿Puedes repetirlo?"))
+                    emit(AgentEvent.Error(M.NOT_HEARD.t(lang)))
                     return@flow
                 }
                 emit(AgentEvent.Transcript(t.text))
@@ -149,22 +150,22 @@ fun Route.agentRoutes(s: Services) {
             call.respondBytes(audio, ContentType("audio", "mpeg"))
         }
 
-        get("/voice/voices") { call.respond(VoicesResponse(SettingsService.VOICES)) }
+        get("/voice/voices") { call.respond(VoicesResponse(SettingsService.voices(call.lang(s)))) }
 
-        // ------------------------------------------------------------ Compartir con Kairo
+        // ------------------------------------------------------------ Save to Kairo (share)
         post("/capture") {
             val user = s.users.byId(call.userId())!!
             val isMultipart = call.request.contentType().match(ContentType.MultiPart.FormData)
             val (text, url, image, type, conv) = if (isMultipart) {
                 val up = call.receiveUpload(20L * 1024 * 1024)
-                if (up.file != null && up.contentType?.startsWith("image/") != true) badRequest("Solo se aceptan imágenes")
+                if (up.file != null && up.contentType?.startsWith("image/") != true) badRequest(M.ONLY_IMAGES)
                 CaptureInput(up.fields["text"], up.fields["url"], up.file, up.contentType, up.fields["conversationId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() })
             } else {
                 val b = call.receiveBody<CaptureJson>()
                 CaptureInput(b.text, b.url, null, null, b.conversationId)
             }
-            if (text.isNullOrBlank() && url.isNullOrBlank() && image == null) badRequest("No hay nada que guardar")
-            // Si el "texto" es solo un enlace, trátalo como enlace
+            if (text.isNullOrBlank() && url.isNullOrBlank() && image == null) badRequest(M.NOTHING_TO_SAVE)
+            // If the "text" is just a link, treat it as a link
             val linkInText = text?.trim()?.takeIf { url == null && Regex("^https?://\\S+$").matches(it) }
             call.streamAgent(
                 s.capture.capture(
@@ -175,19 +176,19 @@ fun Route.agentRoutes(s: Services) {
         }
     }
 
-    // ------------------------------------------------------------ Conversaciones
+    // ------------------------------------------------------------ Conversations
     get("/conversations") { call.respond(s.conversations.list(call.userId())) }
     get("/conversations/{id}/messages") {
         val id = call.uuidParam()
-        s.conversations.get(call.userId(), id) ?: notFound("Conversación")
+        s.conversations.get(call.userId(), id) ?: notFound(M.NF_CONVERSATION)
         call.respond(s.conversations.messages(call.userId(), id))
     }
     delete("/conversations/{id}") {
-        if (!s.conversations.delete(call.userId(), call.uuidParam())) notFound("Conversación")
+        if (!s.conversations.delete(call.userId(), call.uuidParam())) notFound(M.NF_CONVERSATION)
         call.respond(OkResponse())
     }
 
-    // ------------------------------------------------------------ Hoy y resumen
+    // ------------------------------------------------------------ Today and briefing
     get("/today") {
         val user = s.users.byId(call.userId())!!
         val date = call.request.queryParameters["date"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }

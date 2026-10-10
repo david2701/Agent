@@ -2,6 +2,11 @@ package app.kairo.integrations
 
 import app.kairo.util.Crypto
 import app.kairo.util.KairoJson
+import app.kairo.util.Lang
+import app.kairo.util.Localizable
+import app.kairo.util.M
+import app.kairo.util.Say
+import app.kairo.util.InvalidInput
 import app.kairo.util.SafeUrl
 import app.kairo.util.logSafe
 import app.kairo.util.proxyFromEnv
@@ -32,21 +37,27 @@ import java.util.concurrent.atomic.AtomicInteger
 
 data class McpTool(val name: String, val description: String, val inputSchema: JsonObject)
 
-/** Error de MCP. El mensaje se muestra al usuario y al modelo: nunca lleva detalles del servidor remoto. */
-class McpException(message: String) : RuntimeException(message)
+/**
+ * MCP error. The message is shown to the user and to the model: it never carries details of the remote server.
+ * [text] renders it in the reader's language; [message] is the English text.
+ */
+class McpException(val msg: M, val args: List<Any?> = emptyList()) :
+    RuntimeException(Say(msg, args).text(Lang.EN)), Localizable {
+    override fun text(lang: Lang): String = Say(msg, args).text(lang)
+}
 
 /**
- * Cliente mínimo de Model Context Protocol sobre "Streamable HTTP" (JSON-RPC 2.0).
- * Permite conectar servidores MCP remotos (Notion, Home Assistant, etc.) como herramientas del agente.
+ * Minimal Model Context Protocol client over "Streamable HTTP" (JSON-RPC 2.0).
+ * It lets remote MCP servers (Notion, Home Assistant, etc.) be connected as agent tools.
  *
- * Seguridad:
- * - Cada petición valida la URL con [SafeUrl]: sólo hosts públicos, salvo `KAIRO_MCP_ALLOW_PRIVATE=true`
- *   (servidores en la LAN, como Home Assistant) y los hosts de `KAIRO_MCP_ALLOWED_HOSTS`.
- * - No sigue redirecciones (un 3xx es un error).
- * - Las respuestas se leen con un límite de [MAX_RESPONSE_BYTES].
- * - Los errores que ve el usuario son genéricos (no sirven para escanear puertos); el detalle va sólo al log.
- * - Las sesiones y la caché de herramientas se separan por URL y cabeceras (credenciales), así dos usuarios
- *   con la misma URL nunca comparten la sesión que abrió el otro.
+ * Security:
+ * - Every request validates the URL with [SafeUrl]: public hosts only, except `KAIRO_MCP_ALLOW_PRIVATE=true`
+ *   (servers on the LAN, like Home Assistant) and the hosts of `KAIRO_MCP_ALLOWED_HOSTS`.
+ * - It does not follow redirects (a 3xx is an error).
+ * - Responses are read with a limit of [MAX_RESPONSE_BYTES].
+ * - The errors the user sees are generic (they cannot be used to scan ports); the detail goes only to the log.
+ * - Sessions and the tool cache are separated by URL and headers (credentials), so two users
+ *   with the same URL never share the session the other one opened.
  */
 class McpClient(
     private val policy: SafeUrl.Policy = policyFromEnv(),
@@ -67,21 +78,14 @@ class McpClient(
     private val toolCache = ConcurrentHashMap<String, Pair<Long, List<McpTool>>>()
 
     /**
-     * Comprueba una URL antes de guardarla. Lanza IllegalArgumentException con un mensaje para el usuario.
+     * Checks a URL before saving it. Throws an [InvalidInput] with a message for the user.
      */
     suspend fun validateUrl(url: String) {
         try {
             SafeUrl.check(url, policy)
         } catch (e: SafeUrl.UnsafeUrlException) {
-            if (!e.blockedAddress) throw IllegalArgumentException(e.message)
-            throw IllegalArgumentException(
-                if (policy.allowPrivate) {
-                    "Esa dirección no está permitida para servidores MCP"
-                } else {
-                    "Esa URL apunta a la red local o no se puede resolver. Para un servidor de tu red (p. ej. Home Assistant), " +
-                        "el administrador debe activar KAIRO_MCP_ALLOW_PRIVATE=true en el servidor"
-                },
-            )
+            if (!e.blockedAddress) throw e
+            throw InvalidInput(if (policy.allowPrivate) M.MCP_ADDRESS_NOT_ALLOWED else M.MCP_LOCAL_NETWORK)
         }
     }
 
@@ -100,8 +104,8 @@ class McpClient(
                 )
             } ?: emptyList()
         }.getOrElse {
-            log.warn("MCP {}: lista de herramientas inválida: {}", hostOf(url), logSafe(it.message))
-            throw McpException(GENERIC_ERROR)
+            log.warn("MCP {}: invalid tool list: {}", hostOf(url), logSafe(it.message))
+            throw McpException(M.MCP_CONNECT_FAILED)
         }
         toolCache[key] = System.currentTimeMillis() to tools
         return tools
@@ -124,7 +128,7 @@ class McpClient(
         return content.take(12_000)
     }
 
-    /** Olvida las sesiones y herramientas de [url] (de cualquier usuario o credenciales). */
+    /** Forgets the sessions and tools of [url] (for any user or credentials). */
     fun invalidate(url: String) {
         val prefix = urlPrefix(url)
         sessions.keys.removeIf { it.startsWith(prefix) }
@@ -166,7 +170,7 @@ class McpClient(
         })
         if (resp.status == 404) {
             invalidateKey(key)
-            throw McpException("La sesión MCP expiró, vuelve a intentarlo")
+            throw McpException(M.MCP_SESSION_EXPIRED)
         }
         return parse(url, resp)
     }
@@ -177,8 +181,8 @@ class McpClient(
         val target = try {
             SafeUrl.check(url, policy).url
         } catch (e: SafeUrl.UnsafeUrlException) {
-            log.warn("MCP {}: URL rechazada: {}", hostOf(url), logSafe(e.message))
-            throw McpException(GENERIC_ERROR)
+            log.warn("MCP {}: URL rejected: {}", hostOf(url), logSafe(e.message))
+            throw McpException(M.MCP_CONNECT_FAILED)
         }
         return try {
             http.preparePost(target) {
@@ -191,8 +195,8 @@ class McpClient(
             }.execute { resp ->
                 val (bytes, truncated) = resp.bodyAsChannel().readCapped(MAX_RESPONSE_BYTES)
                 if (truncated) {
-                    log.warn("MCP {}: respuesta de más de {} bytes", hostOf(url), MAX_RESPONSE_BYTES)
-                    throw McpException(GENERIC_ERROR)
+                    log.warn("MCP {}: response of more than {} bytes", hostOf(url), MAX_RESPONSE_BYTES)
+                    throw McpException(M.MCP_CONNECT_FAILED)
                 }
                 Reply(resp.status.value, resp.headers[HttpHeaders.ContentType], resp.headers["Mcp-Session-Id"], bytes.toString(Charsets.UTF_8))
             }
@@ -201,16 +205,16 @@ class McpClient(
         } catch (e: McpException) {
             throw e
         } catch (e: Exception) {
-            log.warn("MCP {}: no se pudo conectar: {}", hostOf(url), logSafe(e.message ?: e.javaClass.simpleName))
-            throw McpException(GENERIC_ERROR)
+            log.warn("MCP {}: could not connect: {}", hostOf(url), logSafe(e.message ?: e.javaClass.simpleName))
+            throw McpException(M.MCP_CONNECT_FAILED)
         }
     }
 
-    /** Acepta respuesta JSON directa o un stream SSE con el mensaje JSON-RPC. */
+    /** Accepts a direct JSON response or an SSE stream carrying the JSON-RPC message. */
     private fun parse(url: String, resp: Reply): JsonObject {
         if (resp.status !in 200..299) {
-            log.warn("MCP {}: respondió {}", hostOf(url), resp.status)
-            throw McpException(GENERIC_ERROR)
+            log.warn("MCP {}: responded {}", hostOf(url), resp.status)
+            throw McpException(M.MCP_CONNECT_FAILED)
         }
         val text = resp.body
         if (text.isBlank()) return JsonObject(emptyMap())
@@ -221,14 +225,14 @@ class McpClient(
             } else text
             KairoJson.parseToJsonElement(json).jsonObject
         }.getOrElse {
-            log.warn("MCP {}: respuesta que no es JSON-RPC: {}", hostOf(url), logSafe(it.message))
-            throw McpException(GENERIC_ERROR)
+            log.warn("MCP {}: response that is not JSON-RPC: {}", hostOf(url), logSafe(it.message))
+            throw McpException(M.MCP_CONNECT_FAILED)
         }
         (obj["error"] as? JsonObject)?.let { err ->
             val code = (err["code"] as? JsonPrimitive)?.intOrNull
             log.warn("MCP {}: error {} {}", hostOf(url), code, logSafe((err["message"] as? JsonPrimitive)?.content))
-            // Sólo el código numérico de JSON-RPC (p. ej. -32602 parámetros inválidos): el texto puede venir de cualquier servicio
-            throw McpException("El servidor MCP rechazó la petición" + (code?.let { " (código $it)" } ?: ""))
+            // Only the numeric JSON-RPC code (e.g. -32602 invalid params): the text can come from any service
+            throw if (code != null) McpException(M.MCP_REJECTED_CODE, listOf(code)) else McpException(M.MCP_REJECTED)
         }
         return obj["result"] as? JsonObject ?: JsonObject(emptyMap())
     }
@@ -236,12 +240,13 @@ class McpClient(
     private fun hostOf(url: String): String = logSafe(runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "?", 120)
 
     companion object {
-        const val GENERIC_ERROR = "No se pudo conectar con el servidor MCP"
+        /** English text of the generic connection error (the user sees it in their own language). */
+        val GENERIC_ERROR: String = M.MCP_CONNECT_FAILED.en
         const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
         /**
-         * `KAIRO_MCP_ALLOW_PRIVATE=true`: acepta servidores MCP en la red local / privada (Home Assistant en la LAN).
-         * `KAIRO_MCP_ALLOWED_HOSTS=host1,host2`: hosts exactos que se aceptan siempre (incluso loopback o un servicio de docker).
+         * `KAIRO_MCP_ALLOW_PRIVATE=true`: accepts MCP servers on the local / private network (Home Assistant on the LAN).
+         * `KAIRO_MCP_ALLOWED_HOSTS=host1,host2`: exact hosts that are always accepted (even loopback or a docker service).
          */
         fun policyFromEnv(env: Map<String, String> = System.getenv()): SafeUrl.Policy = SafeUrl.Policy(
             allowPrivate = env["KAIRO_MCP_ALLOW_PRIVATE"]?.trim()?.toBooleanStrictOrNull() ?: false,
@@ -250,7 +255,7 @@ class McpClient(
 
         private fun urlPrefix(url: String) = url.trim() + "\u0000"
 
-        /** Sesión por URL y cabeceras: las credenciales van en las cabeceras, así que no se comparte entre usuarios. */
+        /** Session per URL and headers: credentials travel in the headers, so it is not shared between users. */
         internal fun cacheKey(url: String, headers: Map<String, String>): String =
             urlPrefix(url) + Crypto.sha256(headers.toSortedMap().entries.joinToString("\u0000") { (k, v) -> "${k.lowercase()}\u0001$v" })
     }

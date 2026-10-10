@@ -19,8 +19,8 @@ import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
 /**
- * Push autoalojado sin Firebase con ntfy (https://ntfy.sh, o tu propio servidor ntfy).
- * Es un canal de respaldo: la app recibe los avisos principalmente por su WebSocket y por alarmas locales.
+ * Self-hosted push without Firebase through ntfy (https://ntfy.sh, or your own ntfy server).
+ * It is a backup channel: the app receives notices mainly through its WebSocket and local alarms.
  */
 class NtfyNotifier(private val cfg: AppConfig) {
     private val log = LoggerFactory.getLogger(NtfyNotifier::class.java)
@@ -34,8 +34,8 @@ class NtfyNotifier(private val cfg: AppConfig) {
     val enabled: Boolean get() = cfg.ntfyUrl != null
 
     /**
-     * Publica en [topicOverride] (o en NTFY_TOPIC). NTFY_TOKEN sólo se adjunta con [authenticated]: el token es del
-     * propietario y no debe servir para publicar en temas que elige otro miembro.
+     * Publishes to [topicOverride] (or to NTFY_TOPIC). NTFY_TOKEN is only attached with [authenticated]: the token belongs
+     * to the owner and must not be usable to publish to topics another member chooses.
      */
     suspend fun send(
         topicOverride: String?,
@@ -62,9 +62,9 @@ class NtfyNotifier(private val cfg: AppConfig) {
                 }.toString())
             }.execute { resp ->
                 resp.bodyAsChannel().readCapped(MAX_RESPONSE_BYTES)
-                if (resp.status.value !in 200..299) log.warn("ntfy respondió {}", resp.status.value)
+                if (resp.status.value !in 200..299) log.warn("ntfy responded {}", resp.status.value)
             }
-        }.onFailure { log.warn("ntfy falló: {}", logSafe(it.message)) }
+        }.onFailure { log.warn("ntfy failed: {}", logSafe(it.message)) }
     }
 
     private companion object {

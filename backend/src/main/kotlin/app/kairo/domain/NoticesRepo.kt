@@ -18,7 +18,7 @@ import java.sql.ResultSet
 import java.time.Instant
 import java.util.UUID
 
-/** Aviso para un miembro: algo que la familia compartió, una tarea asignada, un mensaje. */
+/** Notice for a member: something the family shared, an assigned task, a message. */
 @Serializable
 data class Notice(
     val id: UUID,
@@ -33,15 +33,15 @@ data class Notice(
 )
 
 object NoticeKinds {
-    /** Alguien compartió algo nuevo con la familia. */
+    /** Someone shared something new with the family. */
     const val SHARED = "shared"
-    /** Cambió algo compartido que te afecta (un evento movido o cancelado, una tarea completada). */
+    /** Something shared that affects you changed (an event moved or cancelled, a task completed). */
     const val UPDATED = "updated"
-    /** Te asignaron una tarea. */
+    /** You were assigned a task. */
     const val ASSIGNED = "assigned"
-    /** Otro miembro te programó un recordatorio. */
+    /** Another member set a reminder for you. */
     const val REMINDER = "reminder"
-    /** Mensaje directo de la familia ("avísale a todos que la cena está lista"). */
+    /** Direct message from the family ("tell everyone dinner is ready"). */
     const val MESSAGE = "message"
 }
 
@@ -62,7 +62,7 @@ class NoticesRepo(private val db: Db) {
         ) { map(it) }
     }
 
-    /** No leídos de las últimas horas, para que el teléfono los muestre al sincronizar si no llegó el push. */
+    /** Unread from the last hours, so the phone shows them on sync if the push never arrived. */
     suspend fun recentUnread(userId: UUID, since: Instant): List<Notice> = db.read {
         query(
             "select * from notices where user_id = ? and read_at is null and created_at > ? order by created_at limit 50",
@@ -78,7 +78,7 @@ class NoticesRepo(private val db: Db) {
         else exec("update notices set read_at = now() where user_id = ? and read_at is null and id = any(?)", userId, UuidArray(ids))
     }
 
-    /** Limpieza: los avisos viejos ya no sirven. */
+    /** Cleanup: old notices are no longer useful. */
     suspend fun prune() = db.tx { exec("delete from notices where created_at < now() - interval '60 days'") }
 
     private fun map(rs: ResultSet) = Notice(

@@ -6,12 +6,23 @@ import app.kairo.db.instant
 import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
+import app.kairo.services.NoticeText
 import app.kairo.services.Notifier
+import app.kairo.util.Lang
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.say
 import java.sql.ResultSet
 import java.util.UUID
 
-/** Listas con casillas (súper, pendientes, viaje...). Las familiares las ven y editan todos en el hogar. */
-class ListsRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
+/** Checklists (shopping, to-dos, trips...). Family ones are seen and edited by everyone in the household. */
+class ListsRepo(
+    private val db: Db,
+    private val activity: ActivityRepo,
+    private val notifier: Notifier,
+    /** Language of a user, for the default names the server creates. */
+    private val langOf: suspend (UUID) -> Lang = { Lang.DEFAULT },
+) {
 
     suspend fun all(userId: UUID): List<ShoppingList> = db.read {
         query("select * from lists where ${visibleTo()} and deleted_at is null order by shared desc, updated_at desc", userId, userId) { mapList(it) }
@@ -28,8 +39,8 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
         query("select * from list_items where list_id = ? order by checked, sort, created_at", listId) { mapItem(it) }
 
     /**
-     * Busca por nombre tolerando variaciones ("súper", "lista del super", "supermercado").
-     * Si hay una personal y una familiar con el mismo nombre, [preferShared] decide (por defecto, la familiar).
+     * Finds by name, tolerating variations ("shopping list", "the groceries", "súper", "lista del super", "supermercado").
+     * If there is a personal one and a family one with the same name, [preferShared] decides (the family one by default).
      */
     suspend fun findByName(userId: UUID, name: String, preferShared: Boolean = true): ShoppingList? {
         val lists = all(userId).sortedBy { if (it.shared == preferShared) 0 else 1 }
@@ -38,19 +49,20 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
     }
 
     suspend fun create(userId: UUID, name: String, icon: String? = null, source: String, shared: Boolean = false): ShoppingList {
+        val lang = langOf(userId)
         val list = db.tx {
             val id = one(
                 "insert into lists(user_id, household_id, shared, name, icon) values (?, $HOUSEHOLD_OF, ?, ?, ?) returning id",
-                userId, userId, shared, prettyName(name), icon,
+                userId, userId, shared, prettyName(name, lang), icon,
             ) { it.uuid("id") }!!
             getTx(userId, id)!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.LIST, list.id, "Lista: ${list.name}", source, shared = list.shared)
+        activity.record(userId, Kinds.CREATED, EntityTypes.LIST, list.id, say(M.ACT_LIST, list.name), source, shared = list.shared)
         if (list.shared) announce(userId, list)
         return list
     }
 
-    /** Usa la lista que ya existe; si piden una familiar y sólo hay una personal propia con ese nombre, la comparte. */
+    /** Uses the list that already exists; if a family one is requested and there is only a personal one of the user's own with that name, it shares it. */
     suspend fun findOrCreate(userId: UUID, name: String, source: String, shared: Boolean = false): ShoppingList {
         val found = findByName(userId, name, preferShared = true)
         return when {
@@ -63,7 +75,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
     suspend fun rename(userId: UUID, id: UUID, name: String?, icon: String?, shared: Boolean? = null): ShoppingList? {
         val current = get(userId, id) ?: return null
         if (shared != null && shared != current.shared && current.ownerId != userId) {
-            throw FamilyException("Solo quien creó la lista puede cambiar si se comparte")
+            throw FamilyException(M.ONLY_OWNER_SHARE_LIST)
         }
         val list = db.tx {
             exec(
@@ -94,11 +106,11 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
             exec("update lists set updated_at = now() where id = ?", listId)
             getTx(userId, listId)
         } ?: return null
-        activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, "${list.name}: + ${clean.joinToString(", ")}", source, shared = list.shared)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, say(M.ACT_LIST_ITEMS_ADDED, list.name, clean.joinToString(", ")), source, shared = list.shared)
         return list
     }
 
-    /** Marca/desmarca elementos por texto aproximado. Devuelve los que no encontró. */
+    /** Checks/unchecks items by approximate text. Returns the ones it did not find. */
     suspend fun setChecked(userId: UUID, listId: UUID, texts: List<String>, checked: Boolean, source: String): Pair<ShoppingList?, List<String>> {
         val missing = ArrayList<String>()
         val list = db.tx {
@@ -111,7 +123,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
             exec("update lists set updated_at = now() where id = ?", listId)
             getTx(userId, listId)
         }
-        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, "${it.name}: ${if (checked) "marcado" else "desmarcado"} ${texts.joinToString(", ")}", source, shared = it.shared) }
+        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, say(if (checked) M.ACT_LIST_CHECKED else M.ACT_LIST_UNCHECKED, it.name, texts.joinToString(", ")), source, shared = it.shared) }
         return list to missing
     }
 
@@ -127,7 +139,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
             exec("update lists set updated_at = now() where id = ?", listId)
             getTx(userId, listId)
         }
-        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, "${it.name}: quitado ${texts.joinToString(", ")}", source, shared = it.shared) }
+        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, say(M.ACT_LIST_REMOVED, it.name, texts.joinToString(", ")), source, shared = it.shared) }
         return list to missing
     }
 
@@ -138,7 +150,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
             exec("update lists set updated_at = now() where id = ?", listId)
             getTx(userId, listId)
         }
-        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, "${it.name}: limpiados los marcados", source, shared = it.shared) }
+        list?.let { activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, say(M.ACT_LIST_CLEARED, it.name), source, shared = it.shared) }
         return list
     }
 
@@ -150,7 +162,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
         )
         exec("update lists set updated_at = now() where id = ?", listId)
         getTx(userId, listId)
-    }.also { if (it != null) activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, "${it.name}: elemento actualizado", "dashboard", shared = it.shared) }
+    }.also { if (it != null) activity.record(userId, Kinds.UPDATED, EntityTypes.LIST, listId, say(M.ACT_LIST_ITEM_UPDATED, it.name), "dashboard", shared = it.shared) }
 
     suspend fun deleteItem(userId: UUID, listId: UUID, itemId: UUID): ShoppingList? = db.tx {
         getTx(userId, listId) ?: return@tx null
@@ -161,7 +173,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
     suspend fun delete(userId: UUID, id: UUID, source: String): ShoppingList? {
         val list = get(userId, id) ?: return null
         db.tx { exec("update lists set deleted_at = now() where ${visibleTo()} and id = ?", userId, userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.LIST, id, "Lista eliminada: ${list.name}", source, shared = list.shared)
+        activity.record(userId, Kinds.DELETED, EntityTypes.LIST, id, say(M.ACT_LIST_DELETED, list.name), source, shared = list.shared)
         return list
     }
 
@@ -169,7 +181,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
         db.tx { exec("update lists set deleted_at = null where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
     private suspend fun announce(userId: UUID, list: ShoppingList) =
-        notifier.everyone(userId, NoticeKinds.SHARED, "${notifier.firstName(userId)} compartió una lista", list.name, EntityTypes.LIST, list.id)
+        notifier.everyone(userId, NoticeKinds.SHARED, NoticeText(say(M.NOTICE_LIST_SHARED, notifier.who(userId)), Plain(list.name)), EntityTypes.LIST, list.id)
 
     private fun mapList(rs: ResultSet) = ShoppingList(
         id = rs.uuid("id"),
@@ -185,14 +197,15 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
     private fun mapItem(rs: ResultSet) = ListItem(rs.uuid("id"), rs.str("text"), rs.getBoolean("checked"), rs.getDouble("sort"), rs.instant("created_at"))
 
     companion object {
-        /** Nombre para mostrar: una línea, máximo [Text.NAME_MAX] caracteres ("lista del súper" -> "Supermercado"). */
-        fun prettyName(raw: String): String {
+        /**
+         * Display name: one line, at most [Text.NAME_MAX] characters. The usual ways of saying "shopping list"
+         * ("lista del súper", "groceries", "supermarket"...) become the default name of [lang]
+         * ("Shopping list" / "Supermercado").
+         */
+        fun prettyName(raw: String, lang: Lang = Lang.DEFAULT): String {
             val n = Text.cleanName(raw, Int.MAX_VALUE).removePrefix("lista de ").removePrefix("Lista de ").removePrefix("lista del ").removePrefix("Lista del ")
-            val pretty = when (Text.normalize(n)) {
-                "super", "supermercado", "mercado", "compras" -> "Supermercado"
-                else -> n.trim().replaceFirstChar { it.uppercase() }
-            }
-            return Text.cleanName(pretty).ifEmpty { "Lista" }
+            val pretty = if (Text.isShoppingAlias(n)) M.DEFAULT_LIST_NAME.t(lang) else n.trim().replaceFirstChar { it.uppercase() }
+            return Text.cleanName(pretty).ifEmpty { M.DEFAULT_LIST_FALLBACK.t(lang) }
         }
     }
 }

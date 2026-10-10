@@ -8,7 +8,13 @@ import app.kairo.db.intList
 import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
+import app.kairo.services.NoticeText
 import app.kairo.services.Notifier
+import app.kairo.util.Lang
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.localized
+import app.kairo.util.say
 import app.kairo.util.humanDate
 import app.kairo.util.humanDateTime
 import app.kairo.util.zoneOf
@@ -31,7 +37,7 @@ data class EventPatch(
     val shared: Boolean? = null,
 )
 
-/** Datos de un evento leído de Google Calendar. */
+/** Data of an event read from Google Calendar. */
 data class GoogleEventData(
     val googleId: String,
     val calendarId: String,
@@ -49,7 +55,7 @@ data class GoogleEventData(
 
 class EventsRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
 
-    /** Eventos en un rango (los propios y los familiares), expandiendo los recurrentes creados en Kairo. */
+    /** Events in a range (the user's own and the family's), expanding the recurring ones created in Kairo. */
     suspend fun range(userId: UUID, from: Instant, to: Instant): List<Event> {
         val rows = db.read {
             query(
@@ -74,7 +80,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
 
     suspend fun get(userId: UUID, id: UUID): Event? = db.read { getTx(userId, id) }
 
-    /** Avisos de eventos cuya hora de aviso cae en [from, to). */
+    /** Alerts of events whose alert time falls in [from, to). */
     suspend fun alerts(userId: UUID, from: Instant, to: Instant): List<EventAlert> =
         range(userId, from, to.plusSeconds(8L * 86400))
             .filter { !it.allDay }
@@ -109,24 +115,24 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
             ) { it.uuid("id") }!!
             getTx(userId, id)!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.EVENT, event.id, "Evento: ${event.title}", source, shared = event.shared)
+        activity.record(userId, Kinds.CREATED, EntityTypes.EVENT, event.id, say(M.ACT_EVENT, event.title), source, shared = event.shared)
         if (event.shared) {
-            notifier.everyone(userId, NoticeKinds.SHARED, "${notifier.firstName(userId)} agregó un evento familiar", describe(event), EntityTypes.EVENT, event.id)
+            notifier.everyone(userId, NoticeKinds.SHARED, NoticeText(say(M.NOTICE_EVENT_ADDED, notifier.who(userId)), describe(event)), EntityTypes.EVENT, event.id)
         }
         return event
     }
 
-    /** "Cita médica de Sofía · jueves 15 de octubre a las 10:00 · Clínica" */
-    private fun describe(e: Event): String {
+    /** "Sofía's checkup · Thursday, October 15 at 10:00 AM · Clinic", in the reader's language. */
+    private fun describe(e: Event) = localized { lang ->
         val zone = zoneOf(e.timezone)
-        val whenText = if (e.allDay) humanDate(e.startAt.atZone(zone).toLocalDate()) + ", todo el día" else humanDateTime(e.startAt, zone)
-        return listOf(e.title, whenText, e.location).filter { it.isNotBlank() }.joinToString(" · ")
+        val whenText = if (e.allDay) M.WHEN_ALL_DAY.t(lang, humanDate(e.startAt.atZone(zone).toLocalDate(), lang = lang)) else humanDateTime(e.startAt, zone, lang = lang)
+        listOf(e.title, whenText, e.location).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
     suspend fun update(userId: UUID, id: UUID, patch: EventPatch, source: String): Event? {
         val c = get(userId, id) ?: return null
         if (patch.shared != null && patch.shared != c.shared && c.ownerId != userId) {
-            throw FamilyException("Solo quien creó el evento puede cambiar si se comparte")
+            throw FamilyException(M.ONLY_OWNER_SHARE_EVENT)
         }
         val start = patch.startAt ?: c.startAt
         var end = patch.endAt ?: if (patch.startAt != null) start.plus(Duration.between(c.startAt, c.endAt)) else c.endAt
@@ -143,13 +149,13 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
             )
             getTx(userId, id)
         } ?: return null
-        activity.record(userId, Kinds.UPDATED, EntityTypes.EVENT, id, "Evento editado: ${event.title}", source, shared = event.shared || c.shared)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.EVENT, id, say(M.ACT_EVENT_EDITED, event.title), source, shared = event.shared || c.shared)
         if (event.shared) {
-            val name = notifier.firstName(userId)
+            val who = notifier.who(userId)
             when {
-                !c.shared -> notifier.everyone(userId, NoticeKinds.SHARED, "$name agregó un evento familiar", describe(event), EntityTypes.EVENT, id)
+                !c.shared -> notifier.everyone(userId, NoticeKinds.SHARED, NoticeText(say(M.NOTICE_EVENT_ADDED, who), describe(event)), EntityTypes.EVENT, id)
                 event.startAt != c.startAt || event.allDay != c.allDay ->
-                    notifier.everyone(userId, NoticeKinds.UPDATED, "$name cambió un evento familiar", describe(event), EntityTypes.EVENT, id)
+                    notifier.everyone(userId, NoticeKinds.UPDATED, NoticeText(say(M.NOTICE_EVENT_CHANGED, who), describe(event)), EntityTypes.EVENT, id)
             }
         }
         return event
@@ -158,9 +164,9 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
     suspend fun delete(userId: UUID, id: UUID, source: String): Event? {
         val c = get(userId, id) ?: return null
         db.tx { exec("update events set deleted_at = now(), dirty = true, updated_at = now() where ${visibleTo()} and id = ?", userId, userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.EVENT, id, "Evento eliminado: ${c.title}", source, shared = c.shared)
+        activity.record(userId, Kinds.DELETED, EntityTypes.EVENT, id, say(M.ACT_EVENT_DELETED, c.title), source, shared = c.shared)
         if (c.shared) {
-            notifier.everyone(userId, NoticeKinds.UPDATED, "${notifier.firstName(userId)} canceló un evento familiar", describe(c), EntityTypes.EVENT, id)
+            notifier.everyone(userId, NoticeKinds.UPDATED, NoticeText(say(M.NOTICE_EVENT_CANCELLED, notifier.who(userId)), describe(c)), EntityTypes.EVENT, id)
         }
         return c
     }
@@ -168,7 +174,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
     suspend fun restore(userId: UUID, id: UUID): Boolean =
         db.tx { exec("update events set deleted_at = null, dirty = true, updated_at = now() where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
-    // --- Sincronización con Google ---
+    // --- Google sync ---
 
     data class DirtyEvent(val event: Event, val deleted: Boolean, val googleCalendarId: String?, val googleEtag: String?)
 
@@ -187,7 +193,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
 
     suspend fun purge(id: UUID) = db.tx { exec("delete from events where id = ?", id) }
 
-    /** Inserta o actualiza un evento venido de Google. No pisa cambios locales pendientes. */
+    /** Inserts or updates an event that came from Google. It does not overwrite pending local changes. */
     suspend fun upsertFromGoogle(userId: UUID, g: GoogleEventData): String = db.tx {
         val existing = one("select id, dirty from events where user_id = ? and google_event_id = ?", userId, g.googleId) {
             it.uuid("id") to it.getBoolean("dirty")
@@ -206,7 +212,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
                 ); "updated"
             }
             else -> {
-                // household_id es obligatorio desde V2; lo que llega de Google es personal (shared = false)
+                // household_id is mandatory since V2; what comes from Google is personal (shared = false)
                 exec(
                     """insert into events(user_id, household_id, shared, title, description, location, start_at, end_at, all_day, timezone, source,
                        google_event_id, google_calendar_id, google_etag, google_recurring_id, dirty)

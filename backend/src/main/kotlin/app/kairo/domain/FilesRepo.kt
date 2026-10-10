@@ -9,7 +9,7 @@ import java.util.UUID
 
 class StoredFile(val id: UUID, val userId: UUID, val contentType: String, val name: String?, val bytes: ByteArray)
 
-/** Archivos pequeños (imágenes compartidas o generadas) guardados en Postgres y servidos con URL firmada. */
+/** Small files (shared or generated images) stored in Postgres and served with a signed URL. */
 class FilesRepo(private val db: Db, private val crypto: Crypto) {
 
     suspend fun store(userId: UUID, bytes: ByteArray, contentType: String, name: String? = null): UUID = db.tx {
@@ -25,7 +25,7 @@ class FilesRepo(private val db: Db, private val crypto: Crypto) {
         }
     }
 
-    /** URL relativa válida durante 30 días; los clientes anteponen la URL base del servidor. */
+    /** Relative URL valid for 30 days; clients prepend the server's base URL. */
     fun signedUrl(id: UUID, ttlSeconds: Long = 30L * 24 * 3600): String {
         val exp = Instant.now().epochSecond + ttlSeconds
         return "/api/files/$id?exp=$exp&sig=${crypto.sign("$id:$exp")}"

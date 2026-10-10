@@ -1,13 +1,13 @@
 package app.kairo.domain
 
 /**
- * Condición SQL de visibilidad: filas del usuario más las que alguien de su familia compartió.
- * Usa dos parámetros, en orden: `userId, userId`. [a] es el prefijo de la tabla (`"t."` para `from tasks t`).
+ * SQL visibility condition: the user's rows plus the ones someone in their family shared.
+ * It uses two parameters, in order: `userId, userId`. [a] is the table prefix (`"t."` for `from tasks t`).
  *
- * Lo personal sigue siendo privado: ni el administrador de la familia ve lo que no está compartido.
+ * Personal items stay private: not even the family administrator sees what is not shared.
  */
 internal fun visibleTo(a: String = ""): String =
     "(${a}user_id = ? or (${a}shared and ${a}household_id = $HOUSEHOLD_OF))"
 
-/** Hogar de un usuario (un parámetro: `userId`). */
+/** A user's household (one parameter: `userId`). */
 internal const val HOUSEHOLD_OF = "(select hh.household_id from users hh where hh.id = ?)"

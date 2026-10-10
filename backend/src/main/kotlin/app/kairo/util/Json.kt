@@ -27,7 +27,7 @@ val KairoJson = Json {
     isLenient = true
 }
 
-/** JSON de la API pública: nulos explícitos para que los clientes vean todos los campos. */
+/** Public API JSON: explicit nulls so clients see every field. */
 val ApiJson = Json(KairoJson) { explicitNulls = true }
 
 object InstantSerializer : KSerializer<Instant> {
@@ -48,14 +48,14 @@ object UUIDSerializer : KSerializer<UUID> {
     override fun deserialize(decoder: Decoder): UUID = UUID.fromString(decoder.decodeString())
 }
 
-/** Acepta ISO-8601 con zona (`2026-10-11T09:00:00-05:00`, `...Z`). */
+/** Accepts ISO-8601 with zone (`2026-10-11T09:00:00-05:00`, `...Z`). */
 fun parseInstant(s: String): Instant = try {
     Instant.parse(s)
 } catch (_: Exception) {
     java.time.OffsetDateTime.parse(s).toInstant()
 }
 
-// --- Acceso cómodo a JsonObject (argumentos de herramientas, settings) ---
+// --- Convenient JsonObject access (tool arguments, settings) ---
 
 fun JsonObject.str(key: String): String? {
     val v = this[key]

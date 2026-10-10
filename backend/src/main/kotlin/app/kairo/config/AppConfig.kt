@@ -1,8 +1,10 @@
 package app.kairo.config
 
+import app.kairo.util.Lang
+import app.kairo.util.M
 import java.util.Base64
 
-/** Configuración leída de variables de entorno. Ver `.env.example` en la raíz del repo. */
+/** Configuration read from environment variables. See `.env.example` at the repo root. */
 data class AppConfig(
     val port: Int,
     val publicUrl: String,
@@ -24,19 +26,24 @@ data class AppConfig(
     val ntfyToken: String?,
     val corsOrigins: List<String>,
     val schedulersEnabled: Boolean,
-    /** Permite endpoints de push http:// (sólo pruebas o un ntfy en la red local). Por defecto, sólo https. */
+    /** Allows http:// push endpoints (tests only, or an ntfy on the local network). Https only by default. */
     val pushAllowHttp: Boolean = false,
-    /** Push nativo de Apple (APNs), opcional: id de la clave .p8, Team ID y bundle id de la app de iOS. */
+    /**
+     * Language for server text when nobody's preference is known: the owner account created at first start,
+     * and `auto` users outside a request. `en` by default (KAIRO_DEFAULT_LANGUAGE=es for Spanish).
+     */
+    val defaultLanguage: Lang = Lang.DEFAULT,
+    /** Apple native push (APNs), optional: .p8 key id, Team ID and the iOS app's bundle id. */
     val apnsKeyId: String? = null,
     val apnsTeamId: String? = null,
     val apnsTopic: String? = null,
-    /** Contenido PEM de la clave .p8 (APNS_PRIVATE_KEY, admite "\n" literales) o ruta del archivo (APNS_PRIVATE_KEY_FILE). */
+    /** PEM content of the .p8 key (APNS_PRIVATE_KEY, accepts literal "\n") or the file path (APNS_PRIVATE_KEY_FILE). */
     val apnsPrivateKey: String? = null,
     val apnsPrivateKeyFile: String? = null,
 ) {
     val googleEnabled: Boolean get() = !googleClientId.isNullOrBlank() && !googleClientSecret.isNullOrBlank()
 
-    /** Están todos los datos de APNs (la clave se valida al arrancar en ApnsService). */
+    /** All the APNs data is present (the key itself is validated at startup in ApnsService). */
     val apnsConfigured: Boolean
         get() = !apnsKeyId.isNullOrBlank() && !apnsTeamId.isNullOrBlank() && !apnsTopic.isNullOrBlank() &&
             (!apnsPrivateKey.isNullOrBlank() || !apnsPrivateKeyFile.isNullOrBlank())
@@ -44,7 +51,7 @@ data class AppConfig(
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
             fun req(name: String): String =
-                env[name]?.takeIf { it.isNotBlank() } ?: error("Falta la variable de entorno $name")
+                env[name]?.takeIf { it.isNotBlank() } ?: error("Missing environment variable $name")
             fun opt(name: String): String? = env[name]?.takeIf { it.isNotBlank() }
 
             val key = encryptionKeyFrom(req("KAIRO_ENCRYPTION_KEY"))
@@ -52,6 +59,9 @@ data class AppConfig(
             jwtSecretProblem(jwt)?.let { error(it) }
             val ownerPassword = opt("KAIRO_OWNER_PASSWORD")
             ownerPasswordProblem(ownerPassword)?.let { error(it) }
+            val defaultLanguage = opt("KAIRO_DEFAULT_LANGUAGE")?.let {
+                Lang.fromCode(it) ?: error("KAIRO_DEFAULT_LANGUAGE must be en or es (got '$it')")
+            } ?: Lang.DEFAULT
 
             return AppConfig(
                 port = opt("KAIRO_PORT")?.toInt() ?: 8080,
@@ -65,7 +75,7 @@ data class AppConfig(
                 encryptionKey = key,
                 ownerEmail = opt("KAIRO_OWNER_EMAIL"),
                 ownerPassword = ownerPassword,
-                ownerName = opt("KAIRO_OWNER_NAME") ?: "Tú",
+                ownerName = opt("KAIRO_OWNER_NAME") ?: M.DEFAULT_OWNER_NAME.t(defaultLanguage),
                 defaultTimezone = opt("KAIRO_TIMEZONE") ?: "America/Bogota",
                 googleClientId = opt("GOOGLE_CLIENT_ID"),
                 googleClientSecret = opt("GOOGLE_CLIENT_SECRET"),
@@ -75,6 +85,7 @@ data class AppConfig(
                 corsOrigins = opt("KAIRO_CORS_ORIGINS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
                 schedulersEnabled = opt("KAIRO_SCHEDULERS")?.toBooleanStrictOrNull() ?: true,
                 pushAllowHttp = opt("KAIRO_PUSH_ALLOW_HTTP")?.toBooleanStrictOrNull() ?: false,
+                defaultLanguage = defaultLanguage,
                 apnsKeyId = opt("APNS_KEY_ID")?.trim(),
                 apnsTeamId = opt("APNS_TEAM_ID")?.trim(),
                 apnsTopic = opt("APNS_TOPIC")?.trim(),
@@ -83,55 +94,61 @@ data class AppConfig(
             )
         }
 
-        /** Valores de ejemplo de `.env.example`: si siguen ahí, cualquiera que lea el repo conoce el secreto. */
-        private val JWT_PLACEHOLDERS = setOf("cambia-esto-por-64-caracteres-hex")
-        private val ENCRYPTION_KEY_PLACEHOLDERS = setOf("cambia-esto-por-32-bytes-en-base64=")
-        private val OWNER_PASSWORD_PLACEHOLDERS = setOf("una-contraseña-larga")
+        /**
+         * Example values of `.env.example` (current English ones and the former Spanish ones): if they are still
+         * there, anyone who reads the repo knows the secret.
+         */
+        private val JWT_PLACEHOLDERS = setOf("change-this-to-64-hex-characters", "cambia-esto-por-64-caracteres-hex")
+        private val ENCRYPTION_KEY_PLACEHOLDERS = setOf("change-this-to-32-bytes-in-base64=", "cambia-esto-por-32-bytes-en-base64=")
+        private val OWNER_PASSWORD_PLACEHOLDERS = setOf("a-long-password-here", "una-contraseña-larga")
+        private val PLACEHOLDER_MARKERS = listOf("change-this", "cambia-esto")
 
         private val HEX = Regex("^[0-9a-fA-F]+$")
         private val BASE64 = Regex("^[A-Za-z0-9+/_-]+=*$")
 
+        private fun looksLikePlaceholder(s: String): Boolean = PLACEHOLDER_MARKERS.any { s.contains(it, ignoreCase = true) }
+
         /**
-         * Motivo por el que [secret] no sirve como KAIRO_JWT_SECRET, o null si sirve. Se exigen 256 bits
-         * aleatorios: 64 caracteres hexadecimales (`openssl rand -hex 32`, lo que usa scripts/generate-env.sh)
-         * o 43 en base64 (`openssl rand -base64 32`).
+         * Why [secret] is not usable as KAIRO_JWT_SECRET, or null if it is. 256 random bits are required:
+         * 64 hexadecimal characters (`openssl rand -hex 32`, what scripts/generate-env.sh uses)
+         * or 43 in base64 (`openssl rand -base64 32`).
          */
         fun jwtSecretProblem(secret: String): String? {
             val s = secret.trim()
-            val fix = "Genera uno con: openssl rand -hex 32 (o ejecuta scripts/generate-env.sh)."
-            if (s in JWT_PLACEHOLDERS || s.contains("cambia", ignoreCase = true)) {
-                return "KAIRO_JWT_SECRET todavía tiene el valor de ejemplo de .env.example. $fix"
+            val fix = "Generate one with: openssl rand -hex 32 (or run scripts/generate-env.sh)."
+            if (s in JWT_PLACEHOLDERS || looksLikePlaceholder(s)) {
+                return "KAIRO_JWT_SECRET still has the example value from .env.example. $fix"
             }
             val strongHex = HEX.matches(s) && s.length >= 64
             val strongBase64 = !HEX.matches(s) && BASE64.matches(s) && s.trimEnd('=').length >= 43
             if (!strongHex && !strongBase64) {
-                return "KAIRO_JWT_SECRET es demasiado corto o no parece aleatorio: usa al menos 64 caracteres " +
-                    "hexadecimales o 43 en base64 (32 bytes aleatorios). $fix"
+                return "KAIRO_JWT_SECRET is too short or does not look random: use at least 64 " +
+                    "hexadecimal characters or 43 in base64 (32 random bytes). $fix"
             }
-            // Un secreto aleatorio de ese largo usa muchos símbolos distintos; "aaaa…" o "0000…" no lo es
-            if (s.toSet().size < 10) return "KAIRO_JWT_SECRET no parece aleatorio (repite muy pocos caracteres). $fix"
+            // A random secret of that length uses many different symbols; "aaaa..." or "0000..." does not
+            if (s.toSet().size < 10) return "KAIRO_JWT_SECRET does not look random (it repeats very few characters). $fix"
             return null
         }
 
-        /** Decodifica KAIRO_ENCRYPTION_KEY (32 bytes en base64) con mensajes claros si no sirve. */
+        /** Decodes KAIRO_ENCRYPTION_KEY (32 bytes in base64) with clear messages if it is not usable. */
         fun encryptionKeyFrom(raw: String): ByteArray {
             val s = raw.trim()
-            val fix = "Genera una con: openssl rand -base64 32 (o ejecuta scripts/generate-env.sh)."
-            if (s in ENCRYPTION_KEY_PLACEHOLDERS || s.contains("cambia", ignoreCase = true)) {
-                error("KAIRO_ENCRYPTION_KEY todavía tiene el valor de ejemplo de .env.example. $fix")
+            val fix = "Generate one with: openssl rand -base64 32 (or run scripts/generate-env.sh)."
+            if (s in ENCRYPTION_KEY_PLACEHOLDERS || looksLikePlaceholder(s)) {
+                error("KAIRO_ENCRYPTION_KEY still has the example value from .env.example. $fix")
             }
             val key = runCatching { Base64.getDecoder().decode(s) }.getOrNull()
-                ?: error("KAIRO_ENCRYPTION_KEY no es base64 válido. $fix")
-            if (key.size != 32) error("KAIRO_ENCRYPTION_KEY debe ser de 32 bytes en base64 (tiene ${key.size}). $fix")
+                ?: error("KAIRO_ENCRYPTION_KEY is not valid base64. $fix")
+            if (key.size != 32) error("KAIRO_ENCRYPTION_KEY must be 32 bytes in base64 (it has ${key.size}). $fix")
             return key
         }
 
-        /** La contraseña inicial del propietario no puede ser la de ejemplo (sólo se usa en el primer arranque). */
+        /** The owner's initial password cannot be the example one (it is only used on first start). */
         fun ownerPasswordProblem(password: String?): String? =
             if (password != null && password.trim() in OWNER_PASSWORD_PLACEHOLDERS) {
-                "KAIRO_OWNER_PASSWORD todavía tiene el valor de ejemplo de .env.example. Pon una contraseña propia " +
-                    "(o ejecuta scripts/generate-env.sh). Si la cuenta del propietario ya existe, puedes borrar la variable; " +
-                    "y si entraste con esa contraseña, cámbiala en Ajustes > Seguridad."
+                "KAIRO_OWNER_PASSWORD still has the example value from .env.example. Set a password of your own " +
+                    "(or run scripts/generate-env.sh). If the owner account already exists, you can delete the variable; " +
+                    "and if you signed in with that password, change it in Settings > Security."
             } else null
     }
 }

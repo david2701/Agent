@@ -25,9 +25,9 @@ import kotlin.test.assertTrue
 
 class SafeUrlTest {
 
-    private fun ip(s: String): InetAddress = InetAddress.getByName(s) // sólo literales: no usa DNS
+    private fun ip(s: String): InetAddress = InetAddress.getByName(s) // literals only: no DNS
 
-    /** Resolución falsa para nombres de prueba (los literales IP se resuelven sin DNS). */
+    /** Fake resolution for test names (IP literals resolve without DNS). */
     private fun resolver(table: Map<String, List<String>>): (String) -> List<InetAddress> = { host ->
         table[host]?.map(::ip) ?: if (host.any { it.isLetter() } && !host.contains(':')) throw java.net.UnknownHostException(host) else listOf(ip(host))
     }
@@ -35,7 +35,7 @@ class SafeUrlTest {
     private val noDns = resolver(emptyMap())
 
     private fun blocked(url: String, policy: Policy = Policy(), dns: (String) -> List<InetAddress> = noDns) {
-        assertFailsWith<SafeUrl.UnsafeUrlException>("debía rechazar $url") { SafeUrl.checkBlocking(url, policy, dns) }
+        assertFailsWith<SafeUrl.UnsafeUrlException>("should have rejected $url") { SafeUrl.checkBlocking(url, policy, dns) }
     }
 
     private fun allowed(url: String, policy: Policy = Policy(), dns: (String) -> List<InetAddress> = noDns) {
@@ -43,7 +43,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `clasifica IPv4 especiales`() {
+    fun `classifies special IPv4`() {
         mapOf(
             "8.8.8.8" to Kind.PUBLIC, "1.1.1.1" to Kind.PUBLIC, "172.32.0.1" to Kind.PUBLIC, "100.128.0.1" to Kind.PUBLIC,
             "100.63.255.255" to Kind.PUBLIC, "192.169.0.1" to Kind.PUBLIC, "223.255.255.254" to Kind.PUBLIC,
@@ -58,7 +58,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `clasifica IPv6 especiales y formas que esconden IPv4`() {
+    fun `classifies special IPv6 and forms that hide IPv4`() {
         mapOf(
             "2606:4700:4700::1111" to Kind.PUBLIC, "2001:4860:4860::8888" to Kind.PUBLIC,
             "64:ff9b::808:808" to Kind.PUBLIC, // NAT64 de 8.8.8.8
@@ -76,7 +76,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `rechaza direcciones privadas, locales y reservadas en la URL`() {
+    fun `rejects private, local and reserved addresses in the URL`() {
         listOf(
             "http://127.0.0.1/", "http://127.0.0.1:5432/", "https://10.1.2.3/", "http://172.20.0.2:8080/", "http://192.168.0.1/",
             "http://100.64.1.1/", "http://169.254.169.254/latest/meta-data/", "http://0.0.0.0:8080/", "http://255.255.255.255/",
@@ -86,7 +86,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `acepta direcciones publicas`() {
+    fun `accepts public addresses`() {
         listOf(
             "https://8.8.8.8/", "http://1.1.1.1:8080/ruta?q=1", "https://[2606:4700:4700::1111]/", "http://[64:ff9b::808:808]/",
         ).forEach { allowed(it) }
@@ -96,7 +96,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `rechaza trucos de IP en decimal, octal y hexadecimal`() {
+    fun `rejects decimal, octal and hexadecimal IP tricks`() {
         listOf(
             "http://2130706433/", "http://0x7f.1/", "http://0x7f000001/", "http://0177.0.0.1/", "http://017700000001/",
             "http://127.1/", "http://127.0.1/", "http://0x7f.0x0.0x0.0x1/", "http://00000127.0.0.1/", "http://127.000.000.001/",
@@ -105,7 +105,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `rechaza usuario en la URL y esquemas que no son http`() {
+    fun `rejects credentials in the URL and non-http schemes`() {
         listOf(
             "http://good.com@127.0.0.1/", "http://user:pass@8.8.8.8/", "http://good.com:80@169.254.169.254/",
             "ftp://8.8.8.8/", "file:///etc/passwd", "gopher://8.8.8.8:70/", "javascript:alert(1)", "dict://8.8.8.8:11211/",
@@ -116,15 +116,15 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `el fragmento o la consulta no cambian el host`() {
-        // El host real es 127.0.0.1 para Ktor y para java.net.URI
+    fun `fragment or query do not change the host`() {
+        // The real host is 127.0.0.1 for Ktor and for java.net.URI
         blocked("http://127.0.0.1#@ejemplo.com/")
         blocked("http://127.0.0.1?@ejemplo.com/")
         blocked("http://127.0.0.1/@ejemplo.com")
     }
 
     @Test
-    fun `nombres internos de docker y localhost siempre bloqueados`() {
+    fun `docker internal names and localhost are always blocked`() {
         val dns = resolver(
             mapOf(
                 "db" to listOf("172.18.0.2"), "kairo" to listOf("172.18.0.3"), "ntfy" to listOf("172.18.0.4"),
@@ -140,13 +140,13 @@ class SafeUrlTest {
             blocked(it, dns = dns)
             blocked(it, private, dns)
         }
-        // Sólo si el operador lo permite explícitamente
+        // Only if the operator allows it explicitly
         allowed("http://ntfy/", Policy(trustedHosts = setOf("ntfy")), dns)
         allowed("http://localhost:8123/", Policy(trustedHosts = setOf("localhost")), dns)
     }
 
     @Test
-    fun `todas las direcciones del nombre deben ser publicas`() {
+    fun `all the addresses of the name must be public`() {
         val dns = resolver(
             mapOf(
                 "mixto.com" to listOf("93.184.215.14", "10.0.0.5"),
@@ -159,7 +159,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `allowPrivate acepta la LAN pero nunca loopback ni enlace local`() {
+    fun `allowPrivate accepts the LAN but never loopback or link-local`() {
         val private = Policy(allowPrivate = true)
         val dns = resolver(mapOf("homeassistant" to listOf("192.168.1.20"), "ha.casa.lan" to listOf("192.168.1.20", "fd00::20")))
         listOf(
@@ -168,24 +168,24 @@ class SafeUrlTest {
         ).forEach { allowed(it, private, dns) }
         listOf("http://127.0.0.1:8123/", "http://[::1]/", "http://169.254.169.254/", "http://[fe80::1]/", "http://0.0.0.0/", "http://2130706433/")
             .forEach { blocked(it, private, dns) }
-        // Sin allowPrivate, ni el nombre de una sola etiqueta ni su IP
+        // Without allowPrivate, neither the single-label name nor its IP
         blocked("http://homeassistant:8123/", dns = dns)
         blocked("http://ha.casa.lan:8123/", dns = dns)
     }
 
     @Test
-    fun `los hosts de confianza no se resuelven`() {
+    fun `trusted hosts are not resolved`() {
         val policy = Policy(trustedHosts = setOf("ntfy.casa.lan", "NTFY.example.com."))
-        val explode: (String) -> List<InetAddress> = { error("no debía resolver $it") }
+        val explode: (String) -> List<InetAddress> = { error("should not have resolved $it") }
         val checked = SafeUrl.checkBlocking("https://ntfy.casa.lan/upAbc?up=1", policy, explode)
         assertTrue(checked.trusted)
         SafeUrl.checkBlocking("https://ntfy.example.com/upAbc", policy, explode)
-        // Otro host, aunque sea un subdominio, no es de confianza
+        // Another host, even a subdomain, is not trusted
         blocked("https://x.ntfy.casa.lan/", policy, resolver(mapOf("x.ntfy.casa.lan" to listOf("10.0.0.9"))))
     }
 
     @Test
-    fun `readCapped corta sin leer todo`() = runBlocking {
+    fun `readCapped cuts without reading everything`() = runBlocking {
         val data = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
         val (cut, truncated) = ByteReadChannel(data).readCapped(512 * 1024)
         assertEquals(512 * 1024, cut.size)
@@ -200,14 +200,14 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `logSafe escapa saltos de linea`() {
+    fun `logSafe escapes line breaks`() {
         assertEquals("a\\r\\nINFO falso", logSafe("a\r\nINFO falso"))
         assertEquals("x\\u0000y", logSafe("x\u0000y"))
         assertEquals("abc…", logSafe("abcdef", 3))
         assertEquals("null", logSafe(null))
     }
 
-    // ---------------------------------------------------------------- Redirecciones con un servidor local real
+    // ---------------------------------------------------------------- Redirects with a real local server
 
     private lateinit var server: HttpServer
     private val hits = AtomicInteger()
@@ -225,22 +225,22 @@ class SafeUrlTest {
         }
         server.createContext("/ok") { ex ->
             hits.incrementAndGet()
-            val body = "<title>Hola</title>".toByteArray()
+            val body = "<title>Hello</title>".toByteArray()
             ex.sendResponseHeaders(200, body.size.toLong())
             ex.responseBody.use { it.write(body) }
         }
         server.createContext("/big") { ex ->
             hits.incrementAndGet()
-            ex.sendResponseHeaders(200, 0) // chunked, sin longitud
+            ex.sendResponseHeaders(200, 0) // chunked, no length
             runCatching { ex.responseBody.use { out -> val chunk = ByteArray(64 * 1024) { 'a'.code.toByte() }; repeat(64) { out.write(chunk) } } }
         }
         redirect("/a-localhost") { "http://localhost:$port/ok" }
-        redirect("/a-metadatos") { "http://169.254.169.254/latest/meta-data/" }
+        redirect("/a-metadata") { "http://169.254.169.254/latest/meta-data/" }
         redirect("/a-ipv6") { "http://[::1]:$port/ok" }
         redirect("/a-decimal") { "http://2130706433:$port/ok" }
-        redirect("/a-relativa") { "/ok" }
+        redirect("/a-relative") { "/ok" }
         redirect("/a-ftp") { "ftp://8.8.8.8/" }
-        redirect("/bucle") { "/bucle" }
+        redirect("/loop") { "/loop" }
         server.start()
     }
 
@@ -253,42 +253,43 @@ class SafeUrlTest {
         expectSuccess = false
     }
 
-    /** El servidor de pruebas está en 127.0.0.1: sólo ese host es de confianza; cada salto se valida. */
+    /** The test server is at 127.0.0.1: only that host is trusted; every hop is validated. */
     private val local = Policy(trustedHosts = setOf("127.0.0.1"))
 
     @Test
-    fun `sigue redirecciones relativas al mismo host permitido`() = runBlocking {
+    fun `follows relative redirects to the same allowed host`() = runBlocking {
         client().use { http ->
-            val r = http.safeGet("http://127.0.0.1:$port/a-relativa", local, maxBytes = 1024)
+            val r = http.safeGet("http://127.0.0.1:$port/a-relative", local, maxBytes = 1024)
             assertEquals(200, r.status)
-            assertEquals("<title>Hola</title>", r.body.decodeToString())
+            assertEquals("<title>Hello</title>", r.body.decodeToString())
             assertEquals("/ok", r.url.encodedPath)
         }
     }
 
     @Test
-    fun `no sigue redirecciones a hosts privados`() = runBlocking {
+    fun `does not follow redirects to private hosts`() = runBlocking {
         client().use { http ->
-            for (path in listOf("/a-localhost", "/a-metadatos", "/a-ipv6", "/a-decimal", "/a-ftp")) {
+            for (path in listOf("/a-localhost", "/a-metadata", "/a-ipv6", "/a-decimal", "/a-ftp")) {
                 hits.set(0)
                 assertFailsWith<SafeUrl.UnsafeUrlException>(path) { http.safeGet("http://127.0.0.1:$port$path", local, maxBytes = 1024) }
-                assertEquals(1, hits.get(), "sólo la primera petición llega al servidor ($path)")
+                assertEquals(1, hits.get(), "only the first request reaches the server ($path)")
             }
         }
     }
 
     @Test
-    fun `corta las redirecciones en bucle`() = runBlocking {
+    fun `cuts looping redirects`() = runBlocking {
         client().use { http ->
             hits.set(0)
-            val e = assertFailsWith<SafeUrl.UnsafeUrlException> { http.safeGet("http://127.0.0.1:$port/bucle", local, maxBytes = 1024, maxRedirects = 3) }
-            assertEquals("Demasiadas redirecciones", e.message)
+            val e = assertFailsWith<SafeUrl.UnsafeUrlException> { http.safeGet("http://127.0.0.1:$port/loop", local, maxBytes = 1024, maxRedirects = 3) }
+            assertEquals("Too many redirects", e.message)
+            assertEquals("Demasiadas redirecciones", e.text(app.kairo.util.Lang.ES))
             assertEquals(4, hits.get())
         }
     }
 
     @Test
-    fun `sin confianza explicita ni siquiera se conecta a 127_0_0_1`() = runBlocking {
+    fun `without explicit trust it does not even connect to 127_0_0_1`() = runBlocking {
         client().use { http ->
             hits.set(0)
             assertFailsWith<SafeUrl.UnsafeUrlException> { http.safeGet("http://127.0.0.1:$port/ok", Policy(), maxBytes = 1024) }
@@ -298,7 +299,7 @@ class SafeUrlTest {
     }
 
     @Test
-    fun `el cuerpo se lee con limite`() = runBlocking {
+    fun `the body is read with a limit`() = runBlocking {
         client().use { http ->
             val r = http.safeGet("http://127.0.0.1:$port/big", local, maxBytes = 512 * 1024)
             assertEquals(200, r.status)

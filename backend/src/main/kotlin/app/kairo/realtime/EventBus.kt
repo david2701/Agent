@@ -10,7 +10,7 @@ import kotlinx.serialization.json.put
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-/** Evento enviado por WebSocket a los dispositivos conectados. */
+/** Event sent over WebSocket to the connected devices. */
 @Serializable
 data class ServerEvent(val type: String, val data: JsonObject = JsonObject(emptyMap()))
 
@@ -24,11 +24,11 @@ object EventTypes {
 }
 
 /**
- * Bus en memoria por usuario. Suficiente para una sola instancia del servidor.
+ * In-memory bus per user. Enough for a single server instance.
  *
- * Publicar nunca espera: si un suscriptor lento (un WebSocket que el cliente no lee) llena el búfer, ese suscriptor
- * pierde los eventos más viejos (DROP_OLDEST) en vez de frenar a quien publica (los planificadores de recordatorios
- * y avisos de toda la familia). Los clientes se resincronizan solos, así que perder un `entity.changed` es inocuo.
+ * Publishing never waits: if a slow subscriber (a WebSocket the client does not read) fills the buffer, that subscriber
+ * loses the oldest events (DROP_OLDEST) instead of slowing down the publisher (the reminder schedulers
+ * and the whole family's notices). Clients resynchronize on their own, so losing an `entity.changed` is harmless.
  */
 class EventBus {
     private val flows = ConcurrentHashMap<UUID, MutableSharedFlow<ServerEvent>>()
@@ -38,9 +38,9 @@ class EventBus {
 
     fun flow(userId: UUID): SharedFlow<ServerEvent> = of(userId)
 
-    @Suppress("RedundantSuspendModifier") // se mantiene suspend por compatibilidad con quienes lo llaman
+    @Suppress("RedundantSuspendModifier") // stays suspend for compatibility with its callers
     suspend fun publish(userId: UUID, event: ServerEvent) {
-        // Con DROP_OLDEST tryEmit siempre tiene éxito y nunca suspende
+        // With DROP_OLDEST, tryEmit always succeeds and never suspends
         of(userId).tryEmit(event)
     }
 

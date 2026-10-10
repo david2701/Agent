@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 class McpClientTest {
     private lateinit var server: HttpServer
     private var port = 0
-    /** Peticiones recibidas: "ruta método-jsonrpc sesión autorización". */
+    /** Requests received: "path jsonrpc-method session authorization". */
     private val log: MutableList<String> = Collections.synchronizedList(ArrayList())
 
     private fun HttpExchange.reply(status: Int, body: String, type: String = "application/json", headers: Map<String, String> = emptyMap()) {
@@ -46,25 +46,25 @@ class McpClientTest {
                 "notifications/initialized" -> ex.reply(202, "")
                 "tools/list" -> ex.reply(
                     200,
-                    "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"luces\",\"description\":\"Enciende\"}]}}\n\n",
+                    "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"lights\",\"description\":\"Turns on\"}]}}\n\n",
                     type = "text/event-stream",
                 )
-                "tools/call" -> ex.reply(200, """{"jsonrpc":"2.0","id":3,"error":{"code":-32602,"message":"secreto interno: /etc/shadow"}}""")
+                "tools/call" -> ex.reply(200, """{"jsonrpc":"2.0","id":3,"error":{"code":-32602,"message":"internal secret: /etc/shadow"}}""")
                 else -> ex.reply(400, "")
             }
         }
-        server.createContext("/redirige") { ex ->
-            log += "/redirige"
+        server.createContext("/redirect") { ex ->
+            log += "/redirect"
             ex.responseHeaders.add("Location", "http://127.0.0.1:$port/mcp")
             ex.sendResponseHeaders(307, -1)
             ex.close()
         }
         server.createContext("/error") { ex ->
             log += "/error"
-            ex.reply(500, "Traceback: contraseña=hunter2 en 10.0.0.5")
+            ex.reply(500, "Traceback: password=hunter2 at 10.0.0.5")
         }
-        server.createContext("/enorme") { ex ->
-            log += "/enorme"
+        server.createContext("/huge") { ex ->
+            log += "/huge"
             ex.sendResponseHeaders(200, 0)
             runCatching { ex.responseBody.use { out -> val chunk = ByteArray(64 * 1024) { ' '.code.toByte() }; repeat(48) { out.write(chunk) } } }
         }
@@ -74,53 +74,53 @@ class McpClientTest {
     @AfterTest
     fun stop() = server.stop(0)
 
-    // Sin el proxy del entorno: el servidor de pruebas es local
+    // Without the environment proxy: the test server is local
     private val trusted = McpClient(SafeUrl.Policy(trustedHosts = setOf("127.0.0.1")), outboundProxy = null)
 
     @Test
-    fun `lista herramientas y separa sesiones por credenciales`() = runBlocking {
+    fun `lists tools and separates sessions by credentials`() = runBlocking {
         val url = "http://127.0.0.1:$port/mcp"
         val a = trusted.listTools(url, mapOf("Authorization" to "Bearer A"))
-        assertEquals(listOf("luces"), a.map { it.name })
-        // Otro usuario con la misma URL pero otras credenciales: sesión propia, no reutiliza la del primero
+        assertEquals(listOf("lights"), a.map { it.name })
+        // Another user with the same URL but other credentials: own session, it does not reuse the first one's
         trusted.listTools(url, mapOf("Authorization" to "Bearer B"))
         val inits = log.filter { it.contains(" initialize ") }
         assertEquals(2, inits.size)
         assertTrue(log.any { it.startsWith("/mcp tools/list s1 Bearer A") })
         assertTrue(log.any { it.startsWith("/mcp tools/list s2 Bearer B") })
         assertFalse(log.any { it.contains("s1 Bearer B") || it.contains("s2 Bearer A") })
-        // Caché por credenciales: repetir no vuelve a llamar al servidor
+        // Cache per credentials: repeating does not call the server again
         val before = log.size
         trusted.listTools(url, mapOf("Authorization" to "Bearer A"))
         assertEquals(before, log.size)
     }
 
     @Test
-    fun `los errores no exponen detalles del servidor`() = runBlocking {
+    fun `errors do not expose server details`() = runBlocking {
         val err = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:$port/error", emptyMap()) }
         assertEquals(McpClient.GENERIC_ERROR, err.message)
         val closed = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:1/mcp", emptyMap()) }
         assertEquals(McpClient.GENERIC_ERROR, closed.message)
-        val rpc = assertFailsWith<McpException> { trusted.callTool("http://127.0.0.1:$port/mcp", emptyMap(), "luces", kotlinx.serialization.json.JsonObject(emptyMap())) }
-        assertFalse(rpc.message!!.contains("secreto"))
+        val rpc = assertFailsWith<McpException> { trusted.callTool("http://127.0.0.1:$port/mcp", emptyMap(), "lights", kotlinx.serialization.json.JsonObject(emptyMap())) }
+        assertFalse(rpc.message!!.contains("secret"))
         assertTrue(rpc.message!!.contains("-32602"))
     }
 
     @Test
-    fun `no sigue redirecciones`() = runBlocking {
-        val err = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:$port/redirige", emptyMap()) }
+    fun `does not follow redirects`() = runBlocking {
+        val err = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:$port/redirect", emptyMap()) }
         assertEquals(McpClient.GENERIC_ERROR, err.message)
-        assertEquals(listOf("/redirige"), log.toList())
+        assertEquals(listOf("/redirect"), log.toList())
     }
 
     @Test
-    fun `respuestas enormes se cortan`() = runBlocking {
-        val err = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:$port/enorme", emptyMap()) }
+    fun `huge responses are cut`() = runBlocking {
+        val err = assertFailsWith<McpException> { trusted.listTools("http://127.0.0.1:$port/huge", emptyMap()) }
         assertEquals(McpClient.GENERIC_ERROR, err.message)
     }
 
     @Test
-    fun `sin permiso no conecta a direcciones locales`() = runBlocking {
+    fun `without permission it does not connect to local addresses`() = runBlocking {
         val strict = McpClient(SafeUrl.Policy(), outboundProxy = null)
         assertFailsWith<McpException> { strict.listTools("http://127.0.0.1:$port/mcp", emptyMap()) }
         assertFailsWith<IllegalArgumentException> { strict.validateUrl("http://192.168.1.20:8123/mcp_server/sse") }
@@ -135,20 +135,20 @@ class McpClientTest {
     }
 
     @Test
-    fun `politica desde el entorno`() {
+    fun `policy from the environment`() {
         val p = McpClient.policyFromEnv(mapOf("KAIRO_MCP_ALLOW_PRIVATE" to "true", "KAIRO_MCP_ALLOWED_HOSTS" to " mcp-notion , LocalHost "))
         assertTrue(p.allowPrivate)
         assertTrue(p.isTrusted("mcp-notion"))
         assertTrue(p.isTrusted("localhost"))
         assertFalse(McpClient.policyFromEnv(emptyMap()).allowPrivate)
-        assertFalse(McpClient.policyFromEnv(mapOf("KAIRO_MCP_ALLOW_PRIVATE" to "si")).allowPrivate)
+        assertFalse(McpClient.policyFromEnv(mapOf("KAIRO_MCP_ALLOW_PRIVATE" to "yes")).allowPrivate)
     }
 
     @Test
-    fun `clave de sesion depende de url y cabeceras`() {
-        val url = "https://mcp.ejemplo.com/"
+    fun `session key depends on url and headers`() {
+        val url = "https://mcp.example.com/"
         assertEquals(McpClient.cacheKey(url, mapOf("A" to "1", "B" to "2")), McpClient.cacheKey(url, mapOf("B" to "2", "A" to "1")))
         assertNotEquals(McpClient.cacheKey(url, mapOf("Authorization" to "x")), McpClient.cacheKey(url, mapOf("Authorization" to "y")))
-        assertNotEquals(McpClient.cacheKey(url, emptyMap()), McpClient.cacheKey("https://otro.com/", emptyMap()))
+        assertNotEquals(McpClient.cacheKey(url, emptyMap()), McpClient.cacheKey("https://other.example.com/", emptyMap()))
     }
 }

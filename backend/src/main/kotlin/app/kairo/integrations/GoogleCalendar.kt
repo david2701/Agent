@@ -12,7 +12,10 @@ import app.kairo.domain.EventsRepo
 import app.kairo.domain.GoogleEventData
 import app.kairo.realtime.EventBus
 import app.kairo.util.Crypto
+import app.kairo.util.InvalidInput
 import app.kairo.util.KairoJson
+import app.kairo.util.Lang
+import app.kairo.util.M
 import app.kairo.util.zoneOf
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -53,7 +56,7 @@ data class GoogleStatus(
     val available: Boolean,
     val connected: Boolean,
     val calendarId: String? = null,
-    /** Calendario de Google (compartido con la familia) donde van los eventos familiares que crea este usuario. */
+    /** Google calendar (shared with the family) where the family events this user creates go. */
     val familyCalendarId: String? = null,
     val lastSyncAt: String? = null,
     val lastError: String? = null,
@@ -66,8 +69,8 @@ data class GoogleCalendarInfo(val id: String, val summary: String, val primary: 
 data class SyncReport(val pushed: Int, val pulled: Int, val deleted: Int)
 
 /**
- * Sincronización bidireccional con Google Calendar (OAuth 2.0, flujo web con refresh token).
- * Se activa definiendo GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET. Ver docs/GOOGLE_CALENDAR.md.
+ * Two-way sync with Google Calendar (OAuth 2.0, web flow with refresh token).
+ * It is enabled by setting GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. See docs/GOOGLE_CALENDAR.md.
  */
 class GoogleCalendarService(
     private val cfg: AppConfig,
@@ -75,6 +78,8 @@ class GoogleCalendarService(
     private val crypto: Crypto,
     private val events: EventsRepo,
     private val bus: EventBus,
+    /** Language of a user, for the placeholder title of untitled Google events. */
+    private val langOf: suspend (UUID) -> Lang = { Lang.DEFAULT },
 ) {
     private val log = LoggerFactory.getLogger(GoogleCalendarService::class.java)
     private val http = HttpClient(CIO) {
@@ -85,10 +90,10 @@ class GoogleCalendarService(
     val redirectUri: String get() = "${cfg.publicUrl}/api/integrations/google/callback"
 
     /**
-     * URL de autorización de Google. [nonce] es un valor aleatorio que el servidor guarda también en una
-     * cookie HttpOnly del navegador que pidió la URL: va firmado dentro de `state` (sin viajar en claro),
-     * así que el callback sólo vale en ese mismo navegador. Sin esto, alguien podría hacer que otra persona
-     * abra un callback con su propio `code` y conectar su Google a la cuenta de ella (o al revés).
+     * Google authorization URL. [nonce] is a random value the server also stores in an
+     * HttpOnly cookie of the browser that asked for the URL: it goes signed inside `state` (never in clear),
+     * so the callback is only valid in that same browser. Without this, someone could make another person
+     * open a callback with their own `code` and connect their Google to that person's account (or the other way around).
      */
     fun authUrl(userId: UUID, nonce: String): String {
         val exp = Instant.now().epochSecond + OAUTH_STATE_TTL
@@ -105,12 +110,12 @@ class GoogleCalendarService(
         }.buildString()
     }
 
-    /** `state` ya usados (firma -> vencimiento): cada uno vale una sola vez. */
+    /** `state` values already used (signature -> expiry): each one is valid only once. */
     private val usedStates = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
-     * Valida `state` con el [nonce] de la cookie del navegador y devuelve el usuario. Un solo uso:
-     * un segundo callback con el mismo `state` se rechaza.
+     * Validates `state` with the [nonce] from the browser cookie and returns the user. Single use:
+     * a second callback with the same `state` is rejected.
      */
     fun verifyState(state: String, nonce: String?): UUID? {
         if (nonce.isNullOrBlank()) return null
@@ -138,7 +143,7 @@ class GoogleCalendarService(
         })
         val body = KairoJson.parseToJsonElement(resp.bodyAsText()).jsonObject
         val refresh = (body["refresh_token"] as? JsonPrimitive)?.content
-            ?: throw IllegalStateException("Google no devolvió refresh_token. Revoca el acceso en tu cuenta de Google y vuelve a conectar.")
+            ?: throw InvalidInput(M.GOOGLE_NO_REFRESH)
         db.tx {
             exec(
                 """insert into integrations(user_id, provider, secret, meta, status, updated_at) values (?, 'google', ?, ?, 'connected', now())
@@ -173,7 +178,7 @@ class GoogleCalendarService(
         )
     }
 
-    /** Calendario para los eventos familiares (null = el mismo de siempre). */
+    /** Calendar for family events (null = the usual one). */
     suspend fun setFamilyCalendar(userId: UUID, calendarId: String?) = db.tx {
         exec(
             "update integrations set meta = case when ?::text is null then meta - 'familyCalendarId' else jsonb_set(meta, '{familyCalendarId}', to_jsonb(?::text)) end where user_id = ? and provider = 'google'",
@@ -194,11 +199,12 @@ class GoogleCalendarService(
         query("select user_id from integrations where provider = 'google' and status = 'connected'") { it.getObject("user_id", UUID::class.java) }
     }
 
-    /** Empuja cambios locales y trae cambios de Google en una ventana de -30 a +180 días. */
+    /** Pushes local changes and pulls Google changes in a window from -30 to +180 days. */
     suspend fun sync(userId: UUID): SyncReport {
-        val token = accessToken(userId) ?: throw IllegalStateException("Google Calendar no está conectado")
+        val token = accessToken(userId) ?: throw InvalidInput(M.GOOGLE_NOT_CONNECTED)
         val st = status(userId)
         val calendarId = st.calendarId ?: "primary"
+        val untitled = M.GOOGLE_UNTITLED.t(langOf(userId))
         val calPath = "$API/calendars/${calendarId.encodeURLPathPart()}/events"
         var pushed = 0
         var pulled = 0
@@ -259,10 +265,10 @@ class GoogleCalendarService(
                     lastSync?.let { parameter("updatedMin", it.minusSeconds(120).toString()) }
                     pageToken?.let { parameter("pageToken", it) }
                 }
-                if (!r.status.isSuccess()) throw IllegalStateException("Google respondió ${r.status.value}: ${r.bodyAsText().take(200)}")
+                if (!r.status.isSuccess()) throw IllegalStateException("Google responded ${r.status.value}: ${r.bodyAsText().take(200)}")
                 val page = KairoJson.parseToJsonElement(r.bodyAsText()).jsonObject
                 (page["items"] as? JsonArray)?.forEach { item ->
-                    val g = fromGoogle(item.jsonObject, calendarId) ?: return@forEach
+                    val g = fromGoogle(item.jsonObject, calendarId, untitled) ?: return@forEach
                     if (g.recurringId != null && g.recurringId in localRecurringIds) return@forEach
                     when (events.upsertFromGoogle(userId, g)) {
                         "created", "updated" -> pulled++
@@ -327,7 +333,7 @@ class GoogleCalendarService(
         })
     }
 
-    private fun fromGoogle(o: JsonObject, calendarId: String): GoogleEventData? {
+    private fun fromGoogle(o: JsonObject, calendarId: String, untitled: String): GoogleEventData? {
         val id = (o["id"] as? JsonPrimitive)?.content ?: return null
         val cancelled = (o["status"] as? JsonPrimitive)?.content == "cancelled"
         val start = o["start"] as? JsonObject
@@ -347,7 +353,7 @@ class GoogleCalendarService(
             calendarId = calendarId,
             etag = (o["etag"] as? JsonPrimitive)?.content,
             recurringId = (o["recurringEventId"] as? JsonPrimitive)?.content,
-            title = (o["summary"] as? JsonPrimitive)?.content ?: "(Sin título)",
+            title = (o["summary"] as? JsonPrimitive)?.content ?: untitled,
             description = (o["description"] as? JsonPrimitive)?.content ?: "",
             location = (o["location"] as? JsonPrimitive)?.content ?: "",
             startAt = s?.first ?: Instant.EPOCH,
@@ -361,10 +367,10 @@ class GoogleCalendarService(
     companion object {
         private const val API = "https://www.googleapis.com/calendar/v3"
 
-        /** Segundos que vale un `state` de OAuth (y la cookie con su nonce). */
+        /** Seconds an OAuth `state` is valid (and the cookie with its nonce). */
         const val OAUTH_STATE_TTL = 600L
 
-        /** Cookie HttpOnly con el nonce que ata el callback de OAuth al navegador que lo inició. */
+        /** HttpOnly cookie with the nonce that binds the OAuth callback to the browser that started it. */
         const val OAUTH_COOKIE = "kairo_google_oauth"
         const val OAUTH_COOKIE_PATH = "/api/integrations/google"
 
