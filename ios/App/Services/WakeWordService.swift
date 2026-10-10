@@ -78,24 +78,30 @@ final class WakeWordService {
         request = req
         let input = engine.inputNode
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 2048, format: input.outputFormat(forBus: 0)) { buffer, _ in
-            req.append(buffer)
-        }
+        input.installTap(onBus: 0, bufferSize: 2048, format: input.outputFormat(forBus: 0), block: Self.tap(req))
         engine.prepare()
         try engine.start()
-        let phrase = self.phrase
-        task = recognizer?.recognitionTask(with: req) { [weak self] result, error in
-            let text = result?.bestTranscription.formattedString ?? ""
-            let final = result?.isFinal ?? false
-            let failed = error != nil
-            Task { @MainActor in self?.handle(text: text, final: final || failed, phrase: phrase) }
-        }
+        task = recognizer?.recognitionTask(with: req, resultHandler: Self.results(phrase: phrase))
+
         // El reconocedor corta sesiones largas: se reinicia cada 50 s
         restartTask?.cancel()
         restartTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(50))
             guard !Task.isCancelled else { return }
             self?.restart()
+        }
+    }
+
+    // El audio y el reconocedor llaman desde sus propias colas: estos cierres no se aíslan al hilo principal.
+    nonisolated private static func tap(_ req: SFSpeechAudioBufferRecognitionRequest) -> AVAudioNodeTapBlock {
+        { buffer, _ in req.append(buffer) }
+    }
+
+    nonisolated private static func results(phrase: String) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
+        { result, error in
+            let text = result?.bestTranscription.formattedString ?? ""
+            let final = (result?.isFinal ?? false) || error != nil
+            Task { @MainActor in AppModel.shared.wake.handle(text: text, final: final, phrase: phrase) }
         }
     }
 

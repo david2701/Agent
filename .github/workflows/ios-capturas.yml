@@ -1,9 +1,11 @@
 name: iOS capturas
 
 # Capturas de la app en el simulador de iPhone y iPad contra un servidor de prueba (ios/ci).
-# No corre en cada cambio: se lanza a mano (Actions > iOS capturas > Run workflow).
-# Por defecto sólo iPhone (unos 8 minutos); el iPad tarda bastante más en arrancar.
+# No corre en cada cambio: se lanza a mano (Actions > iOS capturas > Run workflow) o al cambiar el
+# propio script de capturas. Por defecto sólo iPhone (unos 8 minutos); el iPad tarda bastante más.
 on:
+  push:
+    paths: ["ios/ci/screenshots.sh"]
   workflow_dispatch:
     inputs:
       ipad:
