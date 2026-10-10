@@ -7,7 +7,7 @@ import kotlin.math.sqrt
 
 object AudioSpec {
     const val SAMPLE_RATE = 16_000
-    /** 32 ms por bloque. */
+    /** 32 ms per frame. */
     const val FRAME = 512
 }
 
@@ -21,14 +21,14 @@ fun rms(buf: ShortArray, len: Int): Double {
     return sqrt(sum / len)
 }
 
-/** Nivel 0..1 para la animación, en escala aproximadamente logarítmica. */
+/** Level 0..1 for the animation, on a roughly logarithmic scale. */
 fun levelOf(rms: Double): Float {
     if (rms <= 30) return 0f
     val db = 20 * kotlin.math.log10(rms / 32768.0) // -60 dB .. 0 dB
     return ((db + 55) / 45).toFloat().coerceIn(0f, 1f)
 }
 
-/** WAV PCM 16 bits mono. Whisper lo acepta directamente. */
+/** 16-bit mono PCM WAV. Whisper accepts it directly. */
 fun pcmToWav(pcm: ShortArray, len: Int, sampleRate: Int = AudioSpec.SAMPLE_RATE): ByteArray {
     val dataBytes = len * 2
     val out = ByteArrayOutputStream(44 + dataBytes)
@@ -46,8 +46,8 @@ fun pcmToWav(pcm: ShortArray, len: Int, sampleRate: Int = AudioSpec.SAMPLE_RATE)
 }
 
 /**
- * Detección de fin de frase por energía con umbral adaptativo al ruido de fondo.
- * Termina tras ~0,9 s de silencio una vez que hubo voz, o a los 15 s.
+ * Energy-based end-of-speech detection with a threshold that adapts to background noise.
+ * Finishes after ~0.9 s of silence once speech was heard, or after 15 s.
  */
 class EndOfSpeech(private var noiseFloor: Double = 220.0) {
     private var speechFrames = 0
@@ -88,7 +88,7 @@ class EndOfSpeech(private var noiseFloor: Double = 220.0) {
     }
 }
 
-/** Búfer creciente de PCM. */
+/** Growing PCM buffer. */
 class PcmBuffer(initial: Int = AudioSpec.SAMPLE_RATE * 8) {
     var data = ShortArray(initial)
         private set

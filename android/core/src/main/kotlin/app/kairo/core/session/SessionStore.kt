@@ -24,8 +24,8 @@ private val Context.sessionStore by preferencesDataStore(name = "kairo_session")
 data class Session(val serverUrl: String, val user: User, val deviceId: String)
 
 /**
- * Sesión del dispositivo. El refresh token se cifra con una clave AES del Android Keystore
- * (nunca sale del hardware seguro); el access token vive solo en memoria.
+ * Device session. The refresh token is encrypted with an AES key from the Android Keystore
+ * (it never leaves secure hardware); the access token lives only in memory.
  */
 class SessionStore(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -58,7 +58,7 @@ class SessionStore(private val context: Context) {
         }
     }
 
-    /** Solo para pruebas de UI (Robolectric no tiene AndroidKeyStore): guarda una sesión sin refresh real. */
+    /** UI tests only (Robolectric has no AndroidKeyStore): stores a session without a real refresh token. */
     @androidx.annotation.VisibleForTesting
     suspend fun saveForTest(serverUrl: String, user: User, deviceId: String, access: String) {
         accessToken = access
