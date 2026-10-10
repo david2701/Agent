@@ -82,7 +82,8 @@ final class GeofenceService {
     }
 
     private func fired(_ identifier: String, satisfied: Bool) {
-        guard let (reminderId, arrive) = Self.parse(identifier), arrive == satisfied else { return }
+        guard let parsed = Self.parse(identifier), parsed.1 == satisfied else { return }
+        let (reminderId, arrive) = parsed
         let text = texts[identifier] ?? "Recordatorio"
         NotificationService.showNow(
             id: "geo:\(reminderId):\(Int(Date().timeIntervalSince1970 / 600))", title: text,
