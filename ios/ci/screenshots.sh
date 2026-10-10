@@ -13,6 +13,17 @@ MOCK=$!
 trap 'kill $MOCK 2>/dev/null' EXIT
 sleep 1
 
+# Ejecuta un comando con límite de tiempo (macOS no trae `timeout`)
+wd() {
+  local t="$1"; shift
+  "$@" & local pid=$!
+  ( sleep "$t"; kill -9 "$pid" 2>/dev/null && echo "  [tiempo agotado: $*]" ) & local w=$!
+  wait "$pid"; local rc=$?
+  kill "$w" 2>/dev/null
+  return $rc
+}
+log() { echo "[$(date +%T)] $*"; }
+
 # Elige el primer simulador disponible cuyo nombre empiece por alguno de los prefijos dados
 pick() {
   xcrun simctl list devices available -j | python3 -c '
@@ -28,33 +39,38 @@ for p in prefixes:
 
 shoot() { # udid nombre-archivo sección apariencia
   local udid="$1" name="$2" section="$3" look="$4"
-  xcrun simctl ui "$udid" appearance "$look"
+  log "$name"
+  wd 30 xcrun simctl ui "$udid" appearance "$look"
   SIMCTL_CHILD_KAIRO_AUTOLOGIN="http://127.0.0.1:8099|demo@kairo.local|demo" \
   SIMCTL_CHILD_KAIRO_SECTION="$section" \
   SIMCTL_CHILD_KAIRO_SCREENSHOT=1 \
   SIMCTL_CHILD_TZ="America/Bogota" \
-    xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" > /dev/null
-  sleep 9
-  xcrun simctl io "$udid" screenshot --type=png "$OUT/$name.png" > /dev/null && echo "  $name.png"
+    wd 60 xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" > /dev/null
+  sleep 8
+  wd 30 xcrun simctl io "$udid" screenshot --type=png "$OUT/$name.png" > /dev/null && echo "  $name.png"
 }
 
 run_device() { # "udid|nombre" prefijo-archivo secciones...
   local udid="${1%%|*}" label="${1#*|}" prefix="$2"; shift 2
-  echo "== $label"
-  xcrun simctl boot "$udid" 2>/dev/null
-  echo "  arrancando…"; xcrun simctl bootstatus "$udid" -b > /dev/null; echo "  listo ($(date +%T))"
-  xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null
-  xcrun simctl install "$udid" "$APP" || { echo "no se pudo instalar"; return 1; }
+  log "== $label ($udid)"
+  wd 120 xcrun simctl boot "$udid" 2>/dev/null
+  wd 420 xcrun simctl bootstatus "$udid" -b > /dev/null
+  log "arrancado"
+  wd 30 xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null
+  wd 180 xcrun simctl install "$udid" "$APP" || { log "no se pudo instalar"; return 1; }
+  log "instalado"
   for spec in "$@"; do
     local section="${spec%%:*}" look="${spec#*:}"
     shoot "$udid" "$prefix-$section-$look" "$section" "$look"
   done
-  xcrun simctl shutdown "$udid"
+  wd 60 xcrun simctl shutdown "$udid"
 }
 
+log "simuladores disponibles:"
+xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20
 PHONE=$(pick "iPhone 17 Pro" "iPhone 17" "iPhone 16 Pro" "iPhone")
 PAD=$(pick "iPad Pro 13" "iPad Pro" "iPad Air" "iPad")
 
-[ -n "$PHONE" ] && run_device "$PHONE" iphone today:light today:dark tasks:light calendar:dark lists:light family:dark chat:light notes:dark reminders:light settings:dark
-[ -n "$PAD" ] && run_device "$PAD" ipad today:light tasks:dark calendar:light notes:light family:dark
+[ -n "$PHONE" ] && run_device "$PHONE" iphone today:light today:dark tasks:light calendar:dark lists:light family:dark chat:light settings:dark
+[ -n "$PAD" ] && run_device "$PAD" ipad today:light tasks:dark calendar:light notes:light
 ls "$OUT"
