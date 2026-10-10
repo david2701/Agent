@@ -1,9 +1,10 @@
 #!/bin/sh
-# Copias de seguridad de Kairo: un pg_dump diario a /backups y limpieza de las viejas.
-# Lo ejecuta el servicio "backup" de docker-compose.yml. Variables:
-#   BACKUP_TIME       hora local de la copia (HH:MM, por defecto 03:30)
-#   BACKUP_KEEP_DAYS  días que se guardan (por defecto 14)
-# Uso manual:  docker compose exec backup /backup.sh now
+# Kairo backups: a daily pg_dump to /backups and cleanup of the old ones.
+# It is run by the "backup" service of docker-compose.yml. Variables:
+#   BACKUP_TIME       local time of the backup (HH:MM, default 03:30)
+#   BACKUP_KEEP_DAYS  days to keep them (default 14)
+# Each successful backup writes the time to /backups/LAST_BACKUP_OK (a marker for monitoring).
+# Manual use:  docker compose exec backup /backup.sh now
 set -eu
 DIR=/backups
 TIME="${BACKUP_TIME:-03:30}"
@@ -14,17 +15,17 @@ mkdir -p "$DIR"
 dump() {
   stamp=$(date +%Y%m%d-%H%M)
   tmp="$DIR/.kairo-$stamp.dump.part"
-  # Formato custom (comprimido); se restaura con pg_restore (ver scripts/restore-backup.sh)
+  # Custom format (compressed); restored with pg_restore (see scripts/restore-backup.sh)
   if pg_dump -Fc -Z 6 -f "$tmp"; then
     mv "$tmp" "$DIR/kairo-$stamp.dump"
-    date -Iseconds > "$DIR/ULTIMA_COPIA_OK"
-    echo "[backup] $(date -Iseconds) copia creada: kairo-$stamp.dump ($(du -h "$DIR/kairo-$stamp.dump" | cut -f1))"
+    date -Iseconds > "$DIR/LAST_BACKUP_OK"
+    echo "[backup] $(date -Iseconds) backup created: kairo-$stamp.dump ($(du -h "$DIR/kairo-$stamp.dump" | cut -f1))"
   else
     rm -f "$tmp"
-    echo "[backup] $(date -Iseconds) ERROR: falló pg_dump" >&2
+    echo "[backup] $(date -Iseconds) ERROR: pg_dump failed" >&2
     return 1
   fi
-  find "$DIR" -maxdepth 1 -name 'kairo-*.dump' -mtime +"$KEEP" -print -delete | sed 's/^/[backup] borrada: /'
+  find "$DIR" -maxdepth 1 -name 'kairo-*.dump' -mtime +"$KEEP" -print -delete | sed 's/^/[backup] deleted: /'
 }
 
 if [ "${1:-}" = "now" ]; then
@@ -32,14 +33,14 @@ if [ "${1:-}" = "now" ]; then
   exit $?
 fi
 
-# Al arrancar, si no hay ninguna copia todavía, hace una.
+# On start, if there is no backup yet, make one.
 ls "$DIR"/kairo-*.dump >/dev/null 2>&1 || dump || true
 
 while true; do
   now=$(date +%s)
   next=$(date -d "today $TIME" +%s)
   [ "$next" -le "$now" ] && next=$(date -d "tomorrow $TIME" +%s)
-  echo "[backup] próxima copia: $(date -d "@$next" '+%Y-%m-%d %H:%M')"
+  echo "[backup] next backup: $(date -d "@$next" '+%Y-%m-%d %H:%M')"
   sleep $((next - now))
   dump || true
 done

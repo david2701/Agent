@@ -1,8 +1,8 @@
-# Kairo: API + dashboard + Postgres con pgvector.
-#   1) ./scripts/generate-env.sh       (crea .env con secretos aleatorios)
-#   2) edita .env (NAN_API_KEY, correo y dominio)
+# Kairo: API + dashboard + Postgres with pgvector.
+#   1) ./scripts/generate-env.sh       (creates .env with random secrets)
+#   2) edit .env (NAN_API_KEY, email and domain)
 #   3) docker compose up -d --build
-# Detrás de Caddy: ver deploy/Caddyfile.example
+# Behind Caddy: see deploy/Caddyfile.example
 
 name: kairo
 
@@ -13,7 +13,7 @@ services:
     environment:
       POSTGRES_USER: kairo
       POSTGRES_DB: kairo
-      POSTGRES_PASSWORD: ${KAIRO_DB_PASSWORD:?Define KAIRO_DB_PASSWORD en .env}
+      POSTGRES_PASSWORD: ${KAIRO_DB_PASSWORD:?Set KAIRO_DB_PASSWORD in .env}
     volumes:
       - kairo-db:/var/lib/postgresql
     healthcheck:
@@ -34,19 +34,20 @@ services:
     environment:
       KAIRO_DB_URL: jdbc:postgresql://db:5432/kairo
       KAIRO_DB_USER: kairo
-    # Opcional, push de Apple: monta la clave .p8 y pon APNS_PRIVATE_KEY_FILE=/run/secrets/apns.p8 en .env
+    # Optional, Apple push: mount the .p8 key and set APNS_PRIVATE_KEY_FILE=/run/secrets/apns.p8 in .env
     # volumes:
     #   - ./secrets/AuthKey_XXXXXXXXXX.p8:/run/secrets/apns.p8:ro
     depends_on:
       db:
         condition: service_healthy
-    # Solo en localhost: Caddy publica HTTPS. Si Caddy corre en Docker, únelo a la red "kairo".
+    # Localhost only: Caddy publishes HTTPS. If Caddy runs in Docker, join it to the "kairo" network.
     ports:
       - "127.0.0.1:${KAIRO_HOST_PORT:-8080}:8080"
     networks: [kairo]
 
-  # Copia de seguridad diaria de la base de datos (incluye notas, adjuntos y todo lo demás) en ./backups.
-  # Copia ./backups fuera del servidor de vez en cuando (y guarda tu .env en un lugar seguro).
+  # Daily database backup (notes, attachments and everything else) in ./backups.
+  # Each successful backup updates ./backups/LAST_BACKUP_OK.
+  # Copy ./backups off the server from time to time (and keep your .env in a safe place).
   backup:
     image: pgvector/pgvector:pg18
     restart: unless-stopped
@@ -55,7 +56,7 @@ services:
       PGHOST: db
       PGUSER: kairo
       PGDATABASE: kairo
-      PGPASSWORD: ${KAIRO_DB_PASSWORD:?Define KAIRO_DB_PASSWORD en .env}
+      PGPASSWORD: ${KAIRO_DB_PASSWORD:?Set KAIRO_DB_PASSWORD in .env}
       TZ: ${KAIRO_TIMEZONE:-UTC}
       BACKUP_TIME: ${BACKUP_TIME:-03:30}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
@@ -67,16 +68,16 @@ services:
         condition: service_healthy
     networks: [kairo]
 
-  # Opcional: push propio para los teléfonos (UnifiedPush), sin Firebase. Se activa con:
+  # Optional: own push for the phones (UnifiedPush), without Firebase. Enabled with:
   #   docker compose --profile push up -d
-  # Publícalo con Caddy (deploy/Caddyfile.example) y en cada teléfono instala la app ntfy apuntando a él.
+  # Publish it with Caddy (deploy/Caddyfile.example) and install the ntfy app on each phone pointing to it.
   ntfy:
     image: binwiederhier/ntfy:v2.28.0
     command: serve
     profiles: ["push"]
     restart: unless-stopped
     environment:
-      NTFY_BASE_URL: ${NTFY_PUBLIC_URL:-https://ntfy.tudominio.com}
+      NTFY_BASE_URL: ${NTFY_PUBLIC_URL:-https://ntfy.yourdomain.com}
       NTFY_BEHIND_PROXY: "true"
       NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
       NTFY_CACHE_DURATION: 24h
