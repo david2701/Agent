@@ -10,6 +10,7 @@
 		0B610B40E67D229B7F1090AE /* WakeWordService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A2B20F6677E3024D3781EF /* WakeWordService.swift */; };
 		11517E09F1D2A370BF9249D5 /* KairoWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 452D7E025DCB3D1443D21756 /* KairoWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		11DB370242ECF48BCD740BDE /* ListsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C304053BD5B8D2CC40E389D1 /* ListsScreen.swift */; };
+		17A464AA09EC46BDC14A907E /* AlarmIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85B0C68165A8AA5D97B890BC /* AlarmIntents.swift */; };
 		1B094C983E8CBDA0B438E320 /* KairoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857A38C946ECE0C1BEBD3EEF /* KairoApp.swift */; };
 		1B9B162022F98F2CA33981BD /* TodayScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1679E4951BB72CAF5529474E /* TodayScreen.swift */; };
 		1E856F6C810B6F72F9FCB3F6 /* FamilyScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77144B41F9E3F7564F77397 /* FamilyScreen.swift */; };
@@ -33,6 +34,7 @@
 		66A438B8FC676DCCB3C3B337 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2A6482FFB102540B39956023 /* Assets.xcassets */; };
 		705C30A1DB783C2DCFE5477B /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EC5A16FA69237666CC5AD80 /* AppModel.swift */; };
 		71ED114A11FB6F7B40B558C8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */; };
+		737D90BD6BA615193F2BB3C7 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2942963F12C233F957C5DC3 /* Provider.swift */; };
 		77262498E2159F9DAE69273A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31F77D751C778C8B40645715 /* WidgetKit.framework */; };
 		7DF1562C34697CF19C2EF037 /* FamilyFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */; };
 		8089AD23BC3276F493CA06B9 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3213C03D9AE59BB20116D82C /* KairoUI */; };
@@ -40,6 +42,7 @@
 		8925A707400684B64A9EB091 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0DDAEA7300F693FAAFA0472B /* KairoUI */; };
 		8B4DB8F2E4033506305BD12E /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47745F20972C8216F5F5159B /* AppConfig.swift */; };
 		8DCF45AD02809D1B0FE154E3 /* KairoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 48EE6490929F9923A9D5E880 /* KairoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9E8BDE6783C1075D47EA6669 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C52B064193093A2890A35DA /* Shortcuts.swift */; };
 		A1B2D93F93A8A9B709980371 /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E31B1DAFA869872A6C83069 /* Intents.swift */; };
 		A53834D73882B6630C6F62F8 /* Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979B193DF41BFF42244BBBF9 /* Rows.swift */; };
 		A84F7500D9F0FF75C87CC0E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3568EE34CF8AEAB25B548074 /* Assets.xcassets */; };
@@ -47,6 +50,7 @@
 		AB72E4DEB4E77EA3ACF1D994 /* MoreScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963DF1176B1DEB3C50D90517 /* MoreScreens.swift */; };
 		AC055CF0B9EE8E79466E9FA2 /* KairoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FBCC43C160C59777C656610 /* KairoWatchApp.swift */; };
 		ADF87BCE7D88AB8C132F345A /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 305CF04161096F9D8756F9FF /* KairoCore */; };
+		B176929823514BB8C7C8C8A1 /* AlarmIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85B0C68165A8AA5D97B890BC /* AlarmIntents.swift */; };
 		B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E385C05FD9D47E0E19203EE /* TasksScreen.swift */; };
 		B58BFA163634DEA089B883CC /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C343F683C082B5F7179CB161 /* NotificationService.swift */; };
 		B8F80F52A5AF6BEC24A5F516 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D9EE22774C519185646F8B15 /* Assets.xcassets */; };
@@ -61,8 +65,8 @@
 		C94B113C92D1EB554745D418 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = E8DCFC5066F47DCAA3E125AD /* KairoUI */; };
 		C9AC3A239D61DD317D0AACCC /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4AA4FFAB89E8B6F9D5B955 /* SyncService.swift */; };
 		D44AFFADFC16B6154AB35D19 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF7F266BCEE559FC939115A /* WatchBridge.swift */; };
-		D7352370AAFE3FE9FA9B794B /* VoiceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FC7CD3EB2375E4566F6D14 /* VoiceLiveActivity.swift */; };
 		D9B777416E744E4262B7D603 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = D51B6538AA2C11FD51FF4D24 /* KairoCore */; };
+		DB159A3C3960944F549265A0 /* LiveActivities.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7A072CE67E22BB9CB56357 /* LiveActivities.swift */; };
 		DD1ADA0689185064F2FD7A66 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F3D5EADDFCF5F97A5E8E312 /* KairoCore */; };
 		E6DD18D1C89333C5AB1D61CD /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0BAAFA2EDE0F01F4D5142C /* SettingsScreen.swift */; };
 		E946A8251FADBA9DBD7EFAE5 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47745F20972C8216F5F5159B /* AppConfig.swift */; };
@@ -162,6 +166,7 @@
 		60BCCFEDA071603941082962 /* KairoWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoWidgetsBundle.swift; sourceTree = "<group>"; };
 		629068826122CD2E66A3BC8D /* KairoShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoShare.entitlements; sourceTree = "<group>"; };
 		68770546B2F6EA64709ECE1E /* Kairo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Kairo.entitlements; sourceTree = "<group>"; };
+		6C52B064193093A2890A35DA /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
 		6C79C76DA516DEB314283D5F /* KairoWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoWatch.entitlements; sourceTree = "<group>"; };
 		702C7DBAB826675208D85909 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		707F7FF55F1FD406C59510DE /* TalkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkView.swift; sourceTree = "<group>"; };
@@ -171,13 +176,13 @@
 		7A4AA4FFAB89E8B6F9D5B955 /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
 		816DC79E95EE8F281DF214C9 /* DeviceActionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActionService.swift; sourceTree = "<group>"; };
 		857A38C946ECE0C1BEBD3EEF /* KairoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoApp.swift; sourceTree = "<group>"; };
+		85B0C68165A8AA5D97B890BC /* AlarmIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmIntents.swift; sourceTree = "<group>"; };
 		873CF4F6695286601659198D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyFields.swift; sourceTree = "<group>"; };
 		8B7733A998E5379EABF0A30B /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		8F0BAAFA2EDE0F01F4D5142C /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityTypes.swift; sourceTree = "<group>"; };
-		95FC7CD3EB2375E4566F6D14 /* VoiceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLiveActivity.swift; sourceTree = "<group>"; };
 		963DF1176B1DEB3C50D90517 /* MoreScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreens.swift; sourceTree = "<group>"; };
 		979B193DF41BFF42244BBBF9 /* Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rows.swift; sourceTree = "<group>"; };
 		97EE4C28B55B879007F5D6C3 /* NotesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScreen.swift; sourceTree = "<group>"; };
@@ -185,9 +190,11 @@
 		A77144B41F9E3F7564F77397 /* FamilyScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyScreen.swift; sourceTree = "<group>"; };
 		B40D1C8672319D772CC62B91 /* KairoWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoWatchWidgets.entitlements; sourceTree = "<group>"; };
 		BA4B1F6EA6AD5007CB02D4E7 /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
+		BB7A072CE67E22BB9CB56357 /* LiveActivities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivities.swift; sourceTree = "<group>"; };
 		C304053BD5B8D2CC40E389D1 /* ListsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListsScreen.swift; sourceTree = "<group>"; };
 		C343F683C082B5F7179CB161 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		D0B13B9AE0BE2FD0418AA10D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D2942963F12C233F957C5DC3 /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
 		D2D562162860B13CEB6A7FC6 /* RemindersScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersScreen.swift; sourceTree = "<group>"; };
 		D377BBB3302A878B36B161E3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D8C5F50F341D9DD24A43DA3A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -306,6 +313,7 @@
 				816DC79E95EE8F281DF214C9 /* DeviceActionService.swift */,
 				1EE36FEE33C727AEA429EF5A /* MeetingRecorder.swift */,
 				C343F683C082B5F7179CB161 /* NotificationService.swift */,
+				6C52B064193093A2890A35DA /* Shortcuts.swift */,
 				7A4AA4FFAB89E8B6F9D5B955 /* SyncService.swift */,
 				F568FDAA84EC50943EFFE47A /* VoiceEngine.swift */,
 				60A2B20F6677E3024D3781EF /* WakeWordService.swift */,
@@ -433,6 +441,7 @@
 			children = (
 				1CFE2557F6A8A707A6AC05EA /* Watch */,
 				94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */,
+				85B0C68165A8AA5D97B890BC /* AlarmIntents.swift */,
 				47745F20972C8216F5F5159B /* AppConfig.swift */,
 				2E31B1DAFA869872A6C83069 /* Intents.swift */,
 			);
@@ -446,8 +455,9 @@
 				D8C5F50F341D9DD24A43DA3A /* Info.plist */,
 				77E3422C5B5E9414D46A5842 /* KairoWidgets.entitlements */,
 				60BCCFEDA071603941082962 /* KairoWidgetsBundle.swift */,
+				BB7A072CE67E22BB9CB56357 /* LiveActivities.swift */,
+				D2942963F12C233F957C5DC3 /* Provider.swift */,
 				9B4C1741C3580B70EDFCD6C6 /* TodayWidget.swift */,
-				95FC7CD3EB2375E4566F6D14 /* VoiceLiveActivity.swift */,
 			);
 			path = Widgets;
 			sourceTree = "<group>";
@@ -664,6 +674,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				265295A9A28712D50E6BA669 /* ActivityTypes.swift in Sources */,
+				17A464AA09EC46BDC14A907E /* AlarmIntents.swift in Sources */,
 				8B4DB8F2E4033506305BD12E /* AppConfig.swift in Sources */,
 				705C30A1DB783C2DCFE5477B /* AppModel.swift in Sources */,
 				BAC9E56BDA733525744DAF0A /* CalendarScreen.swift in Sources */,
@@ -684,6 +695,7 @@
 				C6BD8E282EAB9C68652BBAE8 /* RootView.swift in Sources */,
 				A53834D73882B6630C6F62F8 /* Rows.swift in Sources */,
 				E6DD18D1C89333C5AB1D61CD /* SettingsScreen.swift in Sources */,
+				9E8BDE6783C1075D47EA6669 /* Shortcuts.swift in Sources */,
 				C9AC3A239D61DD317D0AACCC /* SyncService.swift in Sources */,
 				4F19CCD0ACB9FC0AFB96FDDE /* TalkView.swift in Sources */,
 				B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */,
@@ -700,11 +712,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				C8490504BE6FC6B75E81E348 /* ActivityTypes.swift in Sources */,
+				B176929823514BB8C7C8C8A1 /* AlarmIntents.swift in Sources */,
 				F8557A3A752AFE1AC0AB6998 /* AppConfig.swift in Sources */,
 				A1B2D93F93A8A9B709980371 /* Intents.swift in Sources */,
 				B9D9329B6FA6FE5C8859993F /* KairoWidgetsBundle.swift in Sources */,
+				DB159A3C3960944F549265A0 /* LiveActivities.swift in Sources */,
+				737D90BD6BA615193F2BB3C7 /* Provider.swift in Sources */,
 				274DCCA8975390FF6D229CB1 /* TodayWidget.swift in Sources */,
-				D7352370AAFE3FE9FA9B794B /* VoiceLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -107,8 +107,10 @@ struct SettingsScreen: View {
     private var voiceSection: some View {
         Section {
             Picker(selection: Binding(get: { settings.voice }, set: { settings.voice = $0; save(["voice": .string($0)]) })) {
-                ForEach(voices.isEmpty ? [VoiceOption(id: settings.voice, name: settings.voice, description: "")] : voices) { v in
-                    Text(v.name).tag(v.id)
+                if voices.isEmpty {
+                    Text(settings.voice).tag(settings.voice)
+                } else {
+                    ForEach(voices) { v in Text(v.name).tag(v.id) }
                 }
             } label: { Label("Voz de Kairo", systemImage: "waveform") }
             VStack(alignment: .leading) {

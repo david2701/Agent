@@ -9,6 +9,14 @@ struct KairoWidgetsBundle: WidgetBundle {
 
     var body: some Widget {
         TodayWidget()
+        NextEventWidget()
+        ListWidget()
+        TalkWidget()
+        TalkControl()
+        TodayControl()
         VoiceLiveActivity()
+        RecordingLiveActivity()
+        EventLiveActivity()
+        AlarmLiveActivity()
     }
 }

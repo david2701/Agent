@@ -17,8 +17,16 @@ enum DeviceActionService {
                 secondaryButton: nil,
                 secondaryButtonBehavior: nil
             )
+            // Cuenta regresiva en la Isla Dinámica y la pantalla bloqueada (la dibuja AlarmLiveActivity)
+            let presentation = AlarmPresentation(
+                alert: alert,
+                countdown: AlarmPresentation.Countdown(title: LocalizedStringResource(stringLiteral: label),
+                                                       pauseButton: AlarmButton(text: "Pausar", textColor: .white, systemImageName: "pause.fill")),
+                paused: AlarmPresentation.Paused(title: "En pausa",
+                                                 resumeButton: AlarmButton(text: "Reanudar", textColor: .white, systemImageName: "play.fill"))
+            )
             let attributes = AlarmAttributes<KairoAlarmMetadata>(
-                presentation: AlarmPresentation(alert: alert),
+                presentation: presentation,
                 metadata: KairoAlarmMetadata(label: label, kind: "timer"),
                 tintColor: Color(red: 0.94, green: 0.64, blue: 0.23)
             )

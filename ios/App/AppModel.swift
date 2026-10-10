@@ -269,6 +269,7 @@ final class AppModel {
         AppConfig.snapshots.save(snap)
         WidgetCenter.shared.reloadAllTimelines()
         WatchBridge.shared.send(snapshot: snap)
+        EventActivityController.refresh(snap)
     }
 
     func ownerName(_ id: String?) -> String? { family?.ownerName(id) }
