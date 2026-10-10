@@ -55,6 +55,17 @@ jobs:
           xcodebuild build -quiet -project Kairo.xcodeproj -scheme Kairo \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-ios.log
+      - name: Capturas en el simulador
+        if: steps.ios.outcome == 'success'
+        continue-on-error: true
+        working-directory: ios
+        run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/capturas
+      - uses: actions/upload-artifact@v4
+        if: steps.ios.outcome == 'success'
+        with:
+          name: capturas-ios
+          path: ios/build/capturas
+          if-no-files-found: ignore
       - name: Resumen de errores
         if: always()
         working-directory: ios

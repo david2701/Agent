@@ -104,6 +104,9 @@ final class AppModel {
     func bootstrap() async {
         await api.setOnSessionExpired { Task { @MainActor in AppModel.shared.signedOut() } }
         await api.setLocationProvider { await LocationService.shared.lastLocation() }
+        #if DEBUG
+        await debugAutologin()
+        #endif
         if let s = await api.sessions.current() {
             user = s.user
             serverURL = s.serverURL
@@ -113,6 +116,22 @@ final class AppModel {
             phase = .signedOut
         }
     }
+
+    /// Capturas automáticas en el simulador (CI): sin diálogos del sistema.
+    static let screenshotMode = ProcessInfo.processInfo.environment["KAIRO_SCREENSHOT"] != nil
+
+    #if DEBUG
+    /// Sólo en compilaciones de depuración: inicia sesión y abre una sección desde variables de entorno
+    /// (KAIRO_AUTOLOGIN="servidor|correo|contraseña", KAIRO_SECTION=tasks). Lo usa el flujo de capturas de CI.
+    private func debugAutologin() async {
+        let env = ProcessInfo.processInfo.environment
+        if let s = env["KAIRO_SECTION"], let sec = AppSection(rawValue: s) { selection = sec }
+        guard let auto = env["KAIRO_AUTOLOGIN"] else { return }
+        let parts = auto.split(separator: "|", maxSplits: 2).map(String.init)
+        guard parts.count == 3 else { return }
+        _ = try? await api.login(server: parts[0], email: parts[1], password: parts[2])
+    }
+    #endif
 
     func didSignIn(_ u: User) async {
         user = u
@@ -130,7 +149,7 @@ final class AppModel {
         await SyncService.shared.sync(api: api, model: self)
         await refreshSnapshot()
         await ExtensionSessionService.ensure(api: api)
-        await NotificationService.requestAuthorization()
+        if !Self.screenshotMode { await NotificationService.requestAuthorization() }
         if let me = try? await api.me() { user = me }
         if fresh { PushRegistration.register() }
         if let a = PendingAction.take() { perform(a) }
