@@ -22,6 +22,7 @@ import app.kairo.domain.RemindersRepo
 import app.kairo.domain.SettingsService
 import app.kairo.domain.TasksRepo
 import app.kairo.domain.UsersRepo
+import app.kairo.integrations.ApnsService
 import app.kairo.integrations.GoogleCalendarService
 import app.kairo.integrations.McpClient
 import app.kairo.integrations.NtfyNotifier
@@ -55,11 +56,12 @@ class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
     val files = FilesRepo(db, crypto)
     val embedder = Embedder(nan, db, scope)
 
-    // Avisos sin Firebase: WebSocket + Web Push (UnifiedPush) + ntfy
+    // Avisos sin Firebase: WebSocket + Web Push (UnifiedPush) + APNs (iPhone, opcional) + ntfy
     val ntfy = NtfyNotifier(config)
     val push = PushService(db, crypto, config)
+    val apns = ApnsService(db, config)
     val notices = NoticesRepo(db)
-    val notifier = Notifier(scope, config, bus, push, ntfy, notices, users, family, settings)
+    val notifier = Notifier(scope, config, bus, push, apns, ntfy, notices, users, family, settings)
 
     val notes = NotesRepo(db, activity, embedder, files, nan, notifier)
     val tasks = TasksRepo(db, activity, notifier)

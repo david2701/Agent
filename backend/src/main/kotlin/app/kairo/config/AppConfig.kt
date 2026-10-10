@@ -26,8 +26,20 @@ data class AppConfig(
     val schedulersEnabled: Boolean,
     /** Permite endpoints de push http:// (sólo pruebas o un ntfy en la red local). Por defecto, sólo https. */
     val pushAllowHttp: Boolean = false,
+    /** Push nativo de Apple (APNs), opcional: id de la clave .p8, Team ID y bundle id de la app de iOS. */
+    val apnsKeyId: String? = null,
+    val apnsTeamId: String? = null,
+    val apnsTopic: String? = null,
+    /** Contenido PEM de la clave .p8 (APNS_PRIVATE_KEY, admite "\n" literales) o ruta del archivo (APNS_PRIVATE_KEY_FILE). */
+    val apnsPrivateKey: String? = null,
+    val apnsPrivateKeyFile: String? = null,
 ) {
     val googleEnabled: Boolean get() = !googleClientId.isNullOrBlank() && !googleClientSecret.isNullOrBlank()
+
+    /** Están todos los datos de APNs (la clave se valida al arrancar en ApnsService). */
+    val apnsConfigured: Boolean
+        get() = !apnsKeyId.isNullOrBlank() && !apnsTeamId.isNullOrBlank() && !apnsTopic.isNullOrBlank() &&
+            (!apnsPrivateKey.isNullOrBlank() || !apnsPrivateKeyFile.isNullOrBlank())
 
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -62,6 +74,11 @@ data class AppConfig(
                 corsOrigins = opt("KAIRO_CORS_ORIGINS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
                 schedulersEnabled = opt("KAIRO_SCHEDULERS")?.toBooleanStrictOrNull() ?: true,
                 pushAllowHttp = opt("KAIRO_PUSH_ALLOW_HTTP")?.toBooleanStrictOrNull() ?: false,
+                apnsKeyId = opt("APNS_KEY_ID")?.trim(),
+                apnsTeamId = opt("APNS_TEAM_ID")?.trim(),
+                apnsTopic = opt("APNS_TOPIC")?.trim(),
+                apnsPrivateKey = opt("APNS_PRIVATE_KEY")?.replace("\\n", "\n"),
+                apnsPrivateKeyFile = opt("APNS_PRIVATE_KEY_FILE")?.trim(),
             )
         }
     }

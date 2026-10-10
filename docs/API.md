@@ -145,9 +145,44 @@ registra cada teléfono con UnifiedPush (por ejemplo, un ntfy autoalojado). El c
 que llega por WebSocket; el distribuidor no puede leerlo.
 - `GET /push` -> `{vapidPublicKey (base64url, 87 caracteres), registeredDevices}`
 - `POST /push/register {endpoint, p256dh, auth}` (claves del conector UnifiedPush; ligado al dispositivo de la sesión)
-- `DELETE /push/register` · `POST /push/test` -> `{delivered}` (envía un `family.notice` de prueba sólo por push)
+- `DELETE /push/register` · `POST /push/test` -> `{delivered}` (envía un `family.notice` de prueba sólo por push:
+  Web Push y APNs; `delivered` suma los dispositivos que lo aceptaron por ambas vías)
 
 Los endpoints deben ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http` para pruebas o una red local).
+
+### Push de Apple (APNs)
+
+Opcional (ver [PUSH.md](PUSH.md#push-de-apple-apns-para-iphone)). El servidor envía alertas por HTTP/2 a APNs con un
+token de proveedor ES256 firmado con la clave `.p8`; cada token del iPhone queda ligado al dispositivo de la sesión.
+- `GET /push/apns` -> `{available, registeredDevices}` (`available`: el servidor tiene credenciales de APNs válidas;
+  `registeredDevices`: tokens de APNs de este usuario)
+- `POST /push/apns/register {token, environment: "sandbox"|"production", kind: "device", activityId?}` -> `{available, registeredDevices}`
+  - `token`: el token del dispositivo en hexadecimal (64 a 200 caracteres); si no, `400`. Se actualiza si ya existía
+    y reemplaza al token anterior del mismo dispositivo. `environment` inválido o `kind` distinto de `device` -> `400`.
+  - Se guarda aunque el servidor no tenga APNs configurado (`available: false`): empieza a llegar en cuanto se configure.
+- `DELETE /push/apns/register` -> `{ok}` (borra los tokens de APNs de este dispositivo; también se borran al cerrar
+  o revocar la sesión)
+
+Contenido de cada push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expiration` = 1 hora,
+`apns-collapse-id` = la misma clave con la que la app deduplica, p. ej. `rem:{id}:{fireAt}` o `notice:{id}`):
+```json
+{
+  "aps": {
+    "alert": {"title": "Kairo", "body": "Llevar el carnet de salud"},
+    "sound": "default", "thread-id": "reminder", "interruption-level": "time-sensitive",
+    "category": "kairo.reminder", "content-available": 1
+  },
+  "kairo": {"type": "reminder.fire", "data": {"id": "…", "text": "Llevar el carnet de salud", "fireAt": "…", "recurring": false}},
+  "entityId": "…", "destination": "reminders"
+}
+```
+- `kairo` es el mismo `{type, data}` del WebSocket. `interruption-level` es `time-sensitive` para `reminder.fire` y
+  `event.alert`, y `active` para el resto. `thread-id`: `reminder`, `event`, `briefing` o `family`.
+- `category` (`kairo.reminder` con "Hecho"/"En 10 min", `kairo.briefing` con "Escuchar"), `entityId` y `destination`
+  son los mismos que usan las notificaciones locales de la app.
+- El contenido nunca pasa de 4 KB: si hace falta, se recortan el texto de la alerta y los textos largos de `data`
+  (terminan en `…`); ids y fechas no se tocan.
+- Si Apple responde `410`, o `400` con `BadDeviceToken` / `DeviceTokenNotForTopic`, el token se borra.
 
 ## Ajustes y sistema
 - `GET|PATCH /settings` -> `{settings: UserSettings, googleAvailable, ntfyAvailable}`
@@ -172,7 +207,8 @@ Los endpoints deben ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http` par
 - `event.alert` `{id, title, startAt, alertAt, minutes, location, shared}`: aviso previo de un evento del calendario (deduplicar por `id+startAt+minutes` con la alarma local).
 - `family.notice` `{id, kind, title, body, actorId?, entityType?, entityId?, createdAt}`: aviso de la familia (deduplicar por `id`).
 
-Los mismos eventos `reminder.fire`, `event.alert`, `briefing.ready` y `family.notice` llegan también por push.
+Los mismos eventos `reminder.fire`, `event.alert`, `briefing.ready` y `family.notice` llegan también por push
+(Web Push y, en iPhone, APNs dentro de la clave `kairo`).
 - `briefing.ready` `{text, date}`
 - `recording.updated` `{id}`
 - `ping` cada 25 s (el cliente puede enviar `"ping"` y recibe `pong`).

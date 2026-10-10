@@ -5,6 +5,8 @@
 *.keystore
 *.jks
 keystore.properties
+*.p8
+secrets/
 local.properties
 
 # Build outputs

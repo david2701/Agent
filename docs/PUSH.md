@@ -11,6 +11,9 @@ Funciona en tres niveles; cuanto más arriba, más inmediato con la app cerrada.
 
 Los tres conviven: el teléfono reconoce cada aviso por su id y no lo muestra dos veces.
 
+En **iPhone** no hay UnifiedPush: el nivel 1 es el push de Apple (APNs), también opcional
+(ver [Push de Apple (APNs) para iPhone](#push-de-apple-apns-para-iphone)).
+
 ## Cómo funciona el push propio
 
 ```
@@ -54,6 +57,86 @@ No hace falta crear temas ni suscripciones a mano: Kairo y ntfy los gestionan so
 - Dashboard: *Ajustes > Notificaciones* muestra cuántos teléfonos tienen push registrado.
 - App: *Enviar prueba* manda un aviso sólo por push; si llega con la app cerrada, está listo.
 - API: `POST /api/push/test` devuelve `{delivered}` (ver [API.md](API.md#push-propio-sin-firebase)).
+
+## Push de Apple (APNs) para iPhone
+
+Con la app de iOS cerrada, el único push que llega es el de Apple. Es **opcional**: sin APNs la app funciona con sus
+notificaciones locales (recordatorios, avisos de eventos y resumen matinal programados en el propio iPhone, que suenan
+aunque no haya internet), la conexión directa mientras está abierta y la actualización en segundo plano. Lo único que
+se pierde es que los avisos de la familia lleguen al instante con la app cerrada.
+
+```
+Kairo (tu servidor) --HTTP/2 + token de la clave .p8--> APNs (Apple) --> iPhone (y el Apple Watch emparejado)
+```
+
+Necesitas una cuenta del Apple Developer Program (la misma con la que firmas la app, ver [IOS.md](IOS.md)).
+
+### 1. Crear la clave `.p8`
+
+1. En [developer.apple.com](https://developer.apple.com/account) entra a *Certificates, Identifiers & Profiles > Keys*
+   y toca **+**.
+2. Ponle un nombre (por ejemplo "Kairo push"), marca **Apple Push Notifications service (APNs)** y registra la clave.
+   Si Apple te pide configurarla, elige el entorno *Sandbox & Production* para usar la misma clave en ambos.
+3. Descarga el archivo `AuthKey_XXXXXXXXXX.p8`. **Sólo se puede descargar una vez**: guárdalo en un lugar seguro y
+   nunca lo subas al repositorio (`*.p8` y `secrets/` están en `.gitignore`).
+4. Anota el **Key ID** (10 caracteres, también va en el nombre del archivo) y tu **Team ID** (*Membership details*).
+
+El App ID de la app debe tener la capacidad *Push Notifications*; con la firma automática de Xcode se activa sola,
+porque la app ya trae el permiso `aps-environment`.
+
+### 2. Configurar el servidor
+
+```bash
+# .env
+APNS_KEY_ID=ABC123DEFG
+APNS_TEAM_ID=TEAM123456
+APNS_TOPIC=app.kairo.ios                    # KAIRO_BUNDLE_ID de ios/Config/Signing.xcconfig
+APNS_PRIVATE_KEY_FILE=/run/secrets/apns.p8
+```
+
+Con Docker, monta el archivo en el contenedor (descomenta estas líneas del servicio `kairo` en `docker-compose.yml`):
+
+```yaml
+    volumes:
+      - ./secrets/AuthKey_ABC123DEFG.p8:/run/secrets/apns.p8:ro
+```
+
+Si prefieres no usar un archivo, pon el contenido de la clave en `APNS_PRIVATE_KEY`, en una sola línea y con `\n` en
+lugar de cada salto de línea:
+
+```bash
+awk 'NF {printf "%s\\n", $0}' AuthKey_ABC123DEFG.p8
+```
+
+Reinicia (`docker compose up -d`). El log dice `APNs activo para app.kairo.ios`; si falta un dato o la clave no es
+válida, dice `APNs desactivado: ...` y Kairo sigue funcionando sin push de Apple.
+
+### Sandbox y producción
+
+| Cómo instalaste la app | Entorno | Servidor de Apple |
+|---|---|---|
+| Desde Xcode (compilación de depuración) | `sandbox` | `api.sandbox.push.apple.com` |
+| TestFlight o App Store | `production` | `api.push.apple.com` |
+
+La app dice al registrarse en qué entorno está y el servidor usa el de cada token; la misma clave `.p8` sirve para los
+dos. Si un token no corresponde a su entorno o a la app, Apple responde `BadDeviceToken` o `DeviceTokenNotForTopic`
+y Kairo lo borra; la app lo vuelve a registrar al iniciar sesión.
+
+### Comprobar que funciona
+
+- App: *Ajustes > Avisos* dice si el servidor tiene el push de Apple activo y cuántos dispositivos tienes registrados.
+- API: `GET /api/push/apns` -> `{available: true, registeredDevices: 1}` (ver [API.md](API.md#push-de-apple-apns)).
+- Cierra la app y toca *Enviar prueba* desde otro dispositivo, o llama a `POST /api/push/test`: `delivered` cuenta
+  también los iPhone que aceptaron el aviso.
+
+### Qué conviene saber
+
+- Los recordatorios y avisos de eventos llegan como *urgentes* (`time-sensitive`), con los botones "Hecho" y
+  "En 10 min" en los recordatorios. Cada aviso lleva el mismo id que la alarma local de la app, así que no se duplica.
+- A diferencia de Web Push, el contenido de APNs no va cifrado de extremo a extremo: viaja por TLS hasta Apple, que
+  puede ver el título y el texto del aviso.
+- Los tokens se borran al cerrar sesión, al revocar el dispositivo en *Ajustes > Dispositivos* y cuando Apple
+  avisa que ya no sirven.
 
 ## ntfy como canal adicional (opcional)
 

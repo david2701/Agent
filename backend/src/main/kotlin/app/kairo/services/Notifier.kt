@@ -5,6 +5,7 @@ import app.kairo.domain.FamilyRepo
 import app.kairo.domain.NoticesRepo
 import app.kairo.domain.SettingsService
 import app.kairo.domain.UsersRepo
+import app.kairo.integrations.ApnsService
 import app.kairo.integrations.NtfyNotifier
 import app.kairo.integrations.PushService
 import app.kairo.realtime.EventBus
@@ -21,7 +22,8 @@ import java.util.UUID
  * Un solo lugar para avisar a una persona, sin Firebase:
  * 1. WebSocket a sus dispositivos conectados (dashboard, app abierta o escuchando).
  * 2. Web Push cifrado a sus teléfonos con UnifiedPush (llega con la app cerrada).
- * 3. ntfy, si configuró un tema propio.
+ * 3. Push nativo de Apple (APNs) a sus iPhone, si el servidor tiene credenciales de APNs.
+ * 4. ntfy, si configuró un tema propio.
  * Los teléfonos deduplican por id, así que recibir el mismo aviso por dos vías no lo muestra dos veces.
  */
 class Notifier(
@@ -29,6 +31,7 @@ class Notifier(
     private val cfg: AppConfig,
     private val bus: EventBus,
     private val push: PushService,
+    private val apns: ApnsService,
     private val ntfy: NtfyNotifier,
     private val notices: NoticesRepo,
     private val users: UsersRepo,
@@ -43,6 +46,10 @@ class Notifier(
         scope.launch {
             runCatching { push.send(userId, event) }.onFailure { log.warn("Push falló: {}", it.message) }
             runCatching { ntfyTopic(userId)?.let { ntfy.send(it, title, body, tags = tags, priority = priority) } }
+        }
+        // Aparte, para que un Web Push lento no retrase el aviso del iPhone
+        if (apns.available) scope.launch {
+            runCatching { apns.send(userId, event, title, body) }.onFailure { log.warn("APNs falló: {}", it.message) }
         }
     }
 

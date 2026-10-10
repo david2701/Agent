@@ -3,12 +3,24 @@ package app.kairo.util
 import io.ktor.client.engine.ProxyBuilder
 import io.ktor.client.engine.ProxyConfig
 import io.ktor.http.Url
+import java.net.InetSocketAddress
+import java.net.ProxySelector
+import java.net.http.HttpClient
 
 /** Proxy de salida opcional tomado de HTTPS_PROXY (útil si el servidor sale por un proxy corporativo). */
 fun proxyFromEnv(): ProxyConfig? {
     val raw = System.getenv("HTTPS_PROXY") ?: System.getenv("https_proxy") ?: return null
     return runCatching { ProxyBuilder.http(Url(raw)) }.getOrNull()
 }
+
+/**
+ * Lo mismo que [proxyFromEnv] para el cliente HTTP del JDK (APNs necesita HTTP/2, que el motor CIO no tiene).
+ * Sin HTTPS_PROXY usa el selector por defecto de la JVM (propiedades https.proxyHost, etc.).
+ */
+fun jdkProxySelector(): ProxySelector =
+    (proxyFromEnv()?.address() as? InetSocketAddress)?.let { ProxySelector.of(it) }
+        ?: ProxySelector.getDefault()
+        ?: HttpClient.Builder.NO_PROXY
 
 /**
  * true si a [host] hay que llegar sin proxy: está en NO_PROXY o es una dirección local/privada

@@ -96,12 +96,14 @@ class UsersRepo(private val db: Db) {
 
     suspend fun revokeDevice(userId: UUID, deviceId: UUID): Boolean = db.tx {
         exec("delete from push_endpoints where device_id = ? and user_id = ?", deviceId, userId)
+        exec("delete from apns_tokens where device_id = ? and user_id = ?", deviceId, userId)
         exec("update devices set revoked_at = now() where user_id = ? and id = ?", userId, deviceId) > 0
     }
 
     /** Cierra todas las sesiones de un usuario (tras definir una contraseña nueva con un código de acceso). */
     suspend fun revokeAllDevices(userId: UUID) = db.tx {
         exec("delete from push_endpoints where user_id = ?", userId)
+        exec("delete from apns_tokens where user_id = ?", userId)
         exec("update devices set revoked_at = now() where user_id = ? and revoked_at is null", userId)
     }
 

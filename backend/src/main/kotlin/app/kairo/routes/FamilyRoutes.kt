@@ -21,6 +21,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.json.buildJsonObject
@@ -39,6 +41,8 @@ import java.util.UUID
 @Serializable data class PushConfig(val vapidPublicKey: String, val registeredDevices: Int)
 @Serializable data class PushRegister(val endpoint: String, val p256dh: String, val auth: String)
 @Serializable data class PushTestResult(val delivered: Int)
+@Serializable data class ApnsStatus(val available: Boolean, val registeredDevices: Int)
+@Serializable data class ApnsRegister(val token: String, val environment: String, val kind: String = "device", val activityId: String? = null)
 
 fun Route.familyRoutes(s: Services) {
 
@@ -110,7 +114,7 @@ fun Route.familyRoutes(s: Services) {
         }
     }
 
-    // ------------------------------------------------------------ Push propio (UnifiedPush / Web Push)
+    // ------------------------------------------------------------ Push propio (UnifiedPush / Web Push y APNs)
     route("/push") {
         get { call.respond(PushConfig(s.push.vapidPublicKey(), s.push.registeredDevices(call.userId()))) }
         post("/register") {
@@ -123,17 +127,44 @@ fun Route.familyRoutes(s: Services) {
             s.push.unregister(call.userId(), call.deviceId())
             call.respond(OkResponse())
         }
-        /** Envía un aviso de prueba sólo por push, para comprobar que llega con la app cerrada. */
+        /** Envía un aviso de prueba sólo por push (Web Push y APNs), para comprobar que llega con la app cerrada. */
         post("/test") {
             val me = call.userId()
+            val title = "Push de Kairo funcionando"
+            val body = "Este aviso llegó sin Firebase."
             val event = ServerEvent(EventTypes.FAMILY_NOTICE, buildJsonObject {
                 put("id", UUID.randomUUID().toString())
                 put("kind", "test")
-                put("title", "Push de Kairo funcionando")
-                put("body", "Este aviso llegó sin Firebase.")
+                put("title", title)
+                put("body", body)
                 put("createdAt", Instant.now().toString())
             })
-            call.respond(PushTestResult(s.push.send(me, event)))
+            val delivered = coroutineScope {
+                val web = async { s.push.send(me, event) }
+                val apple = async { s.apns.send(me, event, title, body) }
+                web.await() + apple.await()
+            }
+            call.respond(PushTestResult(delivered))
+        }
+
+        // -------------------------------------------------------- Push nativo de Apple (APNs)
+        route("/apns") {
+            /** available: el servidor tiene credenciales de APNs; registeredDevices: tokens de APNs de este usuario. */
+            get { call.respond(ApnsStatus(s.apns.available, s.apns.registeredDevices(call.userId()))) }
+            /** Se guarda aunque APNs no esté configurado: empieza a funcionar en cuanto se configure. */
+            post("/register") {
+                val b = call.receiveBody<ApnsRegister>()
+                try {
+                    s.apns.register(call.userId(), call.deviceId(), b.token, b.environment, b.kind, b.activityId)
+                } catch (e: IllegalArgumentException) {
+                    badRequest(e.message ?: "Datos de APNs inválidos")
+                }
+                call.respond(ApnsStatus(s.apns.available, s.apns.registeredDevices(call.userId())))
+            }
+            delete("/register") {
+                s.apns.unregister(call.userId(), call.deviceId())
+                call.respond(OkResponse())
+            }
         }
     }
 }

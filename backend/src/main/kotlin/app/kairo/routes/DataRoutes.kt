@@ -36,9 +36,9 @@ import java.util.UUID
 
 private const val SRC = "dashboard"
 
-/** Origen de un cambio hecho desde un cliente: "app" para Android/Wear, "dashboard" para la web. */
+/** Origen de un cambio hecho desde un cliente: "app" para Android/Wear e iPhone/Apple Watch, "dashboard" para la web. */
 private fun io.ktor.server.application.ApplicationCall.source(): String =
-    when (request.headers["X-Kairo-Client"]?.lowercase()) { "android", "wear" -> "app"; else -> SRC }
+    when (request.headers["X-Kairo-Client"]?.lowercase()) { "android", "wear", "ios", "watch" -> "app"; else -> SRC }
 
 @Serializable data class NoteCreate(
     val title: String = "", val content: String = "", val tags: List<String> = emptyList(), val pinned: Boolean = false, val shared: Boolean = false,

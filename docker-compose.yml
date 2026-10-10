@@ -34,6 +34,9 @@ services:
     environment:
       KAIRO_DB_URL: jdbc:postgresql://db:5432/kairo
       KAIRO_DB_USER: kairo
+    # Opcional, push de Apple: monta la clave .p8 y pon APNS_PRIVATE_KEY_FILE=/run/secrets/apns.p8 en .env
+    # volumes:
+    #   - ./secrets/AuthKey_XXXXXXXXXX.p8:/run/secrets/apns.p8:ro
     depends_on:
       db:
         condition: service_healthy
