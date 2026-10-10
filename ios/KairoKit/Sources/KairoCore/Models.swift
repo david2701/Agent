@@ -47,6 +47,10 @@ public struct FileRef: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var url: String
     public var contentType: String?
+
+    public init(id: String, url: String, contentType: String? = nil) {
+        self.id = id; self.url = url; self.contentType = contentType
+    }
 }
 
 public struct Note: Codable, Sendable, Hashable, Identifiable {
