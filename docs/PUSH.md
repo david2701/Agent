@@ -1,163 +1,171 @@
-# Avisos sin Firebase
+# Notifications without Firebase
 
-Sí: Kairo tiene su propio sistema de avisos y no depende de Firebase ni de Google Play Services.
-Funciona en tres niveles; cuanto más arriba, más inmediato con la app cerrada.
+Kairo has its own notification system and does not depend on Firebase or Google Play Services. It works on three
+levels. The higher the level, the faster notifications arrive while the app is closed.
 
-| Nivel | Cómo llega | Qué necesita |
+Other languages: [Spanish version](es/PUSH.md).
+
+| Level | How it arrives | What it needs |
 |---|---|---|
-| **1. Push propio (UnifiedPush)** | Al instante, con la app cerrada y sin gastar batería extra | Un servidor ntfy (incluido en `docker-compose.yml`) y la app ntfy en cada teléfono |
-| **2. Conexión directa** | Al instante mientras la app está abierta, "Oye Kairo" está activo o activas *Conexión directa con tu servidor* | Nada más; usa un poco más de batería |
-| **3. Alarmas locales y sincronización** | Recordatorios, avisos de eventos y resumen matinal suenan a su hora aunque no haya internet; el resto llega en la siguiente sincronización (cada 15 min) | Nada |
+| **1. Self-hosted push (UnifiedPush)** | Instantly, with the app closed and no extra battery use | An ntfy server (included in `docker-compose.yml`) and the ntfy app on each phone |
+| **2. Direct connection** | Instantly while the app is open, "Hey Kairo" is active, or you turn on *Direct connection to your server* | Nothing else. It uses a little more battery. |
+| **3. Local alarms and sync** | Reminders, event alerts and the morning briefing ring on time even with no internet. Everything else arrives on the next sync (every 15 minutes). | Nothing |
 
-Los tres conviven: el teléfono reconoce cada aviso por su id y no lo muestra dos veces.
+All three work together. The phone recognizes each notification by its id and never shows it twice.
 
-En **iPhone** no hay UnifiedPush: el nivel 1 es el push de Apple (APNs), también opcional
-(ver [Push de Apple (APNs) para iPhone](#push-de-apple-apns-para-iphone)).
+**iPhone** has no UnifiedPush. Level 1 is Apple's push service (APNs), which is also optional.
+See [Apple push (APNs) for iPhone](#apple-push-apns-for-iphone).
 
-## Cómo funciona el push propio
+## How self-hosted push works
 
 ```
-Kairo (tu servidor) --Web Push cifrado--> ntfy (tu servidor) --conexión del teléfono--> app ntfy --> Kairo en el teléfono
+Kairo (your server) --encrypted Web Push--> ntfy (your server) --phone connection--> ntfy app --> Kairo on the phone
 ```
 
-- **UnifiedPush** es un estándar abierto para que las apps reciban push sin Firebase. La app ntfy actúa como
-  "distribuidor": mantiene una sola conexión con tu servidor ntfy y entrega los mensajes a Kairo.
-- Kairo cifra cada mensaje para el teléfono (RFC 8291, `aes128gcm`) y lo firma con VAPID (RFC 8292). ntfy sólo
-  ve bytes cifrados: ni ntfy ni nadie en el camino puede leer tus recordatorios.
-- La clave VAPID se genera sola en el primer uso y se guarda cifrada con `KAIRO_ENCRYPTION_KEY`.
+- **UnifiedPush** is an open standard that lets apps receive push notifications without Firebase. The ntfy app acts
+  as the "distributor". It keeps a single connection to your ntfy server and hands messages to Kairo.
+- Kairo encrypts each message for the phone (RFC 8291, `aes128gcm`) and signs it with VAPID (RFC 8292). ntfy only sees
+  encrypted bytes. Neither ntfy nor anyone on the way can read your reminders.
+- The VAPID key is generated automatically on first use and stored encrypted with `KAIRO_ENCRYPTION_KEY`.
 
-## Ponerlo en marcha
+## Set it up
 
-1. En el servidor, define en `.env` la URL pública de ntfy y levántalo:
+1. On the server, set the public ntfy URL in `.env` and start it:
    ```bash
    # .env
-   NTFY_PUBLIC_URL=https://ntfy.tudominio.com
+   NTFY_PUBLIC_URL=https://ntfy.example.com
    ```
    ```bash
    docker compose --profile push up -d
    ```
-2. Agrega a tu Caddyfile el bloque `ntfy.tudominio.com` de [`deploy/Caddyfile.example`](../deploy/Caddyfile.example) y ejecuta `caddy reload`.
-3. En cada teléfono de la familia:
-   - Instala **ntfy** (F-Droid o Play Store).
-   - En ntfy: *Ajustes > Servidor predeterminado* = `https://ntfy.tudominio.com`.
-   - En Kairo: *Ajustes > Avisos al instante, sin Firebase > Configurar*, elige ntfy y toca *Enviar prueba*.
+2. Add the `ntfy.example.com` block from [`deploy/Caddyfile.example`](../deploy/Caddyfile.example) to your Caddyfile
+   and run `caddy reload`.
+3. On each family phone:
+   - Install **ntfy** (F-Droid or Play Store).
+   - In ntfy, set *Settings > Default server* to `https://ntfy.example.com`.
+   - In Kairo, open *Settings > Instant alerts without Firebase > Set up*, choose ntfy and tap *Send test*.
 
-No hace falta crear temas ni suscripciones a mano: Kairo y ntfy los gestionan solos.
+You do not need to create topics or subscriptions by hand. Kairo and ntfy manage them.
 
-## Seguridad del servidor ntfy
+## ntfy server security
 
-- Los temas de UnifiedPush son aleatorios e imposibles de adivinar, y el contenido va cifrado.
-- La configuración incluida no permite registrarse (`NTFY_ENABLE_SIGNUP=false`), guarda los mensajes 24 horas
-  y sólo escucha en `127.0.0.1` (lo publica Caddy con HTTPS).
-- Si quieres cerrarlo más, ntfy permite control de acceso (`auth-default-access: deny-all`) dejando escritura
-  anónima sólo en los temas `up*`; consulta la documentación de ntfy sobre UnifiedPush.
+- UnifiedPush topics are random and impossible to guess, and the content is encrypted.
+- The bundled configuration does not allow sign-ups (`NTFY_ENABLE_SIGNUP=false`), keeps messages for 24 hours and
+  listens on `127.0.0.1` only (Caddy publishes it over HTTPS).
+- To lock it down further, ntfy supports access control (`auth-default-access: deny-all`) with anonymous write
+  access only on the `up*` topics. See the ntfy documentation on UnifiedPush.
 
-### Qué endpoints acepta Kairo
+### Which endpoints Kairo accepts
 
-El endpoint lo manda el teléfono, así que Kairo lo valida (al registrarlo y antes de cada envío) para que nadie pueda
-usarlo para llegar a servicios de tu red:
-- Debe ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http`, para pruebas).
-- El host de `NTFY_PUBLIC_URL` (o de `NTFY_URL`) se acepta siempre, aunque resuelva a una IP de tu red local; es tu
-  ntfy. Si ese host es local o está en `NO_PROXY`, Kairo llega a él sin pasar por `HTTPS_PROXY`.
-- Cualquier otro host (ntfy.sh, otro distribuidor) tiene que resolver a direcciones públicas. Si usas un distribuidor
-  en tu red con otro nombre, pon `KAIRO_PUSH_ALLOW_PRIVATE=true` (acepta redes privadas; nunca loopback ni `169.254.x.x`).
-- Un endpoint o token de APNs que ya registró otra cuenta no se reasigna (`400`): cierra sesión en esa cuenta en el
-  teléfono (o revoca su dispositivo en *Ajustes > Dispositivos*) antes de entrar con otra.
+The phone sends the endpoint, so Kairo validates it (when it is registered and before every delivery). This stops
+anyone from using it to reach services on your network:
+- It must be `https`. `KAIRO_PUSH_ALLOW_HTTP=true` allows `http`, for testing.
+- The host of `NTFY_PUBLIC_URL` (or `NTFY_URL`) is always accepted, even if it resolves to an IP on your local
+  network, because it is your own ntfy. If that host is local or listed in `NO_PROXY`, Kairo reaches it without
+  going through `HTTPS_PROXY`.
+- Any other host (ntfy.sh, another distributor) must resolve to public addresses. If you use a distributor on your
+  network under a different name, set `KAIRO_PUSH_ALLOW_PRIVATE=true`. This accepts private networks, but never
+  loopback or `169.254.x.x`.
+- An endpoint or APNs token that another account has already registered is not reassigned (`400`). Sign out of that
+  account on the phone, or revoke its device in *Settings > Devices*, before signing in with another one.
 
-## Comprobar que funciona
+## Check that it works
 
-- Dashboard: *Ajustes > Notificaciones* muestra cuántos teléfonos tienen push registrado.
-- App: *Enviar prueba* manda un aviso sólo por push; si llega con la app cerrada, está listo.
-- API: `POST /api/push/test` devuelve `{delivered}` (ver [API.md](API.md#push-propio-sin-firebase)).
+- Dashboard: *Settings > Notifications* shows how many phones have push registered.
+- App: *Send test* sends a notification through push only. If it arrives with the app closed, you are all set.
+- API: `POST /api/push/test` returns `{delivered}` (see [API.md](API.md#self-hosted-push-no-firebase)).
 
-## Push de Apple (APNs) para iPhone
+## Apple push (APNs) for iPhone
 
-Con la app de iOS cerrada, el único push que llega es el de Apple. Es **opcional**: sin APNs la app funciona con sus
-notificaciones locales (recordatorios, avisos de eventos y resumen matinal programados en el propio iPhone, que suenan
-aunque no haya internet), la conexión directa mientras está abierta y la actualización en segundo plano. Lo único que
-se pierde es que los avisos de la familia lleguen al instante con la app cerrada.
+With the iOS app closed, the only push that can arrive is Apple's. It is **optional**. Without APNs, the app still
+works with its local notifications (reminders, event alerts and the morning briefing are scheduled on the iPhone and
+ring even with no internet), the direct connection while it is open, and background refresh. The only thing you lose
+is instant delivery of family notices while the app is closed.
 
 ```
-Kairo (tu servidor) --HTTP/2 + token de la clave .p8--> APNs (Apple) --> iPhone (y el Apple Watch emparejado)
+Kairo (your server) --HTTP/2 + .p8 key token--> APNs (Apple) --> iPhone (and the paired Apple Watch)
 ```
 
-Necesitas una cuenta del Apple Developer Program (la misma con la que firmas la app, ver [IOS.md](IOS.md)).
+You need an Apple Developer Program account, the same one you use to sign the app (see [IOS.md](IOS.md)).
 
-### 1. Crear la clave `.p8`
+### 1. Create the `.p8` key
 
-1. En [developer.apple.com](https://developer.apple.com/account) entra a *Certificates, Identifiers & Profiles > Keys*
-   y toca **+**.
-2. Ponle un nombre (por ejemplo "Kairo push"), marca **Apple Push Notifications service (APNs)** y registra la clave.
-   Si Apple te pide configurarla, elige el entorno *Sandbox & Production* para usar la misma clave en ambos.
-3. Descarga el archivo `AuthKey_XXXXXXXXXX.p8`. **Sólo se puede descargar una vez**: guárdalo en un lugar seguro y
-   nunca lo subas al repositorio (`*.p8` y `secrets/` están en `.gitignore`).
-4. Anota el **Key ID** (10 caracteres, también va en el nombre del archivo) y tu **Team ID** (*Membership details*).
+1. At [developer.apple.com](https://developer.apple.com/account), go to *Certificates, Identifiers & Profiles > Keys*
+   and click **+**.
+2. Give it a name (for example "Kairo push"), check **Apple Push Notifications service (APNs)** and register the
+   key. If Apple asks you to configure it, choose the *Sandbox & Production* environment so one key works for both.
+3. Download the `AuthKey_XXXXXXXXXX.p8` file. **You can only download it once.** Store it somewhere safe and never
+   commit it to the repository (`*.p8` and `secrets/` are in `.gitignore`).
+4. Note the **Key ID** (10 characters, also in the file name) and your **Team ID** (under *Membership details*).
 
-El App ID de la app debe tener la capacidad *Push Notifications*; con la firma automática de Xcode se activa sola,
-porque la app ya trae el permiso `aps-environment`.
+The app's App ID must have the *Push Notifications* capability. With Xcode's automatic signing this is turned on for
+you, because the app already includes the `aps-environment` entitlement.
 
-### 2. Configurar el servidor
+### 2. Configure the server
 
 ```bash
 # .env
 APNS_KEY_ID=ABC123DEFG
 APNS_TEAM_ID=TEAM123456
-APNS_TOPIC=app.kairo.ios                    # KAIRO_BUNDLE_ID de ios/Config/Signing.xcconfig
+APNS_TOPIC=app.kairo.ios                    # KAIRO_BUNDLE_ID from ios/Config/Signing.xcconfig
 APNS_PRIVATE_KEY_FILE=/run/secrets/apns.p8
 ```
 
-Con Docker, monta el archivo en el contenedor (descomenta estas líneas del servicio `kairo` en `docker-compose.yml`):
+With Docker, mount the file into the container (uncomment these lines in the `kairo` service of
+`docker-compose.yml`):
 
 ```yaml
     volumes:
       - ./secrets/AuthKey_ABC123DEFG.p8:/run/secrets/apns.p8:ro
 ```
 
-Si prefieres no usar un archivo, pon el contenido de la clave en `APNS_PRIVATE_KEY`, en una sola línea y con `\n` en
-lugar de cada salto de línea:
+If you prefer not to use a file, put the key contents in `APNS_PRIVATE_KEY`, on a single line, with `\n` in place of
+each line break:
 
 ```bash
 awk 'NF {printf "%s\\n", $0}' AuthKey_ABC123DEFG.p8
 ```
 
-Reinicia (`docker compose up -d`). El log dice `APNs activo para app.kairo.ios`; si falta un dato o la clave no es
-válida, dice `APNs desactivado: ...` y Kairo sigue funcionando sin push de Apple.
+Restart with `docker compose up -d`. The log says that APNs is enabled for your topic. If a value is missing or the
+key is not valid, it says that APNs is disabled, and Kairo keeps working without Apple push.
 
-### Sandbox y producción
+### Sandbox and production
 
-| Cómo instalaste la app | Entorno | Servidor de Apple |
+| How you installed the app | Environment | Apple server |
 |---|---|---|
-| Desde Xcode (compilación de depuración) | `sandbox` | `api.sandbox.push.apple.com` |
-| TestFlight o App Store | `production` | `api.push.apple.com` |
+| From Xcode (debug build) | `sandbox` | `api.sandbox.push.apple.com` |
+| TestFlight or the App Store | `production` | `api.push.apple.com` |
 
-La app dice al registrarse en qué entorno está y el servidor usa el de cada token; la misma clave `.p8` sirve para los
-dos. Si un token no corresponde a su entorno o a la app, Apple responde `BadDeviceToken` o `DeviceTokenNotForTopic`
-y Kairo lo borra; la app lo vuelve a registrar al iniciar sesión.
+When it registers, the app says which environment it is in, and the server uses the right one for each token. The
+same `.p8` key works for both. If a token does not match its environment or the app, Apple answers `BadDeviceToken`
+or `DeviceTokenNotForTopic` and Kairo deletes it. The app registers it again when you sign in.
 
-### Comprobar que funciona
+### Check that it works
 
-- App: *Ajustes > Avisos* dice si el servidor tiene el push de Apple activo y cuántos dispositivos tienes registrados.
-- API: `GET /api/push/apns` -> `{available: true, registeredDevices: 1}` (ver [API.md](API.md#push-de-apple-apns)).
-- Cierra la app y toca *Enviar prueba* desde otro dispositivo, o llama a `POST /api/push/test`: `delivered` cuenta
-  también los iPhone que aceptaron el aviso.
+- App: *Settings > Notifications* says whether the server has Apple push enabled and how many devices you have
+  registered.
+- API: `GET /api/push/apns` returns `{available: true, registeredDevices: 1}` (see
+  [API.md](API.md#apple-push-apns)).
+- Close the app and tap *Send test* from another device, or call `POST /api/push/test`. `delivered` also counts the
+  iPhones that accepted the notification.
 
-### Qué conviene saber
+### Good to know
 
-- Los recordatorios y avisos de eventos llegan como *urgentes* (`time-sensitive`), con los botones "Hecho" y
-  "En 10 min" en los recordatorios. Cada aviso lleva el mismo id que la alarma local de la app, así que no se duplica.
-- A diferencia de Web Push, el contenido de APNs no va cifrado de extremo a extremo: viaja por TLS hasta Apple, que
-  puede ver el título y el texto del aviso.
-- Los tokens se borran al cerrar sesión, al revocar el dispositivo en *Ajustes > Dispositivos* y cuando Apple
-  avisa que ya no sirven.
+- Reminders and event alerts arrive as *time-sensitive*, with "Done" and "In 10 min" buttons on reminders. Each
+  notification carries the same id as the app's local alarm, so it is never duplicated.
+- Unlike Web Push, APNs content is not end-to-end encrypted. It travels over TLS to Apple, who can see the title and
+  text of the notification.
+- Tokens are deleted when you sign out, when you revoke the device in *Settings > Devices*, and when Apple reports
+  that they are no longer valid.
 
-## ntfy como canal adicional (opcional)
+## ntfy as an extra channel (optional)
 
-Aparte del push de la app, el servidor puede publicar los avisos en un tema de ntfy para quien prefiera verlos en
-la propia app ntfy o en el escritorio: `NTFY_URL`, `NTFY_TOPIC` y `NTFY_TOKEN` en `.env` (tema del propietario), o
-un tema por persona en *Ajustes*.
+Besides the app's push, the server can publish notifications to an ntfy topic, for people who prefer to see them in
+the ntfy app itself or on the desktop. Set `NTFY_URL`, `NTFY_TOPIC` and `NTFY_TOKEN` in `.env` (the owner's topic),
+or use one topic per person in *Settings*.
 
-`NTFY_TOPIC` y `NTFY_TOKEN` son del propietario (`KAIRO_OWNER_EMAIL`): sólo sus avisos se publican con el token. Los
-demás miembros pueden elegir su propio tema (letras, números, `-` y `_`), que Kairo publica **sin** token, y no pueden
-usar el tema del propietario. Si tu ntfy exige autenticación para escribir (`auth-default-access: deny-all`), da
-permiso de escritura anónima a los temas de los miembros (`ntfy access everyone tema-de-sofia write-only`) o que usen
-temas en ntfy.sh.
+`NTFY_TOPIC` and `NTFY_TOKEN` belong to the owner (`KAIRO_OWNER_EMAIL`). Only the owner's notifications are
+published with the token. Other members can pick their own topic (letters, numbers, `-` and `_`), which Kairo
+publishes **without** a token, and they cannot use the owner's topic. If your ntfy requires authentication to write
+(`auth-default-access: deny-all`), grant anonymous write access to the members' topics
+(`ntfy access everyone sofia-topic write-only`), or have them use topics on ntfy.sh.

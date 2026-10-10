@@ -1,68 +1,68 @@
-# Conectar Google Calendar
+# Connecting Google Calendar
 
-Kairo tiene su propio calendario desde el primer día. Cuando conectes Google Calendar,
-la sincronización es en los dos sentidos:
+Kairo has its own calendar from day one. When you connect Google Calendar, sync works in both directions:
 
-- Los eventos que crees en Kairo (por voz, app o dashboard) se suben a tu calendario de Google.
-- Los cambios en Google (desde el móvil, Gmail, etc.) llegan a Kairo cada 5 minutos o con "Sincronizar ahora".
-- Ventana sincronizada: 30 días hacia atrás y 180 hacia adelante.
+- Events you create in Kairo (by voice, in the app or in the dashboard) are uploaded to your Google calendar.
+- Changes made in Google (from your phone, Gmail and so on) arrive in Kairo every 5 minutes, or when you choose
+  "Sync now".
+- The synced window is 30 days back and 180 days ahead.
 
-## 1. Crear las credenciales en Google Cloud (una sola vez, ~10 minutos)
+Other languages: [Spanish version](es/GOOGLE_CALENDAR.md).
 
-1. Entra a <https://console.cloud.google.com/> y crea un proyecto (por ejemplo "Kairo").
-2. **APIs y servicios > Biblioteca**: busca **Google Calendar API** y pulsa **Habilitar**.
-3. **APIs y servicios > Pantalla de consentimiento de OAuth** (Google Auth Platform):
-   - Tipo de usuario: **Externo**.
-   - Nombre de la app: Kairo. Correo de asistencia: el tuyo.
-   - Permisos (scopes): agrega
-     `https://www.googleapis.com/auth/calendar.events` y
+## 1. Create the credentials in Google Cloud (once, about 10 minutes)
+
+1. Go to <https://console.cloud.google.com/> and create a project (for example "Kairo").
+2. Open **APIs & Services > Library**, search for **Google Calendar API** and click **Enable**.
+3. Open **APIs & Services > OAuth consent screen** (Google Auth Platform):
+   - User type: **External**.
+   - App name: Kairo. Support email: your own.
+   - Scopes: add `https://www.googleapis.com/auth/calendar.events` and
      `https://www.googleapis.com/auth/calendar.calendarlist.readonly`.
-4. **Importante: publica la app** (Estado de publicación > **Publicar app / En producción**).
-   Mientras esté en modo *Prueba*, Google invalida el permiso cada **7 días** y tendrías
-   que reconectar. Para uso personal no necesitas verificación de Google: al conectar
-   verás un aviso de "Google no verificó esta app"; pulsa *Configuración avanzada > Ir a Kairo*.
-5. **APIs y servicios > Credenciales > Crear credenciales > ID de cliente de OAuth**:
-   - Tipo: **Aplicación web**.
-   - URI de redireccionamiento autorizado:
-     `https://kairo.tudominio.com/api/integrations/google/callback`
-     (el dashboard muestra la URI exacta en Ajustes > Google Calendar).
-6. Copia el **ID de cliente** y el **Secreto de cliente**.
+4. **Important: publish the app** (Publishing status > **Publish app / In production**). While the app is in
+   *Testing* mode, Google revokes the permission every **7 days** and you would have to reconnect. For personal use
+   you do not need Google verification. When you connect, you will see a "Google hasn't verified this app" warning.
+   Click *Advanced > Go to Kairo*.
+5. Open **APIs & Services > Credentials > Create credentials > OAuth client ID**:
+   - Application type: **Web application**.
+   - Authorized redirect URI: `https://kairo.example.com/api/integrations/google/callback`
+     (the dashboard shows the exact URI under *Settings > Google Calendar*).
+6. Copy the **Client ID** and the **Client secret**.
 
-## 2. Configurar el servidor
+## 2. Configure the server
 
-En tu `.env`:
+In your `.env`:
 
 ```env
 GOOGLE_CLIENT_ID=1234567890-xxxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
-KAIRO_PUBLIC_URL=https://kairo.tudominio.com
+KAIRO_PUBLIC_URL=https://kairo.example.com
 ```
 
-Reinicia: `docker compose up -d`.
+Restart with `docker compose up -d`.
 
-## 3. Conectar
+## 3. Connect
 
-Dashboard > **Ajustes > Google Calendar > Conectar**. Acepta los permisos y vuelve a Kairo.
-Puedes elegir qué calendario usar (por defecto, el principal) y desconectar cuando quieras.
+In the dashboard, go to **Settings > Google Calendar > Connect**. Accept the permissions and return to Kairo.
+You can choose which calendar to use (the primary one by default) and disconnect whenever you want.
 
-La conexión se hace desde el dashboard y termina en **el mismo navegador** donde pulsaste *Conectar*
-(en 10 minutos como mucho): Kairo deja una cookie temporal en ese navegador y el regreso desde Google sólo
-vale con ella. Si abres el enlace de Google en otro navegador o dispositivo verás "Estado OAuth inválido";
-vuelve a pulsar *Conectar*. Las apps de Android e iPhone usan la conexión que hagas desde el dashboard.
+The connection runs from the dashboard and finishes in **the same browser** where you clicked *Connect*, within 10
+minutes at most. Kairo leaves a temporary cookie in that browser, and the return from Google is only valid with
+it. If you open the Google link in another browser or on another device, you will see "Invalid OAuth state". Click
+*Connect* again. The Android and iPhone apps use the connection you make from the dashboard.
 
-## Seguridad
+## Security
 
-- El refresh token de Google se guarda **cifrado** (AES-256-GCM con `KAIRO_ENCRYPTION_KEY`).
-- Kairo solo pide acceso a eventos y a la lista de calendarios; no lee tu correo ni tus contactos.
-- El regreso de Google (`state`) va firmado y atado a una cookie HttpOnly del navegador que inició la
-  conexión, y sirve una sola vez: nadie puede conectar su Google a tu cuenta (ni el tuyo a la suya)
-  mandándote un enlace.
-- Al desconectar, Kairo revoca el token en Google y lo borra.
+- The Google refresh token is stored **encrypted** (AES-256-GCM with `KAIRO_ENCRYPTION_KEY`).
+- Kairo only asks for access to events and the list of calendars. It does not read your email or your contacts.
+- The return from Google (`state`) is signed and tied to an HttpOnly cookie in the browser that started the
+  connection. It works only once. Nobody can connect their Google account to yours (or yours to theirs) by sending
+  you a link.
+- When you disconnect, Kairo revokes the token at Google and deletes it.
 
-## Detalles
+## Details
 
-- Los eventos que vienen de Google se marcan con un ícono de sincronización.
-- Si editas un evento en Kairo y en Google a la vez, gana el cambio local pendiente
-  (se envía en la siguiente sincronización).
-- Los eventos recurrentes creados en Kairo se suben con su regla (RRULE); los recurrentes de
-  Google llegan como ocurrencias individuales dentro de la ventana.
+- Events that come from Google are marked with a sync icon.
+- If you edit an event in Kairo and in Google at the same time, the pending local change wins. It is sent on the
+  next sync.
+- Recurring events created in Kairo are uploaded with their rule (RRULE). Recurring events from Google arrive as
+  individual occurrences inside the window.

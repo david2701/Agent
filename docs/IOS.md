@@ -1,136 +1,139 @@
-# Kairo para iPhone, iPad y Apple Watch
+# Kairo for iPhone, iPad and Apple Watch
 
-App nativa en SwiftUI (Swift 6, iOS 27 y watchOS 27) que se conecta a tu servidor de Kairo, igual que la
-app de Android. Todo el código está en [`ios/`](../ios), y el proyecto de Xcode ya viene generado.
+A native SwiftUI app (Swift 6, iOS 27 and watchOS 27) that connects to your Kairo server, just like the Android app.
+All the code is in [`ios/`](../ios), and the Xcode project is already generated.
 
-## Qué incluye
+Other languages: [Spanish version](es/IOS.md). The app follows your device language: Spanish if it is set to Spanish,
+English otherwise.
 
-- **Hoy**: saludo, clima, el orbe para hablar, lo que sonó, la tarjeta de la familia, agenda, pendientes
-  (se completan con un toque), recordatorios del día, listas y notas recientes.
-- **Voz**: conversación a pantalla completa con el orbe animado, transcripción, tarjetas de lo que hizo
-  Kairo y la respuesta hablada (Whisper y Kokoro en Nan, a través de tu servidor). Si Kairo te pregunta algo,
-  sigue escuchando. **"Oye Kairo"** se reconoce dentro del iPhone (reconocimiento de voz en el dispositivo);
-  el audio no sale del teléfono hasta que dices la frase.
-- **Chat** con historial, respuestas en streaming e imágenes (la cámara o la fototeca van a `/capture`).
-- **Tareas** (lista por estado en el iPhone, tablero con arrastrar y soltar en el iPad), **Calendario**
-  (mes y agenda por horas), **Recordatorios** (por hora, repetidos o por lugar, también para otro miembro),
-  **Listas**, **Notas** (búsqueda por significado y markdown), **Memoria**, **Grabaciones** de reuniones,
-  **Actividad** con deshacer, **Familia** y **Ajustes**.
-- **Familia**: lo compartido lleva la casita y el nombre de quien lo creó; invitaciones y códigos de acceso,
-  avisos a la familia y novedades. Unirse con un código o con el enlace `…/unirse?codigo=XXXX-XXXX`.
-- **Widgets**: Hoy (pequeño, mediano, grande, extragrande y pantalla bloqueada), Siguiente evento con cuenta
-  regresiva, Lista interactiva (marcas sin abrir la app) y Hablar con Kairo.
-- **Live Activities** en la Isla Dinámica y la pantalla bloqueada: la conversación por voz, la grabación de
-  una reunión, el próximo evento (cuando falta menos de 45 minutos) y los **temporizadores y alarmas** que
-  pides ("pon un temporizador de 10 minutos"), creados con AlarmKit: suenan como los del Reloj, aunque el
-  iPhone esté en silencio, y se pausan o detienen desde la Isla Dinámica.
-- **Centro de control y pantalla bloqueada**: controles "Hablar con Kairo" y "Mi día".
-- **Siri y Atajos**: "Oye Siri, habla con Kairo", "Oye Siri, pregúntale a Kairo" (responde sin abrir la app),
-  "Abre Kairo en Tareas". También sirven para el **botón de Acción**.
-- **Guardar en Kairo** desde la hoja de compartir de cualquier app: textos, enlaces e imágenes. Kairo decide
-  si es una nota, una tarea, un evento o un elemento de una lista, y te muestra lo que hizo.
-- **Apple Watch**: hablar con Kairo desde el reloj (graba hasta que te callas y lee la respuesta), Hoy,
-  listas para marcar, y complicaciones (hablar, siguiente evento y pendientes). Se vincula solo con el iPhone
-  cerca, o con el código de Ajustes > Apple Watch (sirve para relojes con datos móviles).
-- **Avisos**: los recordatorios, los avisos de eventos y el resumen de la mañana se programan en el iPhone y
-  suenan aunque no haya internet. Los avisos de la familia llegan al instante con la app abierta (WebSocket),
-  al actualizar en segundo plano, y con el push de Apple si lo configuras en el servidor (ver más abajo).
-- **Recordatorios por lugar** con `CLMonitor` (hasta 20 lugares a la vez), aunque la app esté cerrada.
+## What is included
 
-| Hoy | Tareas | Calendario | Notas |
+- **Today**: greeting, weather, the orb to talk to Kairo, what rang, the family card, agenda, to-dos (tap to
+  complete), today's reminders, lists and recent notes.
+- **Voice**: a full-screen conversation with the animated orb, a transcript, cards for what Kairo did, and a spoken
+  answer (Whisper and Kokoro on Nan, through your server). If Kairo asks you a question, it keeps listening.
+  **"Hey Kairo"** (or **"Oye Kairo"** in Spanish) is recognized on the iPhone itself, using on-device speech
+  recognition. The audio does not leave the phone until you say the phrase.
+- **Chat** with history, streaming replies and images (the camera or the photo library go to `/capture`).
+- **Tasks** (a list by status on iPhone, a drag-and-drop board on iPad), **Calendar** (month and hourly agenda),
+  **Reminders** (by time, repeating or by place, also for another member), **Lists**, **Notes** (search by meaning,
+  and markdown), **Memory**, meeting **Recordings**, **Activity** with Undo, **Family** and **Settings**.
+- **Family**: shared items show a little house icon and the name of whoever created them. Invitations and access
+  codes, family notices and updates. Join with a code or with the link `…/join?code=XXXX-XXXX` (the older
+  `…/unirse?codigo=XXXX-XXXX` links still work).
+- **Widgets**: Today (small, medium, large, extra large and Lock Screen), Next event with a countdown, an
+  interactive List (check items without opening the app) and Talk to Kairo.
+- **Live Activities** in the Dynamic Island and on the Lock Screen: the voice conversation, a meeting recording, the
+  next event (when it is less than 45 minutes away), and the **timers and alarms** you ask for ("set a timer for 10
+  minutes"). They are created with AlarmKit, so they ring like the Clock app's, even when the iPhone is silent, and
+  you can pause or stop them from the Dynamic Island.
+- **Control Center and Lock Screen**: "Talk to Kairo" and "My day" controls.
+- **Siri and Shortcuts**: "Hey Siri, talk to Kairo", "Hey Siri, ask Kairo" (answers without opening the app) and
+  "Open Kairo on Tasks". They also work for the **Action button**.
+- **Save to Kairo** from any app's share sheet: text, links and images. Kairo decides whether it is a note, a task,
+  an event or a list item, and shows you what it did.
+- **Apple Watch**: talk to Kairo from your wrist (it records until you stop talking and reads the answer), Today,
+  lists to check off, and complications (talk, next event and to-dos). It pairs on its own when the iPhone is
+  nearby, or with the code from Settings > Apple Watch (this works for watches with cellular).
+- **Notifications**: reminders, event alerts and the morning briefing are scheduled on the iPhone and ring even with
+  no internet. Family notices arrive instantly while the app is open (WebSocket), on background refresh, and
+  through Apple push if you set it up on the server (see below).
+- **Location reminders** with `CLMonitor` (up to 20 places at a time), even when the app is closed.
+
+| Today | Tasks | Calendar | Notes |
 |---|---|---|---|
-| ![Hoy](screenshots/ios/iphone-today-light.png) | ![Tareas](screenshots/ios/iphone-tasks-light.png) | ![Calendario](screenshots/ios/iphone-calendar-dark.png) | ![Notas](screenshots/ios/iphone-notes-light.png) |
-| ![Hoy en oscuro](screenshots/ios/iphone-today-dark.png) | ![Familia](screenshots/ios/iphone-family-dark.png) | ![Chat](screenshots/ios/iphone-chat-light.png) | ![Ajustes](screenshots/ios/iphone-settings-dark.png) |
+| ![Today](screenshots/ios/iphone-today-light.png) | ![Tasks](screenshots/ios/iphone-tasks-light.png) | ![Calendar](screenshots/ios/iphone-calendar-dark.png) | ![Notes](screenshots/ios/iphone-notes-light.png) |
+| ![Today in dark mode](screenshots/ios/iphone-today-dark.png) | ![Family](screenshots/ios/iphone-family-dark.png) | ![Chat](screenshots/ios/iphone-chat-light.png) | ![Settings](screenshots/ios/iphone-settings-dark.png) |
 
-Capturas tomadas en el simulador de iOS 27 (iPhone 17 Pro) con datos de prueba (`ios/ci`).
+Screenshots taken in the iOS 27 simulator (iPhone 17 Pro) with test data (`ios/ci`).
 
-## iPhone, iPad y iPhone Duo
+## iPhone, iPad and iPhone Duo
 
-El diseño se decide por el *size class*, no por el modelo, como recomienda Apple:
+The layout is chosen by *size class*, not by device model, as Apple recommends:
 
-| Pantalla | Diseño |
+| Screen | Layout |
 |---|---|
-| iPhone, pantalla exterior del iPhone Duo, iPad en Slide Over | Pestañas (Hoy, Chat, Tareas, Calendario, Más) con Liquid Glass y la barra "Pregúntale a Kairo" encima |
-| iPad, pantalla interior del iPhone Duo, iPhone grande en horizontal | Barra lateral con todas las secciones y el botón "Hablar con Kairo" (⌘K) |
+| iPhone, the outer screen of the iPhone Duo, iPad in Slide Over | Tabs (Today, Chat, Tasks, Calendar, More) with Liquid Glass and the "Ask Kairo" bar on top |
+| iPad, the inner screen of the iPhone Duo, a large iPhone in landscape | A sidebar with every section and the "Talk to Kairo" button (⌘K) |
 
-En pantallas anchas, Hoy, Calendario, Notas, Listas y Chat muestran dos columnas, y Tareas un tablero.
-La app admite todas las orientaciones y varias ventanas en el iPad, y no usa `UIScreen.main`, así que se
-adapta sola al abrir o cerrar el iPhone Duo. Con un teclado, ⌘K abre la voz y ⌘N crea un elemento.
+On wide screens, Today, Calendar, Notes, Lists and Chat show two columns, and Tasks shows a board. The app supports
+all orientations and multiple windows on iPad. It does not use `UIScreen.main`, so it adapts by itself when you open
+or close the iPhone Duo. With a keyboard, ⌘K opens voice and ⌘N creates an item.
 
-## Compilar en tu Mac
+## Build on your Mac
 
-Necesitas **Xcode 27** (trae el SDK de iOS 27 y watchOS 27).
+You need **Xcode 27** (it includes the iOS 27 and watchOS 27 SDKs).
 
-1. Abre `ios/Config/Signing.xcconfig` y pon:
-   - `DEVELOPMENT_TEAM`: tu Team ID (Xcode > Settings > Accounts, o developer.apple.com > Membership).
-   - `KAIRO_BUNDLE_ID`: un identificador tuyo, por ejemplo `com.tunombre.kairo`. Los widgets, compartir y el
-     reloj cuelgan de él (`.widgets`, `.share`, `.watchkitapp`).
-   - `KAIRO_APP_GROUP` y `KAIRO_WATCH_APP_GROUP`: `group.` + tu identificador.
-   - `KAIRO_KEYCHAIN_GROUP`: tu identificador + `.shared`.
-   - `KAIRO_DEFAULT_SERVER` (opcional): la dirección de tu servidor, para que aparezca escrita al iniciar sesión.
-2. Abre `ios/Kairo.xcodeproj`. Xcode descarga y compila el paquete local `KairoKit` (no hay dependencias externas).
-3. Elige el esquema **Kairo** y tu iPhone, y pulsa ▶. La primera vez, en el iPhone: Ajustes > General >
-   VPN y gestión de dispositivos > confía en tu cuenta, y activa el Modo de desarrollador.
-4. La app del reloj se instala con la del iPhone (app Watch > Kairo > Instalar), o eligiendo el esquema
-   **KairoWatch** con el reloj conectado.
+1. Open `ios/Config/Signing.xcconfig` and set:
+   - `DEVELOPMENT_TEAM`: your Team ID (Xcode > Settings > Accounts, or developer.apple.com > Membership).
+   - `KAIRO_BUNDLE_ID`: an identifier of your own, for example `com.yourname.kairo`. The widgets, the share
+     extension and the watch app hang off it (`.widgets`, `.share`, `.watchkitapp`).
+   - `KAIRO_APP_GROUP` and `KAIRO_WATCH_APP_GROUP`: `group.` plus your identifier.
+   - `KAIRO_KEYCHAIN_GROUP`: your identifier plus `.shared`.
+   - `KAIRO_DEFAULT_SERVER` (optional): your server's address, so it is prefilled on the sign-in screen.
+2. Open `ios/Kairo.xcodeproj`. Xcode downloads and builds the local `KairoKit` package (there are no external
+   dependencies).
+3. Choose the **Kairo** scheme and your iPhone, and press ▶. The first time, on the iPhone: Settings > General >
+   VPN & Device Management > trust your account, and turn on Developer Mode.
+4. The watch app installs together with the iPhone app (Watch app > Kairo > Install), or by choosing the
+   **KairoWatch** scheme with the watch connected.
 
-Con la firma automática, Xcode crea los identificadores, el App Group y los perfiles. Para push, App Groups
-(los widgets con tus datos), Live Activities y el reloj necesitas el **Apple Developer Program**. Con una
-cuenta gratuita puedes probar la app en tu iPhone durante 7 días si quitas en *Signing & Capabilities* las
-capacidades que Xcode marque como no disponibles (por ejemplo, Push Notifications).
+With automatic signing, Xcode creates the identifiers, the App Group and the profiles. Push, App Groups (widgets
+with your data), Live Activities and the watch need the **Apple Developer Program**. With a free account, you can
+try the app on your iPhone for 7 days if you remove the capabilities that Xcode marks as unavailable under
+*Signing & Capabilities* (for example, Push Notifications).
 
-Si cambias `ios/project.yml` (archivos nuevos, targets, ajustes), regenera el proyecto:
+If you change `ios/project.yml` (new files, targets, settings), regenerate the project:
 
 ```bash
 brew install xcodegen
 cd ios && xcodegen
 ```
 
-### Estructura
+### Layout
 
-| Carpeta | Contenido |
+| Folder | Contents |
 |---|---|
-| `ios/KairoKit` | Paquete Swift (SPM). `KairoCore`: modelos, cliente del API con SSE y WebSocket, fechas en español, lógica de voz y el resumen para widgets (sólo Foundation; sus pruebas corren también en Linux). `KairoUI`: colores, Geist, el orbe y componentes. |
-| `ios/App` | La app: estado global, voz, "Oye Kairo", grabaciones, notificaciones, geovallas, AlarmKit, atajos de Siri y todas las pantallas. |
-| `ios/Widgets` | Widgets, controles y Live Activities. |
-| `ios/Share` | Extensión "Guardar en Kairo". |
-| `ios/Watch`, `ios/WatchWidgets` | App y complicaciones del Apple Watch. |
-| `ios/Shared` | Código común a la app y sus extensiones (configuración, intents, tipos de las Live Activities). |
-| `ios/ci` | Servidor de prueba y capturas automáticas en el simulador. |
+| `ios/KairoKit` | Swift package (SPM). `KairoCore`: models, the API client with SSE and WebSocket, date formatting, voice logic and the widget summary (Foundation only; its tests also run on Linux). `KairoUI`: colors, Geist, the orb and components. |
+| `ios/App` | The app: global state, voice, "Hey Kairo", recordings, notifications, geofences, AlarmKit, Siri shortcuts and all the screens. |
+| `ios/Widgets` | Widgets, controls and Live Activities. |
+| `ios/Share` | The "Save to Kairo" extension. |
+| `ios/Watch`, `ios/WatchWidgets` | The Apple Watch app and complications. |
+| `ios/Shared` | Code shared by the app and its extensions (configuration, intents, Live Activity types). |
+| `ios/ci` | A test server and automatic screenshots in the simulator. |
 
-## Push de Apple (opcional)
+## Apple push (optional)
 
-Sin push, Kairo funciona: los recordatorios y eventos se programan en el iPhone, y los avisos de la familia
-llegan con la app abierta o al actualizar en segundo plano. Para que lleguen al instante con la app cerrada,
-configura APNs en tu servidor (ver [PUSH.md](PUSH.md)) con una clave `.p8` de tu cuenta de desarrollador.
-Las compilaciones de Xcode usan el entorno *sandbox*; las de TestFlight y la App Store, *production*. La app
-registra su token en `POST /api/push/apns/register` y en Ajustes > Avisos ves si el servidor lo tiene activo.
+Kairo works without push. Reminders and events are scheduled on the iPhone, and family notices arrive while the app
+is open or during background refresh. To receive them instantly with the app closed, set up APNs on your server
+(see [PUSH.md](PUSH.md)) with a `.p8` key from your developer account. Xcode builds use the *sandbox*
+environment. TestFlight and App Store builds use *production*. The app registers its token with
+`POST /api/push/apns/register`, and in Settings > Notifications you can see whether the server has it enabled.
 
-## Privacidad y seguridad
+## Privacy and security
 
-- La sesión se guarda en el llavero del iPhone. Los widgets y la extensión de compartir tienen **su propia
-  sesión** (en un llavero compartido), así nunca se pisan las renovaciones con la app; al cerrar sesión se
-  cierran todas.
-- Sólo se piden los permisos al usarlos: micrófono al hablar, reconocimiento de voz para "Oye Kairo",
-  ubicación para guardar lugares, y alarmas al poner el primer temporizador.
-- El reloj tiene su propia sesión, que puedes cerrar desde Ajustes > Dispositivos con sesión.
+- The session is stored in the iPhone's keychain. The widgets and the share extension have **their own session** (in
+  a shared keychain group), so token renewals never collide with the app. When you sign out, all of them are signed
+  out.
+- Permissions are requested only when you use them: microphone when you talk, speech recognition for "Hey Kairo",
+  location to save places, and alarms when you set your first timer.
+- The watch has its own session, which you can sign out from Settings > Devices.
 
-## Pruebas y CI
+## Tests and CI
 
-- `cd ios/KairoKit && swift test`: pruebas de los modelos (con respuestas reales anonimizadas del servidor),
-  fechas, voz, SSE y avisos. Corren en macOS y en Linux.
-- El workflow [`ios.yml`](../.github/workflows/ios.yml) compila la app, los widgets, la extensión y el reloj
-  con Xcode 27 en cada cambio (unos 3 minutos).
-- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml), que se lanza a mano (*Actions > iOS capturas >
-  Run workflow*), toma capturas en el simulador de iPhone (y de iPad si lo marcas) contra un servidor de prueba
-  (`ios/ci/mock_server.py`) y las deja en el artefacto *capturas-ios*.
+- `cd ios/KairoKit && swift test`: tests for models (with real, anonymized server responses), dates, voice, SSE and
+  notices. They run on macOS and on Linux.
+- The [`ios.yml`](../.github/workflows/ios.yml) workflow builds the app, the widgets, the extension and the watch
+  app with Xcode 27 on every change (about 3 minutes).
+- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml) is triggered by hand (*Actions > iOS capturas > Run
+  workflow*). It takes screenshots in the iPhone simulator (and the iPad one if you check the box) against a test
+  server (`ios/ci/mock_server.py`) and leaves them in the *capturas-ios* artifact.
 
-## Limitaciones conocidas
+## Known limitations
 
-- La app se compiló con Xcode 27 y se probó en el simulador de iPhone contra un servidor de prueba (las
-  capturas de arriba), pero todavía no en un iPhone, iPad o Apple Watch físicos, ni contra tu servidor real.
-- "Oye Kairo" escucha mientras Kairo está abierto o te está hablando. iOS no permite que una app escuche
-  siempre en segundo plano como en Android; para eso están Siri, el botón de Acción y el control
-  "Hablar con Kairo".
-- Las zonas reservadas de la pantalla del iPhone Duo (`ReservedRegion`, iOS 27.1) todavía no se usan: el
-  diseño se adapta por tamaño de ventana y áreas seguras.
+- The app was built with Xcode 27 and tested in the iPhone simulator against a test server (the screenshots above),
+  but not yet on a physical iPhone, iPad or Apple Watch, nor against your real server.
+- "Hey Kairo" listens while Kairo is open or talking to you. iOS does not let an app listen all the time in the
+  background the way Android does. That is what Siri, the Action button and the "Talk to Kairo" control are for.
+- The iPhone Duo's reserved screen regions (`ReservedRegion`, iOS 27.1) are not used yet. The layout adapts to
+  window size and safe areas instead.

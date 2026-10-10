@@ -1,168 +1,177 @@
-# App Android de Kairo
+# Kairo for Android
 
-Nativa en Kotlin 2.4 con Jetpack Compose y **Material 3 Expressive**. Funciona en teléfonos
-normales, plegables (Galaxy Z Fold/Flip, Pixel Fold) y tablets, y trae una app para **Wear OS**.
+A native app written in Kotlin 2.4 with Jetpack Compose and **Material 3 Expressive**. It runs on regular phones,
+foldables (Galaxy Z Fold/Flip, Pixel Fold) and tablets, and includes a **Wear OS** app.
 
-## Instalar
+Other languages: [Spanish version](es/ANDROID.md). The app follows your phone's language: Spanish if the phone is set
+to Spanish, English otherwise.
 
-1. Descarga el APK desde los artefactos de la CI (*Actions > CI > kairo-apk*) o compílalo:
+## Install
+
+1. Download the APK from the CI artifacts (*Actions > CI > kairo-apk*), or build it yourself:
    ```bash
    cd android
-   ./gradlew :app:assembleRelease      # teléfono: app/build/outputs/apk/release/app-release.apk
-   ./gradlew :wear:assembleRelease     # reloj:    wear/build/outputs/apk/release/wear-release.apk
+   ./gradlew :app:assembleRelease      # phone: app/build/outputs/apk/release/app-release.apk
+   ./gradlew :wear:assembleRelease     # watch: wear/build/outputs/apk/release/wear-release.apk
    ```
-   Requiere JDK 21 y el Android SDK (plataforma 37). Sin keystore propio, la versión release se firma con
-   la clave de depuración: sirve para probar, pero instala la familia con tu propia firma (ver abajo).
+   You need JDK 21 and the Android SDK (platform 37). Without your own keystore, the release build is signed with
+   the debug key. That is fine for testing, but install the family's apps with your own signature (see below).
+2. Install it on the phone (`adb install app-release.apk`, or open the file).
+3. Open Kairo and enter your server URL (`https://kairo.example.com`), your email and your password.
+   If you were invited to a family (or someone gave you an access code), tap **I have an invite code**.
 
-### Firma de release y tu servidor
+### Release signing and your server
 
-Antes de instalar Kairo en los teléfonos de la familia, firma con tu propia clave. Android sólo acepta
-actualizaciones firmadas con la misma clave: si cambias de clave después, hay que desinstalar y volver a
-instalar (y se pierde la sesión). Guarda el archivo y las contraseñas en un lugar seguro, sin ellos no podrás
-publicar actualizaciones.
+Before you install Kairo on your family's phones, sign it with your own key. Android only accepts updates signed
+with the same key. If you change keys later, you have to uninstall and reinstall, and you lose the session. Keep the
+file and the passwords somewhere safe. Without them you cannot publish updates.
 
 ```bash
 keytool -genkeypair -v -keystore kairo-release.jks -alias kairo -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-Crea `android/keystore.properties` (está en `.gitignore`, nunca se sube):
+Create `android/keystore.properties` (it is in `.gitignore` and never gets committed):
 
 ```properties
-storeFile=/ruta/a/kairo-release.jks
-storePassword=tu-contraseña
+storeFile=/path/to/kairo-release.jks
+storePassword=your-password
 keyAlias=kairo
-keyPassword=tu-contraseña
+keyPassword=your-password
 ```
 
-o usa las variables `KAIRO_KEYSTORE_FILE`, `KAIRO_KEYSTORE_PASSWORD`, `KAIRO_KEY_ALIAS` y `KAIRO_KEY_PASSWORD`.
-El teléfono y el reloj usan la misma clave. Para que la CI publique los APK ya firmados, agrega en GitHub
-(*Settings > Secrets and variables > Actions*) los secretos `ANDROID_KEYSTORE_BASE64`
-(`base64 -w0 kairo-release.jks`) y `ANDROID_KEYSTORE_PASSWORD`.
+Alternatively, use the variables `KAIRO_KEYSTORE_FILE`, `KAIRO_KEYSTORE_PASSWORD`, `KAIRO_KEY_ALIAS` and
+`KAIRO_KEY_PASSWORD`. The phone and the watch use the same key. For CI to publish signed APKs, add the secrets
+`ANDROID_KEYSTORE_BASE64` (`base64 -w0 kairo-release.jks`) and `ANDROID_KEYSTORE_PASSWORD` in GitHub
+(*Settings > Secrets and variables > Actions*).
 
-**Tu servidor**: el reloj se vincula contra la dirección con la que se compiló y el teléfono la trae escrita al
-iniciar sesión. Compila con `KAIRO_SERVER_URL=https://kairo.tudominio.com ./gradlew assembleRelease` (o
-`kairo.serverUrl=` en `android/gradle.properties`, o la variable del repositorio `KAIRO_SERVER_URL` para la CI).
-2. Instala en el teléfono (`adb install app-release.apk` o abriendo el archivo).
-3. Abre Kairo, escribe la URL de tu servidor (`https://kairo.tudominio.com`), tu correo y contraseña.
-   Si te invitaron a una familia (o te dieron un código de acceso), toca **Tengo un código**.
+**Your server**: the watch pairs against the address it was built with, and the phone shows that address when you
+sign in. Build with `KAIRO_SERVER_URL=https://kairo.example.com ./gradlew assembleRelease`. You can also set
+`kairo.serverUrl=` in `android/gradle.properties`, or the repository variable `KAIRO_SERVER_URL` for CI.
 
-## Primeros pasos recomendados (Ajustes)
+## Recommended first steps (Settings)
 
-| Ajuste | Para qué |
+| Setting | What it does |
 |---|---|
-| **Oye Kairo** | Escucha continua de la frase de activación. Descarga una vez un modelo de voz offline (40 MB). |
-| **Asistente del sistema** | Elige Kairo como *Asistente digital predeterminado*: mantén pulsado inicio/encendido para hablarle. |
-| **Batería sin restricciones** | Samsung y otros cierran apps en segundo plano. Necesario para la escucha continua. |
-| **Alarmas exactas** | Los recordatorios suenan a la hora exacta incluso sin internet. |
-| **Ubicación "todo el tiempo"** | Opcional, para avisos al llegar o salir de lugares guardados. |
-| **Vincular reloj** | Genera un código de 6 dígitos para iniciar sesión en Wear OS. |
-| **Avisos al instante, sin Firebase** | Conecta Kairo con la app ntfy (UnifiedPush) para recibir avisos con la app cerrada. |
-| **Familia** | Miembros, invitaciones y avisos del hogar (también en *Más > Familia*). |
+| **Hey Kairo** | Continuous listening for the wake phrase ("Hey Kairo" in English, "Oye Kairo" in Spanish). It downloads an offline speech model once (40 MB). |
+| **System assistant** | Choose Kairo as the *default digital assistant*, then long-press the home or power button to talk to it. |
+| **Unrestricted battery** | Samsung and other manufacturers kill background apps. Required for continuous listening. |
+| **Exact alarms** | Reminders ring at the exact time, even with no internet. |
+| **"All the time" location** | Optional. Needed for alerts when you arrive at or leave a saved place. |
+| **Pair watch** | Generates a 6-digit code to sign in on Wear OS. |
+| **Instant alerts without Firebase** | Connects Kairo to the ntfy app (UnifiedPush) so notifications arrive with the app closed. |
+| **Family** | Members, invitations and household notices (also under *More > Family*). |
 
-Otros accesos: **tile** de ajustes rápidos "Kairo", **widget** con tu día y botón de hablar,
-**atajo** al mantener pulsado el ícono, y **Compartir > Guardar en Kairo** desde cualquier app
-(textos, enlaces o fotos: Kairo lee el texto de la imagen y crea notas, recordatorios o eventos).
+Other ways in: a **Quick Settings tile** called "Kairo", a **widget** with your day and a talk button, a
+**shortcut** when you long-press the icon, and **Share > Save to Kairo** from any app (text, links or photos). Kairo
+reads the text in an image and creates notes, reminders or events.
 
-## Cómo funciona "Oye Kairo"
+## How "Hey Kairo" works
 
-- Un servicio en primer plano (tipo micrófono) escucha con **Vosk** dentro del teléfono.
-  El audio **no sale del dispositivo** hasta detectar "Oye Kairo".
-- Al detectarla suena un tono, Kairo graba tu frase y detecta cuándo terminas de hablar.
-- La frase va a tu servidor: Whisper (Nan) la transcribe, el agente actúa y Kokoro (Nan) responde con voz.
-- Si Kairo te pregunta algo, sigue escuchando sin que repitas la frase (desactivable).
+- A foreground service (microphone type) listens with **Vosk**, inside the phone. The audio **never leaves the
+  device** until it detects the wake phrase. The wake phrase is "Hey Kairo" in English and "Oye Kairo" in Spanish.
+  Either one wakes the app, and the name shown in the app follows the app language.
+- When it hears the phrase, it plays a tone, Kairo records what you say and detects when you stop talking.
+- The recording goes to your server. Whisper (Nan) transcribes it, the agent acts, and Kokoro (Nan) answers with
+  voice. Speech recognition and replies use your language setting (English, Spanish, or auto-detect).
+- If Kairo asks you a question, it keeps listening without you repeating the phrase (you can turn this off).
 
-Reglas de Android que debes conocer:
-- La notificación "Kairo está atento" y el punto verde del micrófono son obligatorios.
-- Desde Android 14, tras reiniciar el teléfono la escucha no puede arrancar sola:
-  Kairo muestra una notificación; tócala (o abre la app) y vuelve a quedar atento.
-- La detección de voz por hardware del sistema (la de "Ok Google") está reservada a apps del sistema; por eso Kairo usa su propio detector.
+Android rules you should know:
+- The "Kairo is listening" notification and the green microphone dot are mandatory.
+- Since Android 14, listening cannot restart on its own after a reboot. Kairo shows a notification. Tap it (or open
+  the app) and it goes back to listening.
+- The system's hardware voice detection (the one behind "Ok Google") is reserved for system apps. That is why Kairo
+  uses its own detector.
 
-## Familia
+## Family
 
-Un hogar con varios perfiles. Cada quien tiene lo suyo y comparte lo que marca como **familiar**:
-eventos, listas, tareas, notas y lugares. Lo personal es privado, también para quien administra.
+A household with several profiles. Everyone has their own items and shares what they mark as **shared**: events,
+lists, tasks, notes and places. Personal items are private, including from the administrator.
 
-- **Unirse**: en el login, *Tengo un código* revisa el código (`XXXX-XXXX`, da igual mayúsculas, espacios o guion)
-  y muestra "Te invitaron a Familia ...": nombre (ya escrito), correo y contraseña de al menos 10 caracteres.
-  Con un **código de acceso** (contraseña olvidada) pide solo la contraseña nueva y cierra las otras sesiones.
-- **Pantalla Familia** (*Más* o *Ajustes*): nombre del hogar, miembros con su rol y "Tú", invitaciones pendientes,
-  "Avisar a la familia" (mensaje que llega como notificación) y **Novedades** con "Marcar todo leído".
-  Quien administra invita (nombre y rol), ve el código en grande con **Compartir invitación** (hoja de compartir de
-  Android con el enlace y el código), revoca invitaciones, genera códigos de acceso, cambia roles y quita miembros
-  (se borra su cuenta y lo personal; lo que había compartido pasa a quien lo quita).
-- **En cada pantalla**: Notas (filtro Todas, Mías, Familiares e insignia "Familiar" o "de Valentina"), Tareas
-  (Familiar, **Responsable** con iniciales en la tarjeta y el tablero, filtro "Asignadas a mí"), Listas, Calendario
-  ("Evento familiar" al crear o editar y "agendado por"), Recordatorios (**Para**: tú u otro miembro; "Para X" o "De X")
-  y Lugares (en Recordatorios). Solo quien creó algo puede dejar de compartirlo.
-- **Hoy** muestra una tarjeta "Familia" con los últimos avisos sin leer (no aparece si estás solo; a quien
-  administra le propone invitar).
-- La familia se guarda en caché para mostrar nombres al instante y se recarga al abrir la app, al iniciar sesión
-  y cuando el servidor avisa un cambio (`entity.changed: family`).
+- **Join**: on the sign-in screen, *I have an invite code* checks the code (`XXXX-XXXX`; case, spaces and the dash
+  do not matter) and shows "You were invited to the ... family". Then enter your name (already filled in), email and a
+  password of at least 10 characters. With an **access code** (forgotten password), it only asks for the new
+  password and signs out your other sessions.
+- **Family screen** (*More* or *Settings*): household name, members with their role and "You", pending invitations,
+  "Notify the family" (a message that arrives as a notification) and **Updates** with "Mark all as read".
+  Administrators invite people (name and role), see the code in large type with **Share invitation** (Android's
+  share sheet with the link and the code), revoke invitations, generate access codes, change roles and remove
+  members. Removing a member deletes their account and personal items, and what they shared passes to the person who
+  removed them.
+- **On each screen**: Notes (filter All, Mine, Family, and a "Family" or "Valentina's" badge), Tasks (Family,
+  **Assignee** with initials on the card and the board, an "Assigned to me" filter), Lists, Calendar ("Family event"
+  when you create or edit, and "scheduled by"), Reminders (**For**: you or another member; "For X" or "From X") and
+  Places (under Reminders). Only the person who created an item can stop sharing it.
+- **Today** shows a "Family" card with the latest unread notices. It does not appear if you are alone. For
+  administrators, it suggests inviting someone.
+- Family data is cached so names show instantly. It reloads when you open the app, when you sign in, and when the
+  server announces a change (`entity.changed: family`).
 
-## Avisos sin Firebase
+## Notifications without Firebase
 
-Kairo no usa Firebase ni servicios de Google para notificar. Hay tres niveles y conviven: cada aviso tiene un id
-y el teléfono no lo muestra dos veces (sin importar si llegó por push, WebSocket, alarma local o sincronización).
+Kairo uses neither Firebase nor Google services to notify you. There are three levels and they work together. Each
+notification has an id, and the phone never shows it twice, whether it arrived through push, WebSocket, a local
+alarm or sync.
 
-| Nivel | Cuándo llega | Qué hace falta |
+| Level | When it arrives | What you need |
 |---|---|---|
-| **1. Push propio (UnifiedPush)** | Al instante, con Kairo cerrado y sin gastar batería extra | La app **ntfy** (F-Droid o Play Store) apuntando a tu ntfy (perfil `push` del `docker-compose.yml`) |
-| **2. Conexión directa o "Oye Kairo"** | Al instante mientras el servicio corre | Activar *Conexión directa con tu servidor* (o la escucha); usa algo más de batería |
-| **3. Alarmas locales y sincronización** | Recordatorios, avisos de eventos y resumen a su hora aunque no haya internet; el resto en la siguiente sincronización (15 min) | Nada |
+| **1. Self-hosted push (UnifiedPush)** | Instantly, with Kairo closed and no extra battery use | The **ntfy** app (F-Droid or Play Store) pointed at your ntfy server (the `push` profile in `docker-compose.yml`) |
+| **2. Direct connection or "Hey Kairo"** | Instantly while the service runs | Turn on *Direct connection to your server* (or listening). It uses a bit more battery. |
+| **3. Local alarms and sync** | Reminders, event alerts and the briefing at their time even with no internet. Everything else on the next sync (15 min). | Nothing |
 
-1. **Push propio**: en *Ajustes > Avisos al instante, sin Firebase* toca **Configurar**; Kairo usa el distribuidor
-   instalado (ntfy) y le pide un endpoint con la clave VAPID de tu servidor. El endpoint y las claves de cifrado
-   (`p256dh`, `auth`) se registran en `POST /api/push/register`. El servidor cifra cada aviso para este teléfono
-   (RFC 8291) y el conector lo descifra; el contenido es el mismo `{type, data}` del WebSocket y pasa por el mismo
-   manejador. **Enviar prueba** dice cuántos dispositivos aceptaron el aviso. Al abrir la app y al iniciar sesión
-   se renueva el registro; al cerrar sesión se borra. Detalles del servidor en [PUSH.md](PUSH.md).
-2. **Conexión directa**: servicio en primer plano ligero (tipo `specialUse`) que solo mantiene abierto el WebSocket,
-   con la notificación fija "Kairo conectado". Nunca arranca solo: lo activas tú y vuelve tras reiniciar.
-   El servicio de "Oye Kairo" también mantiene esta conexión, igual que la app abierta.
-3. **Alarmas locales exactas** para recordatorios (también los recurrentes y los que otro miembro te programó,
-   con "De Valentina") y avisos de eventos, más la **sincronización** con WorkManager: `/sync/device` trae además
-   los avisos de la familia sin leer de las últimas 48 h, y el teléfono muestra los que aún no vio.
+1. **Self-hosted push**: in *Settings > Instant alerts without Firebase*, tap **Set up**. Kairo uses the installed
+   distributor (ntfy) and asks it for an endpoint, using your server's VAPID key. The endpoint and the encryption keys
+   (`p256dh`, `auth`) are registered with `POST /api/push/register`. The server encrypts each notification for this
+   phone (RFC 8291) and the connector decrypts it. The content is the same `{type, data}` as the WebSocket and goes
+   through the same handler. **Send test** tells you how many devices accepted the notification. The registration is
+   renewed when you open the app and when you sign in, and deleted when you sign out. Server details are in
+   [PUSH.md](PUSH.md).
+2. **Direct connection**: a light foreground service (type `specialUse`) that only keeps the WebSocket open, with the
+   permanent notification "Kairo connected". It never starts on its own. You turn it on, and it comes back after a
+   reboot. The "Hey Kairo" service also keeps this connection, and so does the open app.
+3. **Exact local alarms** for reminders (including recurring ones and ones another member scheduled for you, shown
+   as "From Valentina") and event alerts, plus **sync** with WorkManager. `/sync/device` also returns the unread
+   family notices from the last 48 hours, and the phone shows the ones it has not seen yet.
 
-Canales de notificación: Recordatorios, Familia (mensajes, tareas asignadas y cambios en lo compartido), Resumen del
-día, Conexión directa, Escucha continua, Grabaciones y Temporizadores. Tocar un aviso de la familia abre la pantalla
-relacionada (o Familia) y lo marca como leído.
+Notification channels: Reminders, Family (messages, assigned tasks and changes to shared items), Daily briefing,
+Direct connection, Continuous listening, Recordings and Timers. Tapping a family notice opens the related screen (or
+Family) and marks it as read.
 
-Los recordatorios por lugar usan las alertas de proximidad del sistema (sin Google Play Services).
-Aparte, el servidor puede publicar en un tema de **ntfy** (`NTFY_URL`, `NTFY_TOPIC`) como canal adicional.
+Location reminders use the system's proximity alerts (no Google Play Services). In addition, the server can publish
+to an **ntfy** topic (`NTFY_URL`, `NTFY_TOPIC`) as an extra channel.
 
-## Plegables
+## Foldables
 
-| Postura | Diseño |
+| Posture | Layout |
 |---|---|
-| Teléfono o Fold cerrado | Barra inferior; listas y detalle en pantallas separadas. |
-| Fold abierto (vertical) | Riel lateral; Hoy en dos columnas; Notas, Chat y Listas con lista y detalle lado a lado; Familia con miembros a la izquierda y avisos a la derecha. |
-| Fold abierto (horizontal) / tablet | Tareas como tablero de 3 columnas; calendario mensual con agenda. |
-| Modo mesa (semiabierto) | El orbe y la respuesta arriba del pliegue; teclado y micrófono abajo. |
+| Phone or closed Fold | Bottom bar. Lists and details on separate screens. |
+| Open Fold (portrait) | Side rail. Today in two columns. Notes, Chat and Lists with list and detail side by side. Family with members on the left and notices on the right. |
+| Open Fold (landscape) / tablet | Tasks as a 3-column board. Month calendar with an agenda. |
+| Tabletop mode (half-open) | The orb and the answer above the fold. Keyboard and microphone below. |
 
-Al doblar o desdoblar no se pierde nada: el estado vive en ViewModels.
+Nothing is lost when you fold or unfold the device. State lives in ViewModels.
 
-## Capturas
+## Screenshots
 
-Se generan sin emulador con Roborazzi contra un backend local:
+The screenshots are generated without an emulator, using Roborazzi against a local backend:
 
 ```bash
 cd android
-./gradlew :app:recordRoborazziDebug     # salida en docs/screenshots/android
+./gradlew :app:recordRoborazziDebug     # output goes to docs/screenshots/android
 ```
 
-Usa el backend de `KAIRO_TEST_SERVER` (por defecto `http://localhost:8088`) con un solo inicio de sesión por
-ejecución. Las horas se muestran en `America/Bogota` (cámbialo con `KAIRO_TEST_TZ`). Las capturas de familia
-crean una invitación temporal y la revocan al terminar.
+It uses the backend at `KAIRO_TEST_SERVER` (default `http://localhost:8088`) with a single sign-in per run. Times
+are shown in `America/Bogota` (change this with `KAIRO_TEST_TZ`). The family screenshots create a temporary invitation
+and revoke it when they finish.
 
-## Privacidad y seguridad en el teléfono
+## Privacy and security on the phone
 
-- La sesión (refresh token) se guarda cifrada con una clave del **Android Keystore**.
-- HTTPS obligatorio (HTTP solo para pruebas con el emulador).
-- Sin respaldos automáticos en la nube de los datos de la app.
-- Las grabaciones de reuniones se suben por partes y se borran del teléfono al subirse.
+- The session (refresh token) is stored encrypted with a key from the **Android Keystore**.
+- HTTPS is required (HTTP is only allowed for emulator testing).
+- App data is excluded from automatic cloud backups.
+- Meeting recordings are uploaded in segments and deleted from the phone once uploaded.
 
 ## Wear OS
 
-App independiente (funciona con Wi-Fi o LTE del reloj). Vincúlala con el código de 6 dígitos de
-*Ajustes > Vincular reloj* en el teléfono. Toca el botón para hablar: Kairo responde en texto y,
-si el reloj tiene altavoz, con voz. Los avisos del teléfono llegan al reloj como notificaciones.
+A standalone app (it works over the watch's Wi-Fi or LTE). Pair it with the 6-digit code from
+*Settings > Pair watch* on the phone. Tap the button to talk. Kairo answers in text and, if the watch has a speaker,
+with voice. Notifications from the phone arrive on the watch.

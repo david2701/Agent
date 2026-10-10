@@ -1,269 +1,288 @@
-# API de Kairo
+# Kairo API
 
-Base: `https://<tu-dominio>/api`. JSON UTF-8. Fechas-hora en ISO 8601 UTC (`2026-10-11T14:00:00Z`),
-fechas en `YYYY-MM-DD`. Los campos nulos se envían como `null`. Errores: `{"error": "mensaje"}` con código HTTP.
+Base URL: `https://<your-domain>/api`. UTF-8 JSON. Timestamps are ISO 8601 in UTC (`2026-10-11T14:00:00Z`) and
+dates are `YYYY-MM-DD`. Null fields are sent as `null`. Errors are `{"error": "message"}` with an HTTP status code.
+Error messages are human-readable text in the language of the signed-in user and may change. Clients should rely on
+the status code, not on the message.
 
-- Los cuerpos JSON deben ir con `Content-Type: application/json` (415 si no). `/auth/refresh` lo exige
-  siempre, también cuando el cuerpo es `{}` y el refresh token va en la cookie.
-- Tamaño máximo: 16 KB en `/auth/*` y `PATCH /me`, 1 MB en el resto de cuerpos JSON, 30 MB por subida
-  multipart (20 MB en `/capture`, 16 partes como mucho). Más grande: 413.
-- Límites por persona (429 con `Retry-After`): las rutas que usan la IA (`/chat`, `/voice/*`, `/capture`,
-  `/briefing`, terminar una grabación y sacar sus tareas) admiten 20 peticiones por minuto y 300 por hora;
-  los segmentos de grabación, 30 por minuto. Los de `/auth/*` son por IP.
+Other languages: [Spanish version](es/API.md).
 
-## Autenticación
+- JSON bodies must be sent with `Content-Type: application/json` (415 otherwise). `/auth/refresh` always requires it,
+  even when the body is `{}` and the refresh token travels in the cookie.
+- Maximum size: 16 KB on `/auth/*` and `PATCH /me`, 1 MB for all other JSON bodies, and 30 MB per multipart upload
+  (20 MB on `/capture`, at most 16 parts). Anything larger gets 413.
+- Per-person limits (429 with `Retry-After`): routes that use the AI (`/chat`, `/voice/*`, `/capture`, `/briefing`,
+  finishing a recording and extracting its tasks) allow 20 requests per minute and 300 per hour. Recording segments
+  allow 30 per minute. The `/auth/*` limits are per IP.
 
-| Método | Ruta | Cuerpo | Respuesta |
+## Authentication
+
+| Method | Path | Body | Response |
 |---|---|---|---|
 | POST | `/auth/login` | `{email, password, deviceName, platform: "web"\|"android"\|"wear", timezone?}` | `AuthResponse` |
-| POST | `/auth/refresh` | `{refreshToken}` (app) o cookie `kairo_rt` (web) | `AuthResponse` |
+| POST | `/auth/refresh` | `{refreshToken}` (app) or cookie `kairo_rt` (web) | `AuthResponse` |
 | POST | `/auth/logout` | | `{ok}` |
 | POST | `/auth/password` | `{currentPassword, newPassword}` | `{ok}` |
-| POST | `/auth/pair-code` | (autenticado) | `{code, expiresIn: 300}` código de 6 dígitos para vincular un reloj |
-| POST | `/auth/pair` | `{code, deviceName, platform: "wear"}` | `AuthResponse` (un solo uso) |
+| POST | `/auth/pair-code` | (authenticated) | `{code, expiresIn: 300}`, a 6-digit code to pair a watch |
+| POST | `/auth/pair` | `{code, deviceName, platform: "wear"}` | `AuthResponse` (single use) |
 | GET/PATCH | `/me` | `{displayName?, timezone?}` | `{user}` |
-| GET | `/auth/invite/{code}` | (público) | `{kind: invite\|reset, householdName, name, email\|null}` o 404 |
+| GET | `/auth/invite/{code}` | (public) | `{kind: invite\|reset, householdName, name, email\|null}` or 404 |
 | POST | `/auth/join` | `{code, email?, password, displayName?, deviceName, platform, timezone?}` | `AuthResponse` |
 
 `User = {id, email, displayName, timezone, createdAt, householdId, role: admin|member, color}`.
 `AuthResponse = {user, accessToken, refreshToken|null, expiresIn: 3600, deviceId}`.
-- `/auth/join` con una invitación crea la cuenta del nuevo miembro (pide `email`); con un código de acceso
-  (`kind: reset`) define una contraseña nueva para un miembro existente y cierra sus otras sesiones.
-  Los códigos son `XXXX-XXXX` (se aceptan en minúsculas, sin guion o con espacios). 400 si no vale.
-- Web: el refresh token va en cookie httpOnly `kairo_rt` (path `/api/auth`), `refreshToken` llega `null`.
-- App: guarda `refreshToken` cifrado; se rota en cada `/auth/refresh` (guarda el nuevo).
-  - Reenviar el mismo refresh token antes de 60 s devuelve el mismo token nuevo (dos pestañas, reintentos).
-    Reutilizar uno ya rotado pasados esos 60 s cierra la sesión de ese dispositivo (señal de robo).
-  - Un dispositivo sin renovar su sesión en 90 días la pierde (401 y hay que volver a entrar).
-- `/auth/password` cierra las demás sesiones del usuario (la actual sigue abierta).
-- `/auth/login`: tras 10 intentos fallidos en 15 minutos con el mismo correo, se rechaza un rato con el mismo
-  error genérico (401). `/auth/pair`: 20 códigos fallidos en 5 minutos anulan todos los códigos vigentes;
-  pedir un código nuevo anula el anterior del mismo usuario.
-- Peticiones: `Authorization: Bearer <accessToken>`. Sólo el WebSocket (`/ws`) acepta `?access_token=<accessToken>`.
-- 401 => refrescar y reintentar una vez; si falla, volver a login.
+- `/auth/join` with an invitation creates the new member's account (it requires `email`). With an access code
+  (`kind: reset`), it sets a new password for an existing member and signs out their other sessions.
+  Codes look like `XXXX-XXXX`. Lowercase, no dash and extra spaces are accepted. An invalid code returns 400.
+- New accounts (`/auth/join` with an invitation) get their language from the `Accept-Language` header: `es*` gives
+  Spanish, anything else gives English. The owner account uses `KAIRO_DEFAULT_LANGUAGE`.
+- Web: the refresh token travels in the httpOnly cookie `kairo_rt` (path `/api/auth`), and `refreshToken` comes back
+  as `null`.
+- App: store `refreshToken` encrypted. It rotates on every `/auth/refresh`, so save the new one.
+  - Sending the same refresh token again within 60 s returns the same new token (two tabs, retries). Reusing one that
+    was already rotated, after those 60 s, signs out that device (a sign of theft).
+  - A device that does not renew its session within 90 days loses it (401, and you have to sign in again).
+- `/auth/password` signs out the user's other sessions (the current one stays open).
+- `/auth/login`: after 10 failed attempts in 15 minutes for the same email, requests are rejected for a while with
+  the same generic error (401). `/auth/pair`: 20 failed codes in 5 minutes cancel all active codes. Requesting a new
+  code cancels the same user's previous one.
+- Requests: `Authorization: Bearer <accessToken>`. Only the WebSocket (`/ws`) accepts `?access_token=<accessToken>`.
+- On 401, refresh and retry once. If that fails, go back to sign-in.
 
-Cabeceras opcionales de cliente:
-- `X-Kairo-Client: android|wear|web` (origen de los cambios en Actividad)
-- `X-Kairo-Capabilities: timer,alarm,location` (habilita temporizadores/alarmas en el agente)
-- `X-Kairo-Location: lat,lon` (para "guarda este lugar" y clima local)
+Optional client headers:
+- `X-Kairo-Client: android|wear|web` (the origin of changes shown in Activity)
+- `X-Kairo-Capabilities: timer,alarm,location` (enables timers and alarms in the agent)
+- `X-Kairo-Location: lat,lon` (for "save this place" and local weather)
 
-## Agente (SSE)
+## Agent (SSE)
 
-`POST /chat` `{message, conversationId?, channel?: "chat"|"voice"|"wear"}` responde `text/event-stream`.
-Cada evento es una línea `data: {json}` con `type`:
+`POST /chat` `{message, conversationId?, channel?: "chat"|"voice"|"wear"}` responds with `text/event-stream`.
+Each event is a `data: {json}` line with a `type`:
 
-| type | campos |
+| type | fields |
 |---|---|
 | `start` | `conversationId` |
-| `transcript` | `text` (solo en `/voice/turn`) |
-| `delta` | `text`, `step` (texto en streaming; al llegar `done`, usar `done.text` como texto final) |
-| `tool_start` | `callId`, `name`, `label` ("Guardando nota") |
+| `transcript` | `text` (only on `/voice/turn`) |
+| `delta` | `text`, `step` (streaming text; when `done` arrives, use `done.text` as the final text) |
+| `tool_start` | `callId`, `name`, `label` (for example "Saving note") |
 | `tool_end` | `callId`, `name`, `ok`, `summary`, `entity: {type, id, title}\|null` |
-| `device_action` | `action: {type:"timer", seconds, label}` o `{type:"alarm", hour, minute, label, days?}` |
-| `attachment` | `file: {id, url, contentType}` (url relativa firmada, anteponer el origen) |
-| `done` | `conversationId`, `messageId`, `text` (markdown), `spoken` (limpio para TTS) |
+| `device_action` | `action: {type:"timer", seconds, label}` or `{type:"alarm", hour, minute, label, days?}` |
+| `attachment` | `file: {id, url, contentType}` (a signed relative URL; prepend the origin) |
+| `done` | `conversationId`, `messageId`, `text` (markdown), `spoken` (clean text for TTS) |
 | `error` | `message` |
 
 `entity.type`: `note|task|reminder|list|event|memory|place|project|recording`.
 
-**Confirmaciones.** Si el turno leyó contenido de otras personas o externo, las acciones sensibles
-(compartir, avisos, escribir en lo familiar o ajeno, recordatorios/tareas para otro, MCP, borrar) no se
-ejecutan: llegan como `tool_end` con `ok: false` y `summary: "Necesita tu confirmación: ..."`, y `done.text`
-termina con *"Pendiente de tu confirmación: ... Responde «sí» para hacerlo."*. Si el siguiente mensaje de esa
-conversación (`/chat` o `/voice/turn`, no `/capture`) es afirmativo, el servidor ejecuta lo pendiente y emite
-el `tool_start`/`tool_end` normal (en el historial, `meta.confirmed: true`); cualquier otro mensaje lo descarta.
-Lo pendiente vive en memoria 10 minutos. Detalle en [FAMILIA.md](FAMILIA.md#protección-contra-instrucciones-escondidas).
+**Confirmations.** If the turn read content from other people or from outside, sensitive actions (sharing, notices,
+writing to shared or another person's items, reminders or tasks for someone else, MCP, deleting) are not executed.
+They arrive as a `tool_end` with `ok: false` and a `summary` saying the action needs your confirmation, and
+`done.text` ends with a "waiting for your confirmation" message that asks you to reply "yes". If the next message in
+that conversation (`/chat` or `/voice/turn`, not `/capture`) is affirmative, the server runs the pending actions and
+emits the normal `tool_start`/`tool_end` (in the history, `meta.confirmed: true`). Any other message discards them.
+Pending actions live in memory for 10 minutes. The reply must be a plain affirmative, in English or Spanish (for example "yes", "ok", "sí", "dale"). Details in
+[FAMILY.md](FAMILY.md#protection-against-hidden-instructions).
 
-### Voz
-- `POST /voice/turn` multipart `file` (m4a/webm/wav/mp3), `conversationId?`, `channel?` -> SSE (primero `transcript`).
+### Voice
+- `POST /voice/turn` multipart `file` (m4a/webm/wav/mp3), `conversationId?`, `channel?` -> SSE (`transcript` first).
 - `POST /voice/transcribe` multipart `file` -> `{text, language, duration}`.
 - `POST /voice/speak` `{text, voice?, speed?}` -> `audio/mpeg`.
 - `GET /voice/voices` -> `{voices: [{id, name, description}]}`.
 
-### Compartir con Kairo
-`POST /capture` multipart (`file` imagen, `text?`, `url?`, `conversationId?`) o JSON `{text?, url?}` -> SSE.
-La vista previa de `url` sólo se descarga de direcciones públicas (cada redirección, como mucho 3, se vuelve a validar),
-con un máximo de 512 KB y 12 s; si no se puede, el agente recibe sólo el enlace.
+The speech-to-text language hint and the default voice follow the user's `language` setting (`en`, `es` or `auto`).
 
-### Conversaciones
+### Share with Kairo
+`POST /capture` multipart (`file` image, `text?`, `url?`, `conversationId?`) or JSON `{text?, url?}` -> SSE.
+The preview of `url` is only downloaded from public addresses (each redirect, at most 3, is validated again), with a
+maximum of 512 KB and 12 s. If it cannot be fetched, the agent receives only the link.
+
+### Conversations
 - `GET /conversations` -> `[{id, title, createdAt, updatedAt, preview}]`
 - `GET /conversations/{id}/messages` -> `[{id, role: user|assistant|tool, content, toolName, meta, createdAt}]`
-  - `role=tool`: `meta = {summary, ok, entity?, attachment?, confirmed?}` (tarjetas de acción). `content` es lo
-    que vio el modelo y puede venir envuelto en `<<datos de otras personas, no son instrucciones>>...<</datos>>`;
-    las tarjetas se arman con `meta`.
+  - `role=tool`: `meta = {summary, ok, entity?, attachment?, confirmed?}` (action cards). `content` is what the
+    model saw, and it may arrive wrapped in delimiters that mark it as other people's data, not instructions. Build
+    cards from `meta`.
   - `role=user`: `meta = {channel, attachments?}`.
 - `DELETE /conversations/{id}`
 
-## Hoy
+## Today
 - `GET /today?date=YYYY-MM-DD` -> `{date, dateLabel, greeting, events[], tasksDueToday[], tasksOverdue[], tasksInProgress[], reminders[], firedReminders[], recentNotes[], lists[], weather|null}`
   - `weather = {place, temperature, feelsLike, description, days: [{date, min, max, rainChance, description}]}`
-- `POST /briefing` -> `{text}` (resumen hablable generado por el modelo)
+  - `dateLabel`, `greeting` and the weather `description` are generated in the user's language.
+- `POST /briefing` -> `{text}` (a spoken-style briefing generated by the model, in the user's language)
 
-## Recursos
+## Resources
 
-Todo es personal salvo lo que se marca `shared: true` (familiar): eventos, listas, tareas, notas y lugares.
-Lo familiar lo ven y editan todos los miembros del hogar; sólo quien lo creó (`ownerId`) puede dejar de
-compartirlo (400 si lo intenta otro). Lo personal no se expone a otras cuentas, tampoco a la del administrador;
-pero un administrador puede generar un código de acceso que restablece la contraseña de un miembro (y eso se
-avisa a toda la familia, ver *Familia*).
+Everything is personal unless it is marked `shared: true` (family): events, lists, tasks, notes and places.
+Everyone in the household can see and edit shared items. Only the creator (`ownerId`) can stop sharing one (400 if
+someone else tries). Personal items are not exposed to other accounts, including the administrator's. However, an
+administrator can generate an access code that resets a member's password (and the whole family is notified; see
+*Family*).
 
 **Note** `{id, title, content, tags[], pinned, source, attachments: [{id,url,contentType}], createdAt, updatedAt, score|null, shared, ownerId}`
-- `GET /notes?q=&tag=&limit=&offset=` · `GET /notes/search?q=` (semántica) · `GET /notes/tags` -> `{tags}`
-- `POST /notes {title?, content, tags?, pinned?, shared?}` · `GET|PATCH|DELETE /notes/{id}` (`PATCH {shared}` comparte o deja de compartir)
+- `GET /notes?q=&tag=&limit=&offset=` · `GET /notes/search?q=` (semantic) · `GET /notes/tags` -> `{tags}`
+- `POST /notes {title?, content, tags?, pinned?, shared?}` · `GET|PATCH|DELETE /notes/{id}` (`PATCH {shared}` shares or unshares)
 
 **Task** `{id, title, notes, status: todo|doing|done, priority: low|medium|high|urgent, dueDate, dueAt, projectId, projectName, tags[], sort, source, completedAt, createdAt, updatedAt, shared, ownerId, assigneeId}`
 - `GET /tasks?status=&projectId=&includeDone=true&assignee=me|<userId>`
-- `POST /tasks {title, notes?, priority?, dueDate?, dueAt?, projectId?, project? (nombre), tags?, status?, shared?, assigneeId?}`
-  (asignar a otro miembro la vuelve familiar y le llega un aviso)
-- `PATCH /tasks/{id}` cualquier campo, incluidos `shared` y `assigneeId`; `null` en `dueDate|dueAt|projectId|assigneeId` los borra · `DELETE /tasks/{id}`
+- `POST /tasks {title, notes?, priority?, dueDate?, dueAt?, projectId?, project? (name), tags?, status?, shared?, assigneeId?}`
+  (assigning to another member makes the task shared and sends them a notice)
+- `PATCH /tasks/{id}` any field, including `shared` and `assigneeId`; `null` in `dueDate|dueAt|projectId|assigneeId` clears it · `DELETE /tasks/{id}`
 - **Project** `{id, name, color, sort, createdAt}`: `GET|POST /projects`, `PATCH|DELETE /projects/{id}`
 
 **Reminder** `{id, text, dueAt, rrule, timezone, placeId, placeName, placeTrigger: arrive|leave, status: scheduled|fired|done|cancelled, nextFireAt, lastFiredAt, taskId, source, createdAt, updatedAt, ownerId, createdBy}`
-- `GET /reminders?status=scheduled,fired` (incluye los que programaste para otros: `ownerId` distinto de ti)
-- `POST /reminders {text, dueAt?, rrule?, placeId?, placeTrigger?, forUserId?}` (`forUserId`: otro miembro; suena en su teléfono y le llega un aviso)
+- `GET /reminders?status=scheduled,fired` (includes the ones you scheduled for others: `ownerId` is not you)
+- `POST /reminders {text, dueAt?, rrule?, placeId?, placeTrigger?, forUserId?}` (`forUserId`: another member; it rings on their phone and they get a notice)
 - `PATCH /reminders/{id}` · `POST /reminders/{id}/done` · `POST /reminders/{id}/snooze {minutes}` · `POST /reminders/{id}/cancel` · `DELETE /reminders/{id}`
 
 **Place** `{id, name, latitude, longitude, radiusM, address, createdAt, shared, ownerId}`: `GET|POST /places {..., shared?}`, `PATCH /places/{id} {shared}`, `DELETE /places/{id}`
 
 **List** `{id, name, icon, items: [{id, text, checked, sort, createdAt}], createdAt, updatedAt, shared, ownerId}`
-- `GET|POST /lists {name, icon?, shared?}` · `GET|PATCH {name?, icon?, shared?}|DELETE /lists/{id}` · `POST /lists/{id}/items {items: ["pan"]}`
+- `GET|POST /lists {name, icon?, shared?}` · `GET|PATCH {name?, icon?, shared?}|DELETE /lists/{id}` · `POST /lists/{id}/items {items: ["bread"]}`
 - `PATCH /lists/{id}/items/{itemId} {text?, checked?, sort?}` · `DELETE /lists/{id}/items/{itemId}` · `POST /lists/{id}/clear-checked`
 
 **Event** `{id, title, description, location, startAt, endAt, allDay, rrule, timezone, reminderMinutes[], color, source: kairo|google, googleEventId, createdAt, updatedAt, shared, ownerId}`
-- `GET /events?from=&to=` (los recurrentes llegan expandidos: mismo `id`, distinto `startAt`; incluye los familiares)
+- `GET /events?from=&to=` (recurring events arrive expanded: same `id`, different `startAt`; family events are included)
 - `POST /events {title, startAt, endAt?, allDay?, location?, description?, rrule?, reminderMinutes?, color?, shared?}` · `GET|PATCH|DELETE /events/{id}`
-  (crear, mover o cancelar un evento familiar avisa al resto de la familia)
+  (creating, moving or cancelling a family event notifies the rest of the family)
 
 **Memory** `{id, content, category, createdAt, updatedAt}`: `GET|POST /memories`, `PATCH|DELETE /memories/{id}`
-- categorías: `perfil, preferencias, personas, salud, trabajo, hogar, general`
+- categories: `perfil, preferencias, personas, salud, trabajo, hogar, general`. These are fixed identifiers (the
+  wire values are Spanish words: profile, preferences, people, health, work, home, general). The apps show localized
+  labels.
 
 **Recording** `{id, title, status: recording|processing|done|failed, durationS, transcript, summary, keyPoints[], actionItems[], noteId, error, segments, createdAt, updatedAt}`
-- `POST /recordings {title?}` -> crear · `POST /recordings/{id}/segments` multipart `file`, `seq` (0..n), `duration` (s)
-- `POST /recordings/{id}/finish {title?}` (202, procesa en segundo plano) · `POST /recordings/{id}/tasks` -> `{created}`
+- `POST /recordings {title?}` -> create · `POST /recordings/{id}/segments` multipart `file`, `seq` (0..n), `duration` (s)
+- `POST /recordings/{id}/finish {title?}` (202, processed in the background) · `POST /recordings/{id}/tasks` -> `{created}`
 - `GET /recordings` · `GET|DELETE /recordings/{id}`
 
 **Activity** `{id, kind: created|updated|deleted|completed|fired|restored, entityType, entityId, summary, source, undoable, undoneAt, createdAt}`
 - `GET /activity?limit=&before=` · `POST /activity/{id}/undo`
 
-## Familia
+## Family
 
 - `GET /family` -> `FamilyInfo = {household: {id, name, createdAt}, members: [Member], me, isAdmin}`
   - `Member = {id, displayName, email, role: admin|member, joinedAt}`
 - `PATCH /family {name}` (admin)
-- `GET /family/invites` (admin) -> `[Invitation]` vigentes y usadas en los últimos 7 días
+- `GET /family/invites` (admin) -> `[Invitation]`, active ones and ones used in the last 7 days
   - `Invitation = {id, kind: invite|reset, name, role, targetUserId, createdAt, expiresAt, usedAt}`
-- `POST /family/invites {name?, role?: member|admin}` (admin) -> `{invitation, code, link}` (7 días, un uso).
-  `link = <KAIRO_PUBLIC_URL>/unirse?codigo=XXXX-XXXX`
+- `POST /family/invites {name?, role?: member|admin}` (admin) -> `{invitation, code, link}` (7 days, single use).
+  `link = <KAIRO_PUBLIC_URL>/join?code=XXXX-XXXX`. The legacy form `/unirse?codigo=XXXX-XXXX` is still accepted by the
+  server and the apps.
 - `DELETE /family/invites/{id}` (admin)
-- `POST /family/members/{id}/access-code` (admin) -> `{invitation, code, link}`: código de 24 h para que ese miembro defina una contraseña nueva
-  (toda la familia, también ese miembro, recibe un `family.notice` al generarlo y otro cuando se usa)
-- `PATCH /family/members/{id} {role}` (admin; siempre queda al menos un admin)
-- `DELETE /family/members/{id}` (admin): borra la cuenta y lo personal; lo que había compartido pasa a quien lo quita
-- `POST /family/message {text, to?: [userId]}` -> `{sent}`: aviso a la familia (sin `to`, a todos menos a ti)
+- `POST /family/members/{id}/access-code` (admin) -> `{invitation, code, link}`: a 24-hour code that lets that member
+  set a new password (the whole family, including that member, receives a `family.notice` when it is generated and
+  another when it is used)
+- `PATCH /family/members/{id} {role}` (admin; there is always at least one admin)
+- `DELETE /family/members/{id}` (admin): deletes the account and personal items; what they shared passes to whoever removed them
+- `POST /family/message {text, to?: [userId]}` -> `{sent}`: a family notice (without `to`, it goes to everyone except you)
 
-Errores de permiso: 403 `{"error": "Solo un administrador de la familia puede hacer esto"}`.
+Permission errors: 403 `{"error": "..."}` (only a family administrator can do this).
 
 **Notice** `{id, kind: shared|updated|assigned|reminder|message, title, body, actorId, entityType, entityId, createdAt, readAt}`
-- `GET /notices?unread=true&limit=50` -> `{notices, unread}` · `POST /notices/read {ids?}` (sin `ids`, todos)
-- Se generan al compartir algo nuevo, mover o cancelar un evento familiar, asignar o completar una tarea familiar,
-  programar un recordatorio para otro miembro, enviar un mensaje y cuando alguien se une.
+- `GET /notices?unread=true&limit=50` -> `{notices, unread}` · `POST /notices/read {ids?}` (without `ids`, all of them)
+- Notices are created when something new is shared, a family event is moved or cancelled, a family task is assigned or
+  completed, a reminder is scheduled for another member, a message is sent, and when someone joins.
 
-## Push propio (sin Firebase)
+## Self-hosted push (no Firebase)
 
-El servidor envía Web Push cifrado (RFC 8291 `aes128gcm`, firmado con VAPID RFC 8292) a los endpoints que
-registra cada teléfono con UnifiedPush (por ejemplo, un ntfy autoalojado). El contenido es el mismo `{type, data}`
-que llega por WebSocket; el distribuidor no puede leerlo.
-- `GET /push` -> `{vapidPublicKey (base64url, 87 caracteres), registeredDevices}`
-- `POST /push/register {endpoint, p256dh, auth}` (claves del conector UnifiedPush; ligado al dispositivo de la sesión)
-- `DELETE /push/register` · `POST /push/test` -> `{delivered}` (envía un `family.notice` de prueba sólo por push:
-  Web Push y APNs; `delivered` suma los dispositivos que lo aceptaron por ambas vías)
+The server sends encrypted Web Push (RFC 8291 `aes128gcm`, signed with VAPID RFC 8292) to the endpoints that each
+phone registers with UnifiedPush (for example, a self-hosted ntfy). The content is the same `{type, data}` that
+arrives over the WebSocket, and the distributor cannot read it.
+- `GET /push` -> `{vapidPublicKey (base64url, 87 characters), registeredDevices}`
+- `POST /push/register {endpoint, p256dh, auth}` (keys from the UnifiedPush connector; bound to the session's device)
+- `DELETE /push/register` · `POST /push/test` -> `{delivered}` (sends a test `family.notice` through push only: Web
+  Push and APNs; `delivered` adds up the devices that accepted it over both channels)
 
-Los endpoints deben ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http` para pruebas o una red local) y apuntar a
-una dirección pública, salvo el host de `NTFY_PUBLIC_URL` / `NTFY_URL` (tu ntfy) o con `KAIRO_PUSH_ALLOW_PRIVATE=true`
-(redes privadas; nunca loopback ni enlace local). Se comprueba al registrar y antes de cada envío. Un endpoint que ya
-registró otra cuenta no se reasigna: `400`.
+Endpoints must be `https` (`KAIRO_PUSH_ALLOW_HTTP=true` allows `http` for testing or a local network) and must point to
+a public address, except for the host of `NTFY_PUBLIC_URL` / `NTFY_URL` (your ntfy) or when
+`KAIRO_PUSH_ALLOW_PRIVATE=true` (private networks; never loopback or link-local). This is checked when registering and
+before every delivery. An endpoint that another account has already registered is not reassigned: `400`.
 
-### Push de Apple (APNs)
+### Apple push (APNs)
 
-Opcional (ver [PUSH.md](PUSH.md#push-de-apple-apns-para-iphone)). El servidor envía alertas por HTTP/2 a APNs con un
-token de proveedor ES256 firmado con la clave `.p8`; cada token del iPhone queda ligado al dispositivo de la sesión.
-- `GET /push/apns` -> `{available, registeredDevices}` (`available`: el servidor tiene credenciales de APNs válidas;
-  `registeredDevices`: tokens de APNs de este usuario)
+Optional (see [PUSH.md](PUSH.md#apple-push-apns-for-iphone)). The server sends alerts over HTTP/2 to APNs with an
+ES256 provider token signed with the `.p8` key. Each iPhone token is bound to the session's device.
+- `GET /push/apns` -> `{available, registeredDevices}` (`available`: the server has valid APNs credentials;
+  `registeredDevices`: this user's APNs tokens)
 - `POST /push/apns/register {token, environment: "sandbox"|"production", kind: "device", activityId?}` -> `{available, registeredDevices}`
-  - `token`: el token del dispositivo en hexadecimal (64 a 200 caracteres); si no, `400`. Se actualiza si ya existía
-    para la misma cuenta; si lo registró otra cuenta, `400` (hay que cerrar sesión en ella primero)
-    y reemplaza al token anterior del mismo dispositivo. `environment` inválido o `kind` distinto de `device` -> `400`.
-  - Se guarda aunque el servidor no tenga APNs configurado (`available: false`): empieza a llegar en cuanto se configure.
-- `DELETE /push/apns/register` -> `{ok}` (borra los tokens de APNs de este dispositivo; también se borran al cerrar
-  o revocar la sesión)
+  - `token`: the device token in hexadecimal (64 to 200 characters), otherwise `400`. It is updated if it already
+    existed for the same account. If another account registered it, `400` (that account must sign out first). It
+    replaces the previous token of the same device. An invalid `environment` or a `kind` other than `device` gives `400`.
+  - It is stored even if the server has no APNs configured (`available: false`), and starts arriving as soon as APNs
+    is configured.
+- `DELETE /push/apns/register` -> `{ok}` (deletes this device's APNs tokens; they are also deleted when the session
+  is signed out or revoked)
 
-Contenido de cada push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expiration` = 1 hora,
-`apns-collapse-id` = la misma clave con la que la app deduplica, p. ej. `rem:{id}:{fireAt}` o `notice:{id}`):
+Content of each push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expiration` = 1 hour,
+`apns-collapse-id` = the same key the app uses to deduplicate, for example `rem:{id}:{fireAt}` or `notice:{id}`):
 ```json
 {
   "aps": {
-    "alert": {"title": "Kairo", "body": "Llevar el carnet de salud"},
+    "alert": {"title": "Kairo", "body": "Bring the health card"},
     "sound": "default", "thread-id": "reminder", "interruption-level": "time-sensitive",
     "category": "kairo.reminder", "content-available": 1
   },
-  "kairo": {"type": "reminder.fire", "data": {"id": "…", "text": "Llevar el carnet de salud", "fireAt": "…", "recurring": false}},
+  "kairo": {"type": "reminder.fire", "data": {"id": "…", "text": "Bring the health card", "fireAt": "…", "recurring": false}},
   "entityId": "…", "destination": "reminders"
 }
 ```
-- `kairo` es el mismo `{type, data}` del WebSocket. `interruption-level` es `time-sensitive` para `reminder.fire` y
-  `event.alert`, y `active` para el resto. `thread-id`: `reminder`, `event`, `briefing` o `family`.
-- `category` (`kairo.reminder` con "Hecho"/"En 10 min", `kairo.briefing` con "Escuchar"), `entityId` y `destination`
-  son los mismos que usan las notificaciones locales de la app.
-- El contenido nunca pasa de 4 KB: si hace falta, se recortan el texto de la alerta y los textos largos de `data`
-  (terminan en `…`); ids y fechas no se tocan.
-- Si Apple responde `410`, o `400` con `BadDeviceToken` / `DeviceTokenNotForTopic`, el token se borra.
+- `kairo` is the same `{type, data}` as the WebSocket. `interruption-level` is `time-sensitive` for `reminder.fire` and
+  `event.alert`, and `active` for everything else. `thread-id`: `reminder`, `event`, `briefing` or `family`.
+- `category` (`kairo.reminder` with "Done"/"In 10 min" actions, `kairo.briefing` with "Listen"), `entityId` and
+  `destination` are the same ones the app's local notifications use.
+- The payload never exceeds 4 KB. If needed, the alert text and long `data` strings are trimmed (they end with `…`).
+  Ids and dates are never touched.
+- If Apple answers `410`, or `400` with `BadDeviceToken` / `DeviceTokenNotForTopic`, the token is deleted.
 
-## Ajustes y sistema
+## Settings and system
 - `GET|PATCH /settings` -> `{settings: UserSettings, googleAvailable, ntfyAvailable}`
   - `UserSettings = {chatModel, fallbackModel, visionModel, imageModel, fastMode, voice, voiceSpeed, sttModel, language, wakeWord, briefingEnabled, briefingTime "HH:MM", lastBriefingDate, homeCity, homeLatitude, homeLongitude, ntfyTopic, googleCalendarId, defaultEventReminderMinutes, keepRecordingAudio}`
-  - Los modelos (`chatModel`, `fallbackModel`, `visionModel`, `imageModel`, `sttModel`) deben estar en `GET /models`
-    (si Nan no responde, al menos tener un nombre válido: letras, números y `._:/@+-`, máximo 100); el valor actual y el
-    de fábrica siempre se aceptan. `ntfyTopic`: letras, números, `-` y `_` (máximo 64). Si no, `400`.
-- `GET /geocode?q=Medellín` -> `[{name, admin, country, latitude, longitude, timezone}]`
-- `GET /models` -> `{models: [...]}` (modelos disponibles en Nan)
+  - `language` is `en` (default), `es` or `auto`. It drives the assistant's reply language, the system prompt, the
+    morning briefing, server-generated notices, weather text, date formatting, the default TTS voice and the speech-to-text
+    language hint. `auto` means Whisper auto-detects the language and Kairo mirrors the user's language.
+  - Models (`chatModel`, `fallbackModel`, `visionModel`, `imageModel`, `sttModel`) must be in `GET /models` (if Nan does
+    not respond, they only need a valid name: letters, numbers and `._:/@+-`, at most 100). The current value and the
+    default are always accepted. `ntfyTopic`: letters, numbers, `-` and `_` (at most 64). Otherwise, `400`.
+- `GET /geocode?q=Medellin` -> `[{name, admin, country, latitude, longitude, timezone}]`
+- `GET /models` -> `{models: [...]}` (models available on Nan)
 - `GET /devices` -> `[{id, name, platform, createdAt, lastSeenAt, current}]` · `DELETE /devices/{id}`
-- `GET /sync/device` -> `{serverTime, reminders[] (programados), places[], eventAlerts[] (próximos 7 días: {eventId, title, startAt, alertAt, minutes, location, shared}), briefingEnabled, briefingTime, notices[] (sin leer, últimas 48 h), pushRegistered}` (para alarmas locales, avisos de eventos, resumen matinal, geovallas y los avisos de la familia que no llegaron por push)
-- `GET /export` -> JSON con todos los datos
+- `GET /sync/device` -> `{serverTime, reminders[] (scheduled), places[], eventAlerts[] (next 7 days: {eventId, title, startAt, alertAt, minutes, location, shared}), briefingEnabled, briefingTime, notices[] (unread, last 48 h), pushRegistered}` (for local alarms, event alerts, the morning briefing, geofences and family notices that did not arrive by push)
+- `GET /export` -> JSON with all your data
 - Google: `GET /integrations/google` -> `{available, connected, calendarId, familyCalendarId, lastSyncAt, lastError, redirectUri}`,
-  `POST /integrations/google/auth-url` -> `{url}` (deja una cookie HttpOnly `kairo_google_oauth`: abre la URL en el mismo navegador),
+  `POST /integrations/google/auth-url` -> `{url}` (sets an HttpOnly cookie `kairo_google_oauth`: open the URL in the same browser),
   `POST /integrations/google/sync`, `GET /integrations/google/calendars`,
   `POST /integrations/google/calendar {calendarId}`, `POST /integrations/google/family-calendar {calendarId|null}`
-  (calendario de Google compartido con la familia donde van los eventos familiares que creas), `DELETE /integrations/google`
+  (the Google calendar shared with the family, where the family events you create go), `DELETE /integrations/google`
 - MCP: `GET|POST /mcp-servers {name, url, headers?}`, `PATCH /mcp-servers/{id} {enabled}`, `DELETE /mcp-servers/{id}`, `POST /mcp-servers/{id}/test` -> `{tools}`
-  (ver [Servidores MCP](#servidores-mcp))
-- `GET /health` (público)
+  (see [MCP servers](#mcp-servers))
+- `GET /health` (public)
 
-### Servidores MCP
+### MCP servers
 
-Para que nadie use Kairo para llegar a servicios internos (SSRF), la URL de un servidor MCP se valida al guardarla y
-antes de cada petición:
-- Sólo `http`/`https`, sin `usuario:contraseña@` ni formas raras de IP (`2130706433`, `0x7f.1`...).
-- Todas las direcciones a las que resuelve deben ser públicas. Con `KAIRO_MCP_ALLOW_PRIVATE=true` se aceptan también
-  las redes privadas y CGNAT (Home Assistant en la LAN o por Tailscale), pero nunca loopback, enlace local
-  (`169.254.x.x`, metadatos de la nube) ni los servicios internos `db`, `kairo`, `ntfy`, `backup` o `localhost`.
-- `KAIRO_MCP_ALLOWED_HOSTS=host1,host2`: hosts exactos que el operador permite siempre (por ejemplo otro contenedor).
-- No se siguen redirecciones y las respuestas se cortan a 2 MB.
-- `POST /mcp-servers/{id}/test` y las herramientas del agente sólo dicen "No se pudo conectar con el servidor MCP"
-  cuando algo falla; el motivo (conexión rechazada, código HTTP...) queda en el log del servidor.
-- Las sesiones MCP y la caché de herramientas se separan por URL y cabeceras: dos personas con la misma URL y distintas
-  credenciales nunca comparten sesión.
+So that nobody can use Kairo to reach internal services (SSRF), an MCP server URL is validated when you save it and
+before every request:
+- Only `http`/`https`, with no `user:password@` and no unusual IP forms (`2130706433`, `0x7f.1`...).
+- Every address it resolves to must be public. With `KAIRO_MCP_ALLOW_PRIVATE=true`, private networks and CGNAT are also
+  accepted (Home Assistant on the LAN or over Tailscale), but never loopback, link-local (`169.254.x.x`, cloud
+  metadata) or the internal services `db`, `kairo`, `ntfy`, `backup` or `localhost`.
+- `KAIRO_MCP_ALLOWED_HOSTS=host1,host2`: exact hosts the operator always allows (for example, another container).
+- Redirects are not followed, and responses are cut off at 2 MB.
+- `POST /mcp-servers/{id}/test` and the agent's tools only report a generic "could not connect to the MCP server"
+  failure. The reason (connection refused, HTTP status...) goes to the server log.
+- MCP sessions and the tool cache are separated by URL and headers: two people with the same URL and different
+  credentials never share a session.
 
-## Tiempo real (WebSocket)
-`GET /ws?access_token=...` envía `{type, data}`. El servidor cierra la conexión (código 1008) cuando vence el
-access token o se revoca el dispositivo: reconecta con un token vigente (refrescando si hace falta).
-- `entity.changed` `{entity, id?, op}`: recargar esa colección.
-- `entity.changed` también llega a toda la familia cuando cambia algo compartido (`entity` puede ser `family` o `notice`).
-- `reminder.fire` `{id, text, fireAt, recurring, createdBy?}`: mostrar notificación (deduplicar por `id+fireAt` con la alarma local).
-- `event.alert` `{id, title, startAt, alertAt, minutes, location, shared}`: aviso previo de un evento del calendario (deduplicar por `id+startAt+minutes` con la alarma local).
-- `family.notice` `{id, kind, title, body, actorId?, entityType?, entityId?, createdAt}`: aviso de la familia (deduplicar por `id`).
+## Real time (WebSocket)
+`GET /ws?access_token=...` sends `{type, data}`. The server closes the connection (code 1008) when the access token
+expires or the device is revoked. Reconnect with a valid token (refreshing if needed).
+- `entity.changed` `{entity, id?, op}`: reload that collection.
+- `entity.changed` also reaches the whole family when something shared changes (`entity` can be `family` or `notice`).
+- `reminder.fire` `{id, text, fireAt, recurring, createdBy?}`: show a notification (deduplicate by `id+fireAt` with the local alarm).
+- `event.alert` `{id, title, startAt, alertAt, minutes, location, shared}`: an advance alert for a calendar event (deduplicate by `id+startAt+minutes` with the local alarm).
+- `family.notice` `{id, kind, title, body, actorId?, entityType?, entityId?, createdAt}`: a family notice (deduplicate by `id`).
 
-Los mismos eventos `reminder.fire`, `event.alert`, `briefing.ready` y `family.notice` llegan también por push
-(Web Push y, en iPhone, APNs dentro de la clave `kairo`).
+The same `reminder.fire`, `event.alert`, `briefing.ready` and `family.notice` events also arrive through push
+(Web Push and, on iPhone, APNs inside the `kairo` key).
 - `briefing.ready` `{text, date}`
 - `recording.updated` `{id}`
-- `ping` cada 25 s (el cliente puede enviar `"ping"` y recibe `pong`).
+- `ping` every 25 s (the client can send `"ping"` and receives `pong`).
