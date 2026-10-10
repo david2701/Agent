@@ -9,6 +9,9 @@ keystore.properties
 secrets/
 local.properties
 
+# Copias de seguridad de la base de datos
+backups/
+
 # Build outputs
 build/
 .gradle/

@@ -109,7 +109,11 @@ Abre `https://kairo.tudominio.com`, entra con tu correo y la contraseña inicial
 - El contenedor sólo escucha en `127.0.0.1:8080`; el acceso público pasa por Caddy. Cambia el puerto con `KAIRO_HOST_PORT`.
 - Push para los teléfonos (opcional): `docker compose --profile push up -d` levanta ntfy; ver [`docs/PUSH.md`](docs/PUSH.md).
 - Familia: entra al dashboard como administrador y usa *Familia > Invitar a alguien*; ver [`docs/FAMILIA.md`](docs/FAMILIA.md).
-- Datos persistentes en el volumen `kairo-db`. Copia de seguridad: `docker compose exec db pg_dump -U kairo kairo > kairo.sql`, o *Ajustes > Datos* en el dashboard (JSON con todo).
+- Datos persistentes en el volumen `kairo-db`. **Copias de seguridad automáticas**: el servicio `backup` guarda cada día
+  (a las `BACKUP_TIME`, 03:30 por defecto) una copia completa en `./backups` y borra las de más de `BACKUP_KEEP_DAYS` (14).
+  Copia esa carpeta fuera del servidor de vez en cuando y guarda tu `.env` en un lugar seguro (sin él no se descifran los
+  tokens guardados). Copia manual: `docker compose exec backup /backup.sh now`. Restaurar:
+  `./scripts/restore-backup.sh backups/kairo-AAAAMMDD-HHMM.dump`. También puedes exportar todo en JSON desde *Ajustes > Datos*.
 - Actualizar: `git pull && docker compose up -d --build`. Las migraciones de la base de datos se aplican solas.
 - Si al compilar Maven Central responde `429 Too Many Requests`, usa un espejo:
   `MAVEN_MIRROR=https://maven-central.storage-download.googleapis.com/maven2/ docker compose build`.
