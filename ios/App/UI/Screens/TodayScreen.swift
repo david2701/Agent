@@ -392,7 +392,7 @@ private struct FamilyCard: View {
                             .font(.kSubheadline).foregroundStyle(KairoColor.muted)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(notices) { n in
+                            ForEach(notices.prefix(3)) { n in
                                 HStack(alignment: .top, spacing: 10) {
                                     Image(systemName: KairoSymbol.notice(n.kind)).font(.system(size: 13)).foregroundStyle(KairoColor.muted).frame(width: 20)
                                     VStack(alignment: .leading, spacing: 1) {

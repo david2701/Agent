@@ -30,7 +30,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .today: "sun.horizon"
-        case .chat: "bubble.left.and.text.bubble.right"
+        case .chat: "text.bubble"
         case .tasks: "checkmark.circle"
         case .calendar: "calendar"
         case .notes: "note.text"

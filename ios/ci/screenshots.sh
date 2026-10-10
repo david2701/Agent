@@ -79,7 +79,7 @@ PAD=""
 
 # El iPad arranca en segundo plano mientras se toman las del iPhone
 [ -n "$PAD" ] && { xcrun simctl boot "${PAD%%|*}" 2>/dev/null & }
-[ -n "$PHONE" ] && run_device "$PHONE" iphone today:light today:dark tasks:light calendar:dark lists:light family:dark chat:light settings:dark
+[ -n "$PHONE" ] && run_device "$PHONE" iphone today:light today:dark tasks:light calendar:dark lists:light notes:light family:dark chat:light settings:dark
 [ -n "$PAD" ] && run_device "$PAD" ipad today:light tasks:dark calendar:light notes:light
 # Informes de fallo de la app, si los hubo
 cp ~/Library/Logs/DiagnosticReports/Kairo*.ips "$OUT/" 2>/dev/null && log "hay informes de fallo"

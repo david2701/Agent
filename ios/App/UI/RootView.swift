@@ -75,7 +75,8 @@ private struct TabLayout: View {
             .badge(model.unreadNotices > 0 ? Text("\(min(model.unreadNotices, 99))") : nil)
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory {
+        // En Chat ya hay un campo para escribir y hablar: ahí no se repite la barra
+        .tabViewBottomAccessory(isEnabled: tab != .chat) {
             TalkAccessory()
         }
         .onChange(of: tab) { _, t in
