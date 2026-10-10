@@ -280,7 +280,7 @@ struct ChatScreen: View {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
         let caption = text.trimmingCharacters(in: .whitespacesAndNewlines)
         text = ""
-        withAnimation(KairoMotion.spring) { items.append(ChatItem(id: UUID().uuidString, kind: .user(caption.isEmpty ? "📷 Imagen" : "📷 \(caption)"))) }
+        withAnimation(KairoMotion.spring) { items.append(ChatItem(id: UUID().uuidString, kind: .user(caption.isEmpty ? "Imagen" : "Imagen: \(caption)"))) }
         let image = Self.jpeg(data) ?? data
         stream(model.api.capture(text: caption.isEmpty ? nil : caption, url: nil, image: KairoAPI.FilePart(filename: "foto.jpg", mime: "image/jpeg", data: image)))
     }

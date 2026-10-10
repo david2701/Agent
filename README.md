@@ -38,11 +38,11 @@ Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).
 ## Arquitectura
 
 ```
- Teléfonos de la familia (Kotlin)        Reloj (Wear OS)        Navegador
-   "Oye Kairo" offline (Vosk)              voz + tarjetas        Dashboard (React)
-   alarmas locales exactas                     │                    │
-          │  HTTPS + WebSocket                 │                    │
-          └──────────────────────┬─────────────┴────────────────────┘
+ Android (Kotlin)          iPhone, iPad, Watch (SwiftUI)     Wear OS        Navegador
+   "Oye Kairo" offline       widgets, Live Activities,       voz +          Dashboard (React)
+   alarmas locales exactas   Siri, AlarmKit, compartir       tarjetas            │
+          │  HTTPS + WebSocket          │                       │                │
+          └─────────────────────────────┴───────────┬───────────┴────────────────┘
                                  ▼
                      Caddy (tu subdominio, HTTPS)
                                  ▼
@@ -63,8 +63,9 @@ Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).
 | `android/app` | App nativa: Compose, Material 3 Expressive, adaptable a plegables y tablets. |
 | `android/wear` | App de Wear OS (independiente, se vincula con un código de 6 dígitos). |
 | `android/core` | Cliente de la API y modelos compartidos entre teléfono y reloj. |
+| `ios/` | App para iPhone, iPad (y iPhone Duo) y Apple Watch en SwiftUI (iOS 27), con widgets, Live Activities, controles, Siri y compartir. Paquete `KairoKit` (SPM). |
 | `design/` | Sistema de diseño (`DESIGN.md`), ícono en SVG y fuentes Geist. |
-| `docs/` | API, Android, familia, push sin Firebase, Google Calendar y capturas. |
+| `docs/` | API, Android, iOS, familia, push sin Firebase, Google Calendar y capturas. |
 | `.claude/skills/` | Skill de diseño Taste usada para la UI. |
 
 ### Modelos de Nan elegidos
@@ -122,12 +123,23 @@ cambios viajan en ambos sentidos cada pocos minutos.
 
 ## Instalar la app
 
+### Android
+
 Detalles completos en [`docs/ANDROID.md`](docs/ANDROID.md).
 
 1. Descarga `app-release.apk` (teléfono) y `wear-release.apk` (reloj) de *Actions > CI > kairo-apk*, o compílalos con `cd android && ./gradlew assembleRelease`.
 2. Instala, abre Kairo y escribe la URL de tu servidor, tu correo y tu contraseña.
 3. En *Ajustes* activa **Oye Kairo**, **batería sin restricciones** y **alarmas exactas**. Opcional: elige Kairo como asistente digital del sistema.
 4. Reloj: en el teléfono, *Ajustes > Vincular reloj* muestra un código de 6 dígitos que escribes en el reloj.
+
+### iPhone, iPad y Apple Watch
+
+Detalles completos en [`docs/IOS.md`](docs/IOS.md).
+
+1. En un Mac con **Xcode 27**, pon tu Team ID y tus identificadores en `ios/Config/Signing.xcconfig`.
+2. Abre `ios/Kairo.xcodeproj`, elige tu iPhone y pulsa ▶ (no hay dependencias externas que instalar).
+3. Abre Kairo y escribe la URL de tu servidor, tu correo y tu contraseña, o *Tengo un código de invitación*.
+4. Reloj: se instala con la app del iPhone y se vincula solo con el iPhone cerca.
 
 ## Avisos sin Firebase
 
@@ -141,6 +153,8 @@ Sí, Kairo tiene su propio sistema de avisos y no usa Firebase ni servicios de G
    suenan aunque no haya internet.
 
 Los recordatorios por lugar usan las alertas de proximidad de Android, sin Google Play Services.
+En iPhone, los recordatorios y eventos se programan en el propio teléfono, y para los avisos de la familia
+con la app cerrada puedes activar el push de Apple (APNs) en tu servidor; es opcional.
 Cómo configurarlo, en [`docs/PUSH.md`](docs/PUSH.md).
 
 ## Seguridad y privacidad
@@ -150,7 +164,7 @@ Cómo configurarlo, en [`docs/PUSH.md`](docs/PUSH.md).
 - Contraseñas con bcrypt, sesiones con tokens de acceso cortos y tokens de renovación rotativos por dispositivo (puedes cerrar sesión en cualquier dispositivo desde *Ajustes > Dispositivos*).
 - Tokens de Google y cabeceras de servidores MCP cifrados con AES-256-GCM; los adjuntos se sirven con enlaces firmados que caducan.
 - Límite de intentos en el inicio de sesión, contenedor sin privilegios de root, cabeceras de seguridad, puerto sólo en localhost.
-- En el teléfono, los tokens se guardan cifrados con Android Keystore.
+- En el teléfono, los tokens se guardan cifrados con Android Keystore; en el iPhone, en el llavero.
 - Acciones destructivas por voz quedan registradas y se pueden deshacer.
 - En familia, lo personal de cada uno es privado; los códigos de invitación son de un solo uso y vencen; al quitar a
   alguien sus sesiones dejan de valer al instante.
@@ -168,6 +182,7 @@ cd dashboard && npm install && npm run dev
 # Pruebas
 cd backend && ./gradlew test
 cd android && ./gradlew :app:testDebugUnitTest
+cd ios/KairoKit && swift test
 ```
 
 Para exponer la base de datos en local añade `ports: ["127.0.0.1:5432:5432"]` al servicio `db`.
@@ -179,7 +194,8 @@ La interfaz sigue la skill [Taste](https://www.tasteskill.dev/), instalada en `.
 `npx skills add Leonxlnx/taste-skill` (detalles en [`.claude/skills/README.md`](.claude/skills/README.md)): un solo
 acento ámbar `#F0A23B` sobre grises neutros, tipografía Geist, sin degradados ni emojis, estados
 completos (cargando, vacío, error) y animaciones que respetan "reducir movimiento". Tokens en
-[`design/DESIGN.md`](design/DESIGN.md). En Android se traduce a Material 3 Expressive.
+[`design/DESIGN.md`](design/DESIGN.md). En Android se traduce a Material 3 Expressive y en iOS a
+SwiftUI con Liquid Glass.
 
 | Dashboard | Teléfono | Fold abierto |
 |---|---|---|

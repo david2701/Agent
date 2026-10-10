@@ -89,7 +89,7 @@ private struct ListCard: View {
         let done = total - list.pending.count
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text(list.icon ?? "🛒").font(.system(size: 22))
+                Image(systemName: list.shared ? "house" : "checklist").font(.system(size: 18, weight: .medium)).foregroundStyle(list.shared ? KairoColor.accent : KairoColor.muted)
                 Spacer()
                 if list.shared { SharedBadge(owner: model.ownerName(list.ownerId), compact: model.ownerName(list.ownerId) == nil) }
             }

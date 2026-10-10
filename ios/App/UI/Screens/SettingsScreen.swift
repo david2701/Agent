@@ -17,7 +17,7 @@ struct SettingsScreen: View {
     @State private var changingPassword = false
     @State private var editingName = false
     @State private var name = ""
-    @AppStorage("kairo.wake", store: AppConfig.sharedDefaults) private var wakeEnabled = false
+    @State private var wakeEnabled = false
     @AppStorage("kairo.followUp", store: AppConfig.sharedDefaults) private var followUp = true
 
     var body: some View {
@@ -41,6 +41,7 @@ struct SettingsScreen: View {
         .kairoBackground()
         .navigationTitle("Ajustes")
         .task { await load() }
+        .onAppear { wakeEnabled = model.wake.isEnabled }
         .sheet(isPresented: $changingPassword) { PasswordSheet() }
         .alert("Tu nombre", isPresented: $editingName) {
             TextField("Nombre", text: $name)
@@ -139,7 +140,7 @@ struct SettingsScreen: View {
         Section {
             Toggle(isOn: Binding(get: { wakeEnabled }, set: { on in
                 wakeEnabled = on
-                Task { if on { await model.wake.start() } else { model.wake.stop() } }
+                model.wake.isEnabled = on
             })) {
                 Label("Oye Kairo", systemImage: "ear")
                 Text(model.wake.lastError ?? "Escucha \"\(settings.wakeWord)\" dentro del iPhone, sin enviar audio hasta que lo dices. Funciona con Kairo abierto o mientras habla.")

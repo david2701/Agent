@@ -152,6 +152,8 @@ final class AppModel {
         if !Self.screenshotMode { await NotificationService.requestAuthorization() }
         if let me = try? await api.me() { user = me }
         if fresh { PushRegistration.register() }
+        voice.followUp = AppConfig.sharedDefaults.object(forKey: "kairo.followUp") as? Bool ?? true
+        if wake.isEnabled && !Self.screenshotMode { await wake.start() }
         if let a = PendingAction.take() { perform(a) }
     }
 

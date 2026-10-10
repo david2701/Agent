@@ -78,6 +78,17 @@ private struct TabLayout: View {
         .tabViewBottomAccessory {
             TalkAccessory()
         }
+        .onChange(of: tab) { _, t in
+            // Mantiene la sección actual al tocar una pestaña (para que los atajos vuelvan a funcionar)
+            let s: AppSection? = switch t {
+            case .today: .today
+            case .chat: .chat
+            case .tasks: .tasks
+            case .calendar: .calendar
+            case .more: morePath.last
+            }
+            if let s, s != model.selection { model.selection = s }
+        }
         .onChange(of: model.selection, initial: true) { _, s in
             switch s {
             case .today: tab = .today
