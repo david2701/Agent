@@ -120,6 +120,7 @@ class BuiltinTools(
                     })
                 },
                 if (found.isEmpty()) "Sin notas para \"$q\"" else "${found.size} nota(s) encontradas",
+                untrusted = OTHERS_NOTES.takeIf { found.any { fromOthers(it.ownerId, it.shared, it.source) } },
             )
         }
 
@@ -225,6 +226,7 @@ class BuiltinTools(
                     put("total", list.size)
                 },
                 "${list.size} tarea(s)",
+                untrusted = OTHERS_ITEMS.takeIf { list.take(40).any { fromOthers(it.ownerId, it.shared, it.source) } },
             )
         }
 
@@ -277,6 +279,7 @@ class BuiltinTools(
                             put("candidates", buildJsonArray { found.forEach { add(json { put("id", it.id.toString()); put("title", it.title) }) } })
                         },
                         "Varias tareas coinciden",
+                        untrusted = OTHERS_ITEMS.takeIf { found.any { fromOthers(it.ownerId, it.shared, it.source) } },
                     )
                 }
                 found.firstOrNull()?.id
@@ -317,12 +320,12 @@ class BuiltinTools(
             val forNames = a.strList("for").orEmpty().filter { it.isNotBlank() }
             val targets = when {
                 forNames.isEmpty() -> listOf(userId)
-                forNames.any { Text.normalize(it) in setOf("todos", "todas", "todo el mundo", "la familia", "familia") } -> familyMembers.map { it.id }.ifEmpty { listOf(userId) }
+                forNames.any { Text.normalize(it) in EVERYONE } -> familyMembers.map { it.id }.ifEmpty { listOf(userId) }
                 else -> forNames.map { n -> findMember(n)?.id ?: return@tool unknownMember(n) }.distinct()
             }
             val place = a.str("place")?.let { name ->
                 places.findByName(userId, name) ?: return@tool ToolResult.error(
-                    "No tengo guardado el lugar '$name'. Lugares: ${places.list(userId).joinToString { it.name }.ifEmpty { "ninguno" }}. " +
+                    "No tengo guardado el lugar '$name'. Lugares: ${places.list(userId).joinToString { Untrusted.clean(it.name, 60) }.ifEmpty { "ninguno" }}. " +
                         "El usuario puede guardarlo diciendo 'guarda este lugar como $name' estando allí, o desde la app.",
                 )
             }
@@ -374,6 +377,7 @@ class BuiltinTools(
                     })
                 },
                 "${list.size} recordatorio(s)",
+                untrusted = OTHERS_ITEMS.takeIf { list.take(40).any { fromOthers(it) } },
             )
         }
 
@@ -476,7 +480,7 @@ class BuiltinTools(
             val name = a.str("list")
             val target = name?.let { lists.findByName(userId, it) }
             val all = if (target != null) listOf(target) else lists.all(userId)
-            if (name != null && target == null) return@tool ToolResult.error("No tengo una lista llamada '$name'. Listas: ${lists.all(userId).joinToString { it.name }.ifEmpty { "ninguna" }}")
+            if (name != null && target == null) return@tool ToolResult.error("No tengo una lista llamada '$name'. Listas: ${lists.all(userId).joinToString { Untrusted.clean(it.name, 60) }.ifEmpty { "ninguna" }}")
             ToolResult(
                 buildJsonObject {
                     put("lists", buildJsonArray {
@@ -491,6 +495,7 @@ class BuiltinTools(
                     })
                 },
                 target?.let { "${it.name}: ${it.items.count { i -> !i.checked }} pendiente(s)" } ?: "${all.size} lista(s)",
+                untrusted = OTHERS_LISTS.takeIf { all.any { fromOthers(it.ownerId, it.shared) } },
             )
         }
 
@@ -605,6 +610,9 @@ class BuiltinTools(
                     put("reminders", buildJsonArray { rs.forEach { add(json { put("id", it.id.toString()); put("text", it.text); put("at", humanDateTime(it.nextFireAt!!, zone)) }) } })
                 },
                 "${evs.size} evento(s), ${ts.size} tarea(s), ${rs.size} recordatorio(s)",
+                untrusted = OTHERS_ITEMS.takeIf {
+                    evs.any { fromOthers(it.ownerId, it.shared, it.source) } || ts.any { fromOthers(it.ownerId, it.shared, it.source) } || rs.any { fromOthers(it) }
+                },
             )
         }
 
@@ -728,7 +736,7 @@ class BuiltinTools(
             },
         ) { a ->
             val text = a.str("text")?.trim()?.take(500)?.ifEmpty { null } ?: return@tool ToolResult.error("Falta el mensaje")
-            val names = a.strList("to").orEmpty().filter { it.isNotBlank() && Text.normalize(it) !in setOf("todos", "todas", "familia", "la familia") }
+            val names = a.strList("to").orEmpty().filter { it.isNotBlank() && Text.normalize(it) !in EVERYONE }
             val to = if (names.isEmpty()) familyMembers.map { it.id } - userId else names.map { n -> findMember(n)?.id ?: return@tool unknownMember(n) } - userId
             if (to.isEmpty()) return@tool ToolResult.error("No hay otros miembros en la familia. Se invitan desde Ajustes > Familia.")
             notifier.family(userId, to, NoticeKinds.MESSAGE, notifier.firstName(userId), text)
@@ -739,7 +747,7 @@ class BuiltinTools(
 
     private fun ToolContext.unknownMember(name: String): ToolResult = ToolResult.error(
         if (familyMembers.size <= 1) "No hay nadie más en tu familia todavía. Se invita desde Ajustes > Familia en el dashboard."
-        else "No encontré a '$name' en la familia. Miembros: ${familyMembers.joinToString { it.displayName }}.",
+        else "No encontré a '$name' en la familia. Miembros: ${familyMembers.joinToString { Untrusted.clean(it.displayName, 60) }}.",
     )
 
     // ---------------------------------------------------------------- Dispositivo
@@ -807,6 +815,11 @@ class BuiltinTools(
                     put("lists", JsonArray(d.lists.map { JsonPrimitive("${it.name}: ${it.items.count { i -> !i.checked }} pendientes") }))
                 },
                 "Resumen de ${d.dateLabel.lowercase()}",
+                untrusted = OTHERS_ITEMS.takeIf {
+                    d.events.any { fromOthers(it.ownerId, it.shared, it.source) } ||
+                        (d.tasksDueToday + d.tasksOverdue + d.tasksInProgress).any { fromOthers(it.ownerId, it.shared, it.source) } ||
+                        d.reminders.any { fromOthers(it) } || d.lists.any { fromOthers(it.ownerId, it.shared) }
+                },
             )
         }
 
@@ -862,6 +875,10 @@ class BuiltinTools(
                     put("memories", buildJsonArray { ms.forEach { add(json { put("id", it.id.toString()); put("fact", it.content) }) } })
                 },
                 "Resultados para \"$q\"",
+                untrusted = OTHERS_ITEMS.takeIf {
+                    ns.any { fromOthers(it.ownerId, it.shared, it.source) } || ts.any { fromOthers(it.ownerId, it.shared, it.source) } ||
+                        es.any { fromOthers(it.ownerId, it.shared, it.source) } || rs.any { fromOthers(it) } || ls.any { fromOthers(it.ownerId, it.shared) }
+                },
             )
         }
 
@@ -885,7 +902,72 @@ class BuiltinTools(
         }
     }
 
+    // ---------------------------------------------------------------- confirmaciones
+
+    /**
+     * Datos del elemento que tocaría una acción (dueño, si es familiar, título, destinatarios) para que
+     * [ToolPolicy] decida si hace falta la confirmación de la persona. Resuelve el objetivo igual que la herramienta.
+     */
+    suspend fun facts(ctx: ToolContext, name: String, a: JsonObject): ActionFacts = with(ctx) {
+        val base = ActionFacts(name, a, userId)
+        fun recipients(ids: Collection<UUID>) = base.copy(recipients = ids.toSet(), recipientNames = ids.distinct().map { memberName(it) ?: "ti" })
+        when (name) {
+            "update_note", "delete_note" -> a.uuid("id")?.let { notes.get(userId, it) }
+                ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) } ?: base
+            "update_task", "delete_task", "complete_task" -> {
+                val t = a.uuid("id")?.let { tasks.get(userId, it) }
+                    ?: a.str("query")?.takeIf { name == "complete_task" }?.let { tasks.findOpen(userId, it, 3).firstOrNull() }
+                val assignee = a.str("assignee")?.takeIf { name == "update_task" && it != "none" }?.let { findMember(it) }
+                val withTarget = t?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) } ?: base
+                if (assignee != null) withTarget.copy(recipients = setOf(assignee.id), recipientNames = listOf(memberName(assignee.id) ?: "ti")) else withTarget
+            }
+            "update_event", "delete_event" -> a.uuid("id")?.let { events.get(userId, it) }
+                ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) } ?: base
+            "update_reminder", "complete_reminder", "snooze_reminder", "cancel_reminder" -> a.uuid("id")?.let { reminders.get(userId, it) }
+                ?.let { base.copy(targetOwner = it.ownerId, targetTitle = it.text) } ?: base
+            "forget" -> a.uuid("id")?.let { memories.get(userId, it) }?.let { base.copy(targetOwner = userId, targetTitle = it.content) } ?: base
+            "add_to_list" -> lists.findByName(userId, a.str("list") ?: "Supermercado", preferShared = true)
+                ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.name) } ?: base
+            "check_list_items", "remove_from_list" -> lists.findByName(userId, a.str("list") ?: "")
+                ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.name) } ?: base
+            "save_current_place" -> a.str("name")?.let { n -> places.findByName(userId, n)?.takeIf { Text.normalize(it.name) == Text.normalize(n) } }
+                ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.name) } ?: base
+            "share" -> {
+                val shared = a.bool("shared") ?: true
+                when (a.str("type")) {
+                    "note" -> a.uuid("id")?.let { notes.get(userId, it) }?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) }
+                    "task" -> a.uuid("id")?.let { tasks.get(userId, it) }?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) }
+                    "event" -> a.uuid("id")?.let { events.get(userId, it) }?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.title) }
+                    "list" -> (a.uuid("id")?.let { lists.get(userId, it) } ?: lists.findByName(userId, a.str("name") ?: "", preferShared = !shared))
+                        ?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.name) }
+                    "place" -> places.findByName(userId, a.str("name") ?: "")?.let { base.copy(targetOwner = it.ownerId, targetShared = it.shared, targetTitle = it.name) }
+                    else -> null
+                } ?: base
+            }
+            "create_reminder" -> {
+                val names = a.strList("for").orEmpty().filter { it.isNotBlank() }
+                recipients(
+                    when {
+                        names.isEmpty() -> listOf(userId)
+                        names.any { Text.normalize(it) in EVERYONE } -> familyMembers.map { it.id }.ifEmpty { listOf(userId) }
+                        else -> names.mapNotNull { findMember(it)?.id }
+                    },
+                )
+            }
+            "create_task" -> a.str("assignee")?.let { findMember(it) }?.let { recipients(listOf(it.id)) } ?: base
+            "message_family" -> {
+                val names = a.strList("to").orEmpty().filter { it.isNotBlank() && Text.normalize(it) !in EVERYONE }
+                recipients(if (names.isEmpty()) familyMembers.map { it.id } - userId else names.mapNotNull { findMember(it)?.id } - userId)
+            }
+            else -> base
+        }
+    }
+
     // ---------------------------------------------------------------- utilidades
+
+    /** Un recordatorio pudo escribirlo otra persona si es para alguien más o lo programó otro miembro. */
+    private fun ToolContext.fromOthers(r: app.kairo.domain.Reminder): Boolean =
+        fromOthers(r.ownerId, false, r.source) || (r.createdBy != null && r.createdBy != userId)
 
     private fun ToolContext.today(): LocalDate = Instant.now().atZone(zone).toLocalDate()
 
@@ -898,5 +980,12 @@ class BuiltinTools(
         val m = (secs % 3600) / 60
         val s = secs % 60
         return listOfNotNull(h.takeIf { it > 0 }?.let { "$it h" }, m.takeIf { it > 0 }?.let { "$it min" }, s.takeIf { it > 0 && h == 0 }?.let { "$it s" }).joinToString(" ")
+    }
+
+    private companion object {
+        val EVERYONE = setOf("todos", "todas", "todo el mundo", "la familia", "familia")
+        const val OTHERS_NOTES = "notas familiares, de otra persona o compartidas desde fuera"
+        const val OTHERS_LISTS = "listas familiares o de otra persona"
+        const val OTHERS_ITEMS = "elementos familiares, de otra persona o externos"
     }
 }
