@@ -1,0 +1,16 @@
+Kairo
+Copyright 2026 david2701 and Kairo contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components bundled with or downloaded by Kairo:
+
+- Geist and Geist Mono fonts (design/fonts, dashboard/src/assets/fonts, Android and iOS apps)
+  Copyright Vercel, licensed under the SIL Open Font License 1.1 (see design/fonts/OFL-LICENSE.txt).
+- Vosk speech recognition library (Android wake word) and its small language models,
+  Copyright Alpha Cephei Inc., licensed under the Apache License 2.0.
+- Other dependencies (Ktor, Kotlin, Jetpack Compose, React, Vite, Tailwind CSS, PostgreSQL JDBC,
+  Flyway and others) are used under their own permissive licenses (Apache-2.0, MIT, BSD, ISC, PostgreSQL).
+
+Kairo talks to third-party services you configure yourself (for example the Nan API, Google Calendar,
+Apple Push Notification service, ntfy). Their terms apply to your use of those services.
