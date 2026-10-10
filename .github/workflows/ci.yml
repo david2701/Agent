@@ -48,9 +48,31 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
+      # Firma con tu keystore si defines los secretos ANDROID_KEYSTORE_BASE64 y ANDROID_KEYSTORE_PASSWORD
+      # (y opcionalmente ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD); si no, con la clave de depuración.
+      # La variable del repositorio KAIRO_SERVER_URL fija tu servidor (el reloj se vincula contra él).
+      - name: Keystore de release
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "Sin keystore: el release se firma con la clave de depuración"; exit 0; fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kairo-release.jks"
+          {
+            echo "KAIRO_KEYSTORE_FILE=$RUNNER_TEMP/kairo-release.jks"
+            echo "KAIRO_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            [ -n "$KEY_ALIAS" ] && echo "KAIRO_KEY_ALIAS=$KEY_ALIAS"
+            [ -n "$KEY_PASSWORD" ] && echo "KAIRO_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
       - name: APK del teléfono y del reloj
         working-directory: android
-        run: ./gradlew :app:assembleRelease :wear:assembleRelease :app:testDebugUnitTest --tests "app.kairo.android.VoiceLogicTest" --no-daemon
+        env:
+          KAIRO_SERVER_URL: ${{ vars.KAIRO_SERVER_URL }}
+        run: |
+          [ -n "$KAIRO_SERVER_URL" ] || unset KAIRO_SERVER_URL
+          ./gradlew :app:assembleRelease :wear:assembleRelease :app:testDebugUnitTest --tests "app.kairo.android.VoiceLogicTest" --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: kairo-apk

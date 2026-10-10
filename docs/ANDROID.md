@@ -11,8 +11,37 @@ normales, plegables (Galaxy Z Fold/Flip, Pixel Fold) y tablets, y trae una app p
    ./gradlew :app:assembleRelease      # teléfono: app/build/outputs/apk/release/app-release.apk
    ./gradlew :wear:assembleRelease     # reloj:    wear/build/outputs/apk/release/wear-release.apk
    ```
-   Requiere JDK 21 y el Android SDK (plataforma 37). La versión release está firmada con la clave
-   de depuración para instalación directa; para publicar en Play Store define tu propio keystore.
+   Requiere JDK 21 y el Android SDK (plataforma 37). Sin keystore propio, la versión release se firma con
+   la clave de depuración: sirve para probar, pero instala la familia con tu propia firma (ver abajo).
+
+### Firma de release y tu servidor
+
+Antes de instalar Kairo en los teléfonos de la familia, firma con tu propia clave. Android sólo acepta
+actualizaciones firmadas con la misma clave: si cambias de clave después, hay que desinstalar y volver a
+instalar (y se pierde la sesión). Guarda el archivo y las contraseñas en un lugar seguro, sin ellos no podrás
+publicar actualizaciones.
+
+```bash
+keytool -genkeypair -v -keystore kairo-release.jks -alias kairo -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Crea `android/keystore.properties` (está en `.gitignore`, nunca se sube):
+
+```properties
+storeFile=/ruta/a/kairo-release.jks
+storePassword=tu-contraseña
+keyAlias=kairo
+keyPassword=tu-contraseña
+```
+
+o usa las variables `KAIRO_KEYSTORE_FILE`, `KAIRO_KEYSTORE_PASSWORD`, `KAIRO_KEY_ALIAS` y `KAIRO_KEY_PASSWORD`.
+El teléfono y el reloj usan la misma clave. Para que la CI publique los APK ya firmados, agrega en GitHub
+(*Settings > Secrets and variables > Actions*) los secretos `ANDROID_KEYSTORE_BASE64`
+(`base64 -w0 kairo-release.jks`) y `ANDROID_KEYSTORE_PASSWORD`.
+
+**Tu servidor**: el reloj se vincula contra la dirección con la que se compiló y el teléfono la trae escrita al
+iniciar sesión. Compila con `KAIRO_SERVER_URL=https://kairo.tudominio.com ./gradlew assembleRelease` (o
+`kairo.serverUrl=` en `android/gradle.properties`, o la variable del repositorio `KAIRO_SERVER_URL` para la CI).
 2. Instala en el teléfono (`adb install app-release.apk` o abriendo el archivo).
 3. Abre Kairo, escribe la URL de tu servidor (`https://kairo.tudominio.com`), tu correo y contraseña.
    Si te invitaron a una familia (o te dieron un código de acceso), toca **Tengo un código**.

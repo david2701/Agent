@@ -1,9 +1,33 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
 }
+
+// Firma de release: android/keystore.properties (no versionado) o variables de entorno (CI).
+// Sin keystore se firma con la clave de depuración: sirve para probar, no para instalar en la familia.
+val releaseSigning: Map<String, String>? = run {
+    val file = rootProject.file("keystore.properties")
+    val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
+    fun value(key: String, env: String): String? = props.getProperty(key) ?: System.getenv(env)
+    val store = value("storeFile", "KAIRO_KEYSTORE_FILE") ?: return@run null
+    val storePassword = value("storePassword", "KAIRO_KEYSTORE_PASSWORD") ?: return@run null
+    mapOf(
+        "storeFile" to store,
+        "storePassword" to storePassword,
+        "keyAlias" to (value("keyAlias", "KAIRO_KEY_ALIAS") ?: "kairo"),
+        "keyPassword" to (value("keyPassword", "KAIRO_KEY_PASSWORD") ?: storePassword),
+    )
+}
+
+// Tu servidor (el reloj se vincula contra él y el teléfono lo trae escrito al iniciar sesión).
+// Cámbialo con KAIRO_SERVER_URL=https://kairo.tudominio.com o kairo.serverUrl en gradle.properties.
+val kairoServerUrl: String = System.getenv("KAIRO_SERVER_URL")
+    ?: (findProperty("kairo.serverUrl") as String?)
+    ?: "https://kairo.dvxlabs.online"
 
 android {
     namespace = "app.kairo.android"
@@ -16,7 +40,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         // URL del servidor sugerida en el login (se puede cambiar en la app)
-        buildConfigField("String", "DEFAULT_SERVER", "\"https://kairo.dvxlabs.online\"")
+        buildConfigField("String", "DEFAULT_SERVER", "\"$kairoServerUrl\"")
         // Plegables y teléfonos actuales son arm64; x86_64 solo para el emulador.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -26,13 +50,23 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        releaseSigning?.let { s ->
+            create("release") {
+                storeFile = rootProject.file(s.getValue("storeFile"))
+                storePassword = s.getValue("storePassword")
+                keyAlias = s.getValue("keyAlias")
+                keyPassword = s.getValue("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Firma: define un keystore en keystore.properties (no versionado) o firma con apksigner.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
