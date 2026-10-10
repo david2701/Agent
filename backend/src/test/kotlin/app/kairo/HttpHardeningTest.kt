@@ -40,7 +40,7 @@ import kotlin.test.assertTrue
 @Serializable
 data class Echo(val email: String, val password: String = "")
 
-/** Cuerpos JSON acotados, Content-Type obligatorio, subidas de imágenes y cabeceras de archivos. */
+/** Capped JSON bodies, mandatory Content-Type, image uploads and file headers. */
 class HttpHardeningTest {
 
     private fun ApplicationTestBuilder.app() {
@@ -60,29 +60,29 @@ class HttpHardeningTest {
     }
 
     @Test
-    fun `login exige JSON y rechaza text plain`() = testApplication {
+    fun `login requires JSON and rejects text plain`() = testApplication {
         app()
         val ok = client.post("/login") {
             contentType(ContentType.Application.Json)
-            setBody("""{"email":"ana@correo.com","password":"x"}""")
+            setBody("""{"email":"ana@example.com","password":"x"}""")
         }
         assertEquals(HttpStatusCode.OK, ok.status)
-        assertEquals("ana@correo.com", ok.bodyAsText())
-        // Un formulario de otra página (CSRF) no puede mandar application/json sin permiso CORS
+        assertEquals("ana@example.com", ok.bodyAsText())
+        // A form from another page (CSRF) cannot send application/json without CORS permission
         val csrf = client.post("/login") {
             contentType(ContentType.Text.Plain)
-            setBody("""{"email":"atacante@correo.com","password":"x"}""")
+            setBody("""{"email":"attacker@example.com","password":"x"}""")
         }
         assertEquals(HttpStatusCode.UnsupportedMediaType, csrf.status)
         val form = client.post("/login") {
             contentType(ContentType.Application.FormUrlEncoded)
-            setBody("""{"email":"atacante@correo.com","password":"x"}""")
+            setBody("""{"email":"attacker@example.com","password":"x"}""")
         }
         assertEquals(HttpStatusCode.UnsupportedMediaType, form.status)
     }
 
     @Test
-    fun `cuerpos demasiado grandes y errores del parser sin detalles`() = testApplication {
+    fun `bodies that are too large and parser errors without details`() = testApplication {
         app()
         val big = client.post("/login") {
             contentType(ContentType.Application.Json)
@@ -91,7 +91,7 @@ class HttpHardeningTest {
         assertEquals(HttpStatusCode.PayloadTooLarge, big.status)
         val bad = client.post("/login") {
             contentType(ContentType.Application.Json)
-            setBody("""{"correo":"x"}""")
+            setBody("""{"mail":"x"}""")
         }
         assertEquals(HttpStatusCode.BadRequest, bad.status)
         val msg = ApiJson.decodeFromString(ApiError.serializer(), bad.bodyAsText()).error
@@ -99,25 +99,25 @@ class HttpHardeningTest {
     }
 
     private fun multipart(bytes: ByteArray, mime: String) = MultiPartFormDataContent(formData {
-        append("text", "hola")
+        append("text", "hello")
         append("file", bytes, Headers.build {
             append(HttpHeaders.ContentType, mime)
-            append(HttpHeaders.ContentDisposition, "filename=\"captura\"")
+            append(HttpHeaders.ContentDisposition, "filename=\"capture\"")
         })
     })
 
     @Test
-    fun `subidas de imagenes por sus bytes`() = testApplication {
+    fun `image uploads by their bytes`() = testApplication {
         app()
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()) + ByteArray(100)
-        // El tipo sale de los bytes aunque el cliente diga otra cosa
+        // The type comes from the bytes even if the client says otherwise
         val ok = client.post("/upload") { setBody(multipart(jpeg, "image/*")) }
         assertEquals("image/jpeg:104", ok.bodyAsText())
         val svg = client.post("/upload") { setBody(multipart("<svg><script>alert(1)</script></svg>".toByteArray(), "image/svg+xml")) }
         assertEquals(HttpStatusCode.UnsupportedMediaType, svg.status)
         val disguised = client.post("/upload") { setBody(multipart("<html><script>alert(1)</script></html>".toByteArray(), "image/png")) }
         assertEquals(HttpStatusCode.UnsupportedMediaType, disguised.status)
-        // El audio pasa con su tipo
+        // Audio passes with its type
         val audio = client.post("/upload") { setBody(multipart(ByteArray(2000) { 1 }, "audio/mp4")) }
         assertEquals("audio/mp4:2000", audio.bodyAsText())
         val tooBig = client.post("/upload") { setBody(multipart(ByteArray(2 * 1024 * 1024), "audio/mp4")) }
@@ -125,7 +125,7 @@ class HttpHardeningTest {
     }
 
     @Test
-    fun `archivos con sandbox y SVG como adjunto`() = testApplication {
+    fun `files with sandbox and SVG as an attachment`() = testApplication {
         app()
         val svg = client.get("/svg")
         assertEquals(FILE_CSP, svg.headers["Content-Security-Policy"])

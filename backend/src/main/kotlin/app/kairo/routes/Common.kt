@@ -4,7 +4,14 @@ import app.kairo.agent.AgentEvent
 import app.kairo.agent.GeoPoint
 import app.kairo.domain.User
 import app.kairo.integrations.GoogleCalendarService
+import app.kairo.Services
 import app.kairo.util.ApiJson
+import app.kairo.util.InvalidInput
+import app.kairo.util.Lang
+import app.kairo.util.Localizable
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.Say
 import app.kairo.util.Crypto
 import app.kairo.util.KairoJson
 import app.kairo.util.parseInstant
@@ -45,7 +52,19 @@ import io.ktor.server.plugins.origin
 import io.ktor.server.routing.Route
 import app.kairo.auth.rateLimitKey
 
-class ApiException(val status: HttpStatusCode, override val message: String) : RuntimeException(message)
+/**
+ * An API error. The text is kept as a [Localizable] and rendered in the reader's language by the
+ * StatusPages handler; [message] is the English text (logs, tests).
+ */
+class ApiException(val status: HttpStatusCode, private val localized: Localizable) :
+    RuntimeException(localized.text(Lang.EN)), Localizable {
+    constructor(status: HttpStatusCode, message: String) : this(status, Plain(message))
+    constructor(status: HttpStatusCode, msg: M, vararg args: Any?) : this(status, Say(msg, args.toList()))
+
+    override val message: String get() = localized.text(Lang.EN)
+
+    override fun text(lang: Lang): String = localized.text(lang)
+}
 
 @Serializable
 data class ApiError(val error: String)
@@ -53,66 +72,83 @@ data class ApiError(val error: String)
 @Serializable
 data class OkResponse(val ok: Boolean = true)
 
-fun notFound(what: String = "Recurso"): Nothing = throw ApiException(HttpStatusCode.NotFound, "$what no encontrado")
+/** 404 with the "<thing> not found" message from the catalog ([M.NF_NOTE], [M.NF_LIST]...). */
+fun notFound(what: M = M.NF_RESOURCE): Nothing = throw ApiException(HttpStatusCode.NotFound, what)
 fun badRequest(msg: String): Nothing = throw ApiException(HttpStatusCode.BadRequest, msg)
-fun payloadTooLarge(msg: String = "El cuerpo de la petición es demasiado grande"): Nothing = throw ApiException(HttpStatusCode.PayloadTooLarge, msg)
-fun unsupportedMediaType(msg: String): Nothing = throw ApiException(HttpStatusCode.UnsupportedMediaType, msg)
+fun badRequest(msg: M, vararg args: Any?): Nothing = throw ApiException(HttpStatusCode.BadRequest, msg, *args)
+fun badRequest(msg: Localizable): Nothing = throw ApiException(HttpStatusCode.BadRequest, msg)
+fun payloadTooLarge(msg: M = M.PAYLOAD_TOO_LARGE): Nothing = throw ApiException(HttpStatusCode.PayloadTooLarge, msg)
+fun unsupportedMediaType(msg: M): Nothing = throw ApiException(HttpStatusCode.UnsupportedMediaType, msg)
 
-/** Lee como mucho [max] bytes del canal (para detectar cuerpos más grandes que el tope, pide uno más). */
+/**
+ * Language for text written in reply to this request: the signed-in user's `language` setting, or, when that is
+ * `auto` or there is no session (errors before authentication), the `Accept-Language` header, or the server default.
+ */
+suspend fun ApplicationCall.lang(s: Services): Lang {
+    val userId = principal<JWTPrincipal>()?.subject?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+    val setting = userId?.let { runCatching { s.settings.get(it).language }.getOrNull() }
+    return Lang.resolve(setting, request.headers[HttpHeaders.AcceptLanguage], s.config.defaultLanguage)
+}
+
+/** Language of the request taken only from `Accept-Language` (public routes, where nobody is signed in yet). */
+fun ApplicationCall.acceptedLang(default: Lang = Lang.DEFAULT): Lang =
+    Lang.resolve(null, request.headers[HttpHeaders.AcceptLanguage], default)
+
+/** Reads at most [max] bytes from the channel (asks for one more to detect bodies bigger than the cap). */
 suspend fun ByteReadChannel.readAtMost(max: Long): ByteArray = readBuffer(max).readByteArray()
 
-/** Content-Length que declara el cliente (null con transferencia por bloques). */
+/** Content-Length the client declares (null with chunked transfer). */
 fun ApplicationCall.declaredContentLength(): Long? = request.contentLength()
 
 fun ApplicationCall.userId(): UUID = principal<JWTPrincipal>()?.subject?.let(UUID::fromString)
-    ?: throw ApiException(HttpStatusCode.Unauthorized, "No autenticado")
+    ?: throw ApiException(HttpStatusCode.Unauthorized, M.NOT_AUTHENTICATED)
 
 fun ApplicationCall.deviceId(): UUID? = principal<JWTPrincipal>()?.getClaim("did", String::class)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 
-val IA_LIMIT = RateLimitName("ia")
-val IA_HOURLY_LIMIT = RateLimitName("ia-hora")
-val RECORDING_LIMIT = RateLimitName("grabacion")
+val IA_LIMIT = RateLimitName("ai")
+val IA_HOURLY_LIMIT = RateLimitName("ai-hourly")
+val RECORDING_LIMIT = RateLimitName("recording")
 
-/** Clave de los límites por persona: el usuario del token, o la IP si la ruta no tiene sesión. */
+/** Key of the per-person limits: the token's user, or the IP when the route has no session. */
 fun userLimitKey(call: ApplicationCall): String =
     call.principal<JWTPrincipal>()?.subject?.let { "u:$it" } ?: ("ip:" + rateLimitKey(call.request.origin.remoteAddress))
 
-/** Rutas que llaman a Nan: tope por minuto y por hora para cada persona. */
+/** Routes that call Nan: a per-minute and a per-hour cap for each person. */
 fun Route.iaLimited(build: Route.() -> Unit) {
     rateLimit(IA_LIMIT) { rateLimit(IA_HOURLY_LIMIT) { build() } }
 }
 
 fun ApplicationCall.uuidParam(name: String = "id"): UUID =
-    parameters[name]?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: badRequest("Id inválido")
+    parameters[name]?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: badRequest(M.INVALID_ID)
 
 fun ApplicationCall.instantQuery(name: String): Instant? = request.queryParameters[name]?.let {
-    runCatching { parseInstant(it) }.getOrElse { badRequest("Fecha inválida en '$name'") }
+    runCatching { parseInstant(it) }.getOrElse { badRequest(M.INVALID_DATE_IN, name) }
 }
 
-/** Ubicación opcional enviada por la app: cabecera `X-Kairo-Location: lat,lon`. */
+/** Optional location sent by the app: header `X-Kairo-Location: lat,lon`. */
 fun ApplicationCall.clientLocation(): GeoPoint? = request.headers["X-Kairo-Location"]?.split(',')?.let { p ->
     val lat = p.getOrNull(0)?.trim()?.toDoubleOrNull()
     val lon = p.getOrNull(1)?.trim()?.toDoubleOrNull()
     if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) GeoPoint(lat, lon) else null
 }
 
-/** Capacidades del cliente: cabecera `X-Kairo-Capabilities: timer,alarm,location`. */
+/** Client capabilities: header `X-Kairo-Capabilities: timer,alarm,location`. */
 fun ApplicationCall.clientCapabilities(): Set<String> =
     request.headers["X-Kairo-Capabilities"]?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
 
-/** Tope de un cuerpo JSON normal (notas largas incluidas). */
+/** Cap for a normal JSON body (long notes included). */
 const val MAX_JSON_BODY = 1L * 1024 * 1024
 
-/** Tope de los cuerpos de las rutas de /api/auth: son públicas y caben de sobra en 16 KB. */
+/** Cap for the bodies of the /api/auth routes: they are public and fit comfortably in 16 KB. */
 const val MAX_AUTH_BODY = 16L * 1024
 
 fun ApplicationCall.isJsonRequest(): Boolean = request.contentType().match(ContentType.Application.Json)
 
 /**
- * Lee el cuerpo como texto UTF-8 sin pasar de [maxBytes] (413 si es mayor), mirando antes Content-Length.
- * Si trae contenido, tiene que ser `Content-Type: application/json` (415): un formulario o un `text/plain`
- * de otra página no puede hacerse pasar por una petición de la app (CSRF), porque el navegador exige
- * permiso CORS para mandar JSON a otro origen.
+ * Reads the body as UTF-8 text without going over [maxBytes] (413 if larger), checking Content-Length first.
+ * If it has content, it must be `Content-Type: application/json` (415): a form or a `text/plain` from
+ * another page cannot pass as a request from the app (CSRF), because the browser requires CORS
+ * permission to send JSON to another origin.
  */
 suspend fun ApplicationCall.receiveJsonText(maxBytes: Long = MAX_JSON_BODY): String {
     val declared = request.contentLength()
@@ -122,7 +158,7 @@ suspend fun ApplicationCall.receiveJsonText(maxBytes: Long = MAX_JSON_BODY): Str
     if (bytes.size > maxBytes) payloadTooLarge()
     val text = bytes.toString(Charsets.UTF_8)
     if (text.isNotBlank() && !isJsonRequest()) {
-        unsupportedMediaType("El cuerpo debe ser JSON (Content-Type: application/json)")
+        unsupportedMediaType(M.BODY_NOT_JSON)
     }
     return text
 }
@@ -130,49 +166,54 @@ suspend fun ApplicationCall.receiveJsonText(maxBytes: Long = MAX_JSON_BODY): Str
 suspend fun ApplicationCall.receiveJsonObject(maxBytes: Long = MAX_JSON_BODY): JsonObject {
     val text = receiveJsonText(maxBytes)
     if (text.isBlank()) return JsonObject(emptyMap())
-    return runCatching { KairoJson.parseToJsonElement(text).jsonObject }.getOrElse { badRequest("JSON inválido") }
+    return runCatching { KairoJson.parseToJsonElement(text).jsonObject }.getOrElse { badRequest(M.INVALID_JSON) }
 }
 
 suspend inline fun <reified T> ApplicationCall.receiveBody(maxBytes: Long = MAX_JSON_BODY): T {
     val text = receiveJsonText(maxBytes)
-    // Sin detalles del parser: no se devuelven nombres internos de clases ni fragmentos del cuerpo
-    return runCatching { KairoJson.decodeFromString<T>(text) }.getOrElse { badRequest("Cuerpo inválido: revisa que el JSON tenga los campos esperados") }
+    // No parser details: internal class names and body fragments are never returned
+    return runCatching { KairoJson.decodeFromString<T>(text) }.getOrElse { badRequest(M.INVALID_BODY) }
 }
 
 /**
- * Mensaje que se puede mostrar al usuario para un IllegalArgumentException, o null para usar uno genérico.
- * Los `require(...)` de Kairo traen mensajes pensados para la persona; los que vienen de librerías
- * (el parser JSON, UUID.fromString, números mal formados) traen detalles internos que no deben salir.
+ * The text that can be shown to the user for an IllegalArgumentException, or null to use a generic one.
+ * Kairo's own validation errors ([InvalidInput], or a `require(...)` raised inside `app.kairo`) carry messages
+ * meant for the person; the ones that come from libraries (the JSON parser, UUID.fromString, malformed
+ * numbers) carry internal details that must not leak.
  */
-fun publicMessage(e: IllegalArgumentException): String? {
+fun publicError(e: IllegalArgumentException): Localizable? {
+    if (e is InvalidInput) return e
     if (e is SerializationException || e is NumberFormatException) return null
     val msg = e.message?.takeIf { it.isNotBlank() } ?: return null
     val origin = e.stackTrace.firstOrNull()?.className ?: return null
-    return if (origin.startsWith("app.kairo.")) msg.take(300) else null
+    return if (origin.startsWith("app.kairo.")) Plain(msg.take(300)) else null
 }
+
+/** [publicError] rendered in [lang] (English by default), for tests and logs. */
+fun publicMessage(e: IllegalArgumentException, lang: Lang = Lang.EN): String? = publicError(e)?.text(lang)
 
 /**
- * Mensaje de un error cualquiera para el cliente: el de un `require`/`error` de Kairo si lo es, si no [fallback].
- * Los fallos de red, base de datos o librerías nunca salen con su texto (se quedan en el log).
+ * The text of any error for the client: Kairo's own `require`/`error`/[InvalidInput] message if it is one,
+ * otherwise [fallback]. Network, database or library failures never go out with their text (it stays in the log).
  */
-fun publicMessage(e: Throwable, fallback: String): String {
-    val own = when (e) {
-        is IllegalArgumentException -> publicMessage(e)
+fun publicError(e: Throwable, fallback: M): Localizable {
+    val own: Localizable? = when (e) {
+        is IllegalArgumentException -> publicError(e)
         is IllegalStateException -> e.message?.takeIf {
             it.isNotBlank() && e.stackTrace.firstOrNull()?.className?.startsWith("app.kairo.") == true
-        }?.take(300)
+        }?.let { Plain(it.take(300)) }
         else -> null
     }
-    return own ?: fallback
+    return own ?: Say(fallback)
 }
 
-/** Imágenes que se aceptan al subir y se muestran en línea. */
+/** Images accepted on upload and shown inline. */
 val RASTER_IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif")
 
 /**
- * Tipo real de una imagen según sus primeros bytes (JPEG, PNG, GIF, WebP, HEIC/HEIF), o null si no es
- * ninguna de ellas. No se confía en el Content-Type que manda el cliente: un SVG o un HTML con
- * `image/png` se rechaza.
+ * Real type of an image from its first bytes (JPEG, PNG, GIF, WebP, HEIC/HEIF), or null if it is none
+ * of them. The Content-Type the client sends is not trusted: an SVG or an HTML sent as `image/png`
+ * is rejected.
  */
 fun sniffImageType(b: ByteArray): String? {
     fun at(offset: Int, vararg bytes: Int) = b.size >= offset + bytes.size && bytes.indices.all { b[offset + it] == bytes[it].toByte() }
@@ -192,15 +233,15 @@ fun sniffImageType(b: ByteArray): String? {
 }
 
 /**
- * ¿Se puede servir en línea un archivo con este tipo? Sólo imágenes rasterizadas y audio: ninguno ejecuta
- * código en el navegador. Lo demás (SVG, HTML, PDF...) se descarga como adjunto.
+ * Can a file of this type be served inline? Only raster images and audio: none of them runs code in the
+ * browser. Everything else (SVG, HTML, PDF...) is downloaded as an attachment.
  */
 fun isInlineSafe(type: ContentType): Boolean {
     val t = type.withoutParameters()
     return t.contentType == "audio" || "${t.contentType}/${t.contentSubtype}".lowercase() in RASTER_IMAGE_TYPES
 }
 
-/** Transmite los eventos del agente como Server-Sent Events (`data: {json}`). */
+/** Streams the agent events as Server-Sent Events (`data: {json}`). */
 suspend fun ApplicationCall.streamAgent(flow: Flow<AgentEvent>) {
     response.header("Cache-Control", "no-cache")
     response.header("X-Accel-Buffering", "no")
@@ -218,15 +259,15 @@ suspend fun ApplicationCall.streamAgent(flow: Flow<AgentEvent>) {
 @Serializable
 data class UserResponse(val user: User)
 
-// ---------------------------------------------------------------- Archivos servidos con URL firmada
+// ---------------------------------------------------------------- Files served with a signed URL
 
-/** Un archivo subido nunca puede ejecutar nada en el origen de Kairo, aunque se abra directamente. */
+/** An uploaded file can never run anything on the Kairo origin, even when opened directly. */
 const val FILE_CSP = "sandbox; default-src 'none'; img-src 'self'"
 
 /**
- * Responde un archivo guardado. Sólo las imágenes rasterizadas y el audio se sirven en línea; lo demás
- * (SVG, HTML...) va como adjunto `application/octet-stream`. `X-Content-Type-Options: nosniff` ya lo
- * añade DefaultHeaders a todas las respuestas.
+ * Responds with a stored file. Only raster images and audio are served inline; everything else
+ * (SVG, HTML...) goes as an `application/octet-stream` attachment. `X-Content-Type-Options: nosniff` is
+ * already added by DefaultHeaders to every response.
  */
 suspend fun ApplicationCall.respondStoredFile(bytes: ByteArray, storedType: String) {
     val type = runCatching { ContentType.parse(storedType) }.getOrNull()?.withoutParameters()
@@ -237,23 +278,23 @@ suspend fun ApplicationCall.respondStoredFile(bytes: ByteArray, storedType: Stri
     respondBytes(bytes, if (inline) type else ContentType.Application.OctetStream)
 }
 
-// ---------------------------------------------------------------- OAuth de Google atado al navegador
+// ---------------------------------------------------------------- Google OAuth bound to the browser
 
-/** Crea el nonce del flujo OAuth y lo deja en una cookie HttpOnly del navegador que lo inicia. */
+/** Creates the OAuth flow nonce and leaves it in an HttpOnly cookie of the browser that starts it. */
 fun ApplicationCall.issueGoogleOAuthNonce(secure: Boolean): String {
     val nonce = Crypto.randomToken(24)
     response.cookies.append(oauthCookie(nonce, GoogleCalendarService.OAUTH_STATE_TTL.toInt(), secure))
     return nonce
 }
 
-/** Lee el nonce del callback y borra la cookie (un solo uso). */
+/** Reads the nonce at the callback and deletes the cookie (single use). */
 fun ApplicationCall.takeGoogleOAuthNonce(secure: Boolean): String? {
     val nonce = request.cookies[GoogleCalendarService.OAUTH_COOKIE, CookieEncoding.RAW]
     response.cookies.append(oauthCookie("", 0, secure))
     return nonce?.takeIf { it.isNotBlank() }
 }
 
-// SameSite=Lax (no Strict): el regreso desde accounts.google.com es una navegación desde otro sitio
+// SameSite=Lax (not Strict): the return from accounts.google.com is a navigation from another site
 private fun oauthCookie(value: String, maxAge: Int, secure: Boolean) = Cookie(
     name = GoogleCalendarService.OAUTH_COOKIE, value = value, encoding = CookieEncoding.RAW, maxAge = maxAge,
     path = GoogleCalendarService.OAUTH_COOKIE_PATH, secure = secure, httpOnly = true, extensions = mapOf("SameSite" to "Lax"),
@@ -263,17 +304,17 @@ private fun oauthCookie(value: String, maxAge: Int, secure: Boolean) = Cookie(
 
 const val WS_PING_MS = 25_000L
 
-/** Por qué termina la sesión de un WebSocket, o null si sigue valiendo. */
+/** Why a WebSocket session ends, or null if it is still valid (the reason is the close frame text, always English). */
 fun wsSessionEnd(nowMs: Long, expiresAtMs: Long, deviceActive: Boolean): String? = when {
-    nowMs >= expiresAtMs -> "Sesión expirada"
-    !deviceActive -> "Sesión cerrada"
+    nowMs >= expiresAtMs -> M.SESSION_EXPIRED.en
+    !deviceActive -> M.SESSION_CLOSED.en
     else -> null
 }
 
 /**
- * Mantiene vivo el WebSocket con un ping cada 25 s mientras la sesión valga: en cada ping comprueba que el
- * dispositivo siga vigente, y al vencer el access token cierra la conexión (el cliente se reconecta con uno
- * nuevo). Sin esto, un WebSocket abierto seguiría recibiendo eventos después de cerrar la sesión.
+ * Keeps the WebSocket alive with a ping every 25 s while the session is valid: on every ping it checks that
+ * the device is still active, and when the access token expires it closes the connection (the client reconnects
+ * with a new one). Without this, an open WebSocket would keep receiving events after the session was closed.
  */
 suspend fun WebSocketSession.keepAliveWhileValid(expiresAtMs: Long, deviceActive: suspend () -> Boolean, onEnd: () -> Unit) {
     while (true) {

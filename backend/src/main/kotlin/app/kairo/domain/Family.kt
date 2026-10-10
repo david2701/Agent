@@ -11,6 +11,10 @@ import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
 import app.kairo.util.Crypto
 import app.kairo.util.InstantSerializer
+import app.kairo.util.Lang
+import app.kairo.util.Localizable
+import app.kairo.util.M
+import app.kairo.util.Say
 import app.kairo.util.UUIDSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -39,7 +43,7 @@ data class FamilyInfo(val household: Household, val members: List<Member>, val m
 @Serializable
 data class Invitation(
     val id: UUID,
-    /** invite (nuevo miembro) | reset (nuevo acceso para un miembro existente) */
+    /** invite (new member) | reset (new access for an existing member) */
     val kind: String,
     val name: String,
     val role: String,
@@ -49,7 +53,7 @@ data class Invitation(
     val usedAt: Instant?,
 )
 
-/** Lo que ve quien abre un código antes de unirse. */
+/** What the person who opens a code sees before joining. */
 @Serializable
 data class InvitePreview(val kind: String, val householdName: String, val name: String, val email: String? = null)
 
@@ -60,18 +64,26 @@ data class InviteRecord(
     val role: String,
     val targetUserId: UUID?,
     val expiresAt: Instant,
-    /** Quién generó el código (null si esa cuenta ya no existe). */
+    /** Who generated the code (null if that account no longer exists). */
     val createdBy: UUID? = null,
 )
 
-/** Error de una operación familiar; [status] 403 cuando hace falta ser administrador. */
-class FamilyException(message: String, val status: Int = 400) : RuntimeException(message)
+/**
+ * Error of a family operation; [status] is 403 when being an administrator is required.
+ * [text] renders the message in the reader's language ([message] is English).
+ */
+class FamilyException(private val localized: Localizable, val status: Int = 400) :
+    RuntimeException(localized.text(Lang.EN)), Localizable {
+    constructor(msg: M, status: Int = 400) : this(Say(msg), status)
+
+    override fun text(lang: Lang): String = localized.text(lang)
+}
 
 /**
- * Familia: un hogar con varios perfiles. Cada perfil tiene lo suyo (privado) y comparte lo que marca
- * como familiar (eventos, listas, tareas, notas y lugares). El administrador invita, quita miembros y
- * genera códigos de acceso nuevos. No ve lo personal de nadie desde su cuenta, pero un código de acceso
- * permite definir la contraseña de otro miembro: por eso generarlo y usarlo se avisa a toda la familia.
+ * Family: a household with several profiles. Each profile has its own (private) things and shares what it
+ * marks as family (events, lists, tasks, notes and places). The administrator invites, removes members and
+ * generates new access codes. They cannot see anyone's personal items from their account, but an access code
+ * lets whoever holds it set another member's password: that is why generating and using one is announced to the whole family.
  */
 class FamilyRepo(private val db: Db) {
     private val random = SecureRandom()
@@ -79,13 +91,13 @@ class FamilyRepo(private val db: Db) {
 
     suspend fun householdId(userId: UUID): UUID =
         db.read { one("select household_id from users where id = ?", userId) { it.uuid("household_id") } }
-            ?: throw FamilyException("Usuario no encontrado")
+            ?: throw FamilyException(M.NF_USER)
 
     suspend fun household(userId: UUID): Household = db.read {
         one("select h.* from households h join users u on u.household_id = h.id where u.id = ?", userId) {
             Household(it.uuid("id"), it.str("name"), it.instant("created_at"))
         }
-    } ?: throw FamilyException("Usuario no encontrado")
+    } ?: throw FamilyException(M.NF_USER)
 
     suspend fun members(userId: UUID): List<Member> = db.read {
         query(
@@ -95,7 +107,7 @@ class FamilyRepo(private val db: Db) {
         ) { mapMember(it) }
     }
 
-    /** Ids de todos los miembros del hogar del usuario (incluido él). Caché corta: se consulta en cada cambio compartido. */
+    /** Ids of every member of the user's household (the user included). Short cache: queried on every shared change. */
     suspend fun memberIds(userId: UUID): List<UUID> {
         val now = System.currentTimeMillis()
         membersCache[userId]?.takeIf { now - it.first < 30_000 }?.let { return it.second }
@@ -116,29 +128,29 @@ class FamilyRepo(private val db: Db) {
 
     suspend fun rename(userId: UUID, name: String): Household {
         requireAdmin(userId)
-        val clean = Text.cleanName(name, 60).ifEmpty { throw FamilyException("El nombre no puede estar vacío") }
+        val clean = Text.cleanName(name, 60).ifEmpty { throw FamilyException(M.FAMILY_NAME_EMPTY) }
         db.tx { exec("update households set name = ? where id = $HOUSEHOLD_OF", clean, userId) }
         return household(userId)
     }
 
-    // --- Invitaciones y códigos de acceso ---
+    // --- Invitations and access codes ---
 
     /**
-     * Crea un código de un solo uso: para un miembro nuevo ([targetUserId] nulo, 7 días) o para que un
-     * miembro existente defina una contraseña nueva (24 horas). Devuelve la invitación y el código en claro.
+     * Creates a single-use code: for a new member ([targetUserId] null, 7 days) or for an existing member
+     * to set a new password (24 hours). Returns the invitation and the code in clear text.
      */
     suspend fun createInvite(actorId: UUID, name: String, role: String, targetUserId: UUID?): Pair<Invitation, String> {
         requireAdmin(actorId)
         val hh = householdId(actorId)
         if (targetUserId != null) {
             val ok = db.read { one("select 1 from users where id = ? and household_id = ?", targetUserId, hh) { true } } ?: false
-            if (!ok) throw FamilyException("Ese miembro no es de tu familia")
+            if (!ok) throw FamilyException(M.FAMILY_NOT_YOUR_MEMBER)
         }
         val code = newCode()
         val ttl = if (targetUserId == null) 7L * 86400 else 86400L
         val inv = db.tx {
             if (targetUserId != null) {
-                // Un solo código vigente por miembro
+                // One valid code per member
                 exec("delete from invitations where target_user_id = ? and used_at is null", targetUserId)
             }
             one(
@@ -168,7 +180,7 @@ class FamilyRepo(private val db: Db) {
         return db.tx { exec("delete from invitations where id = ? and household_id = $HOUSEHOLD_OF and used_at is null", id, userId) } > 0
     }
 
-    /** Invitación vigente para un código, o null. Sólo consulta: para usarla, [claimInvite]. */
+    /** Valid invitation for a code, or null. Query only: to use it, [claimInvite]. */
     suspend fun findInvite(code: String): InviteRecord? = db.read {
         one(
             "select * from invitations where code_hash = ? and used_at is null and expires_at > now()",
@@ -177,9 +189,9 @@ class FamilyRepo(private val db: Db) {
     }
 
     /**
-     * Reclama el código de forma atómica dentro de [tx]: lo marca como usado sólo si sigue vigente y nadie lo
-     * usó. Dos peticiones simultáneas con el mismo código: una lo obtiene y la otra recibe null. Si después
-     * falla algo (correo repetido, error de la base), la transacción se deshace y el código sigue valiendo.
+     * Claims the code atomically inside [tx]: it marks it as used only if it is still valid and nobody used
+     * it. Two simultaneous requests with the same code: one gets it and the other receives null. If something
+     * fails afterwards (duplicate email, database error), the transaction rolls back and the code stays valid.
      */
     fun claimInvite(tx: Tx, code: String): InviteRecord? = tx.one(
         """update invitations set used_at = now()
@@ -201,11 +213,11 @@ class FamilyRepo(private val db: Db) {
         }
     }
 
-    /** Anota quién usó un código ya reclamado con [claimInvite] (en la misma transacción). */
+    /** Records who used a code already claimed with [claimInvite] (in the same transaction). */
     fun markUsedBy(tx: Tx, inviteId: UUID, usedBy: UUID) =
         tx.exec("update invitations set used_by = ? where id = ?", usedBy, inviteId)
 
-    // --- Miembros ---
+    // --- Members ---
 
     suspend fun setRole(actorId: UUID, memberId: UUID, role: String): Member {
         requireAdmin(actorId)
@@ -214,24 +226,24 @@ class FamilyRepo(private val db: Db) {
         db.tx {
             if (r == "member") {
                 val admins = one("select count(*) as n from users where household_id = ? and role = 'admin' and id <> ?", hh, memberId) { it.getInt("n") } ?: 0
-                if (admins == 0) throw FamilyException("La familia necesita al menos un administrador")
+                if (admins == 0) throw FamilyException(M.FAMILY_NEEDS_ADMIN)
             }
-            if (exec("update users set role = ? where id = ? and household_id = ?", r, memberId, hh) == 0) throw FamilyException("Ese miembro no es de tu familia")
+            if (exec("update users set role = ? where id = ? and household_id = ?", r, memberId, hh) == 0) throw FamilyException(M.FAMILY_NOT_YOUR_MEMBER)
         }
         invalidate()
         return members(actorId).first { it.id == memberId }
     }
 
     /**
-     * Quita a un miembro y borra su cuenta y sus datos personales. Lo que había compartido con la familia
-     * (listas, eventos, tareas, notas, lugares) pasa al administrador que lo quita, para que nadie lo pierda.
+     * Removes a member and deletes their account and personal data. What they had shared with the family
+     * (lists, events, tasks, notes, places) passes to the administrator who removes them, so nobody loses it.
      */
     suspend fun removeMember(actorId: UUID, memberId: UUID) {
         requireAdmin(actorId)
-        if (actorId == memberId) throw FamilyException("No puedes quitarte a ti mismo")
+        if (actorId == memberId) throw FamilyException(M.FAMILY_CANT_REMOVE_SELF)
         val hh = householdId(actorId)
         db.tx {
-            one("select 1 from users where id = ? and household_id = ?", memberId, hh) { true } ?: throw FamilyException("Ese miembro no es de tu familia")
+            one("select 1 from users where id = ? and household_id = ?", memberId, hh) { true } ?: throw FamilyException(M.FAMILY_NOT_YOUR_MEMBER)
             for (table in listOf("notes", "tasks", "lists", "places")) {
                 exec("update $table set user_id = ? where user_id = ? and shared", actorId, memberId)
             }
@@ -242,7 +254,7 @@ class FamilyRepo(private val db: Db) {
     }
 
     private suspend fun requireAdmin(userId: UUID) {
-        if (!isAdmin(userId)) throw FamilyException("Solo un administrador de la familia puede hacer esto", 403)
+        if (!isAdmin(userId)) throw FamilyException(M.FAMILY_ADMIN_ONLY, 403)
     }
 
     private fun newCode(): String {
@@ -273,7 +285,7 @@ class FamilyRepo(private val db: Db) {
     }
 
     companion object {
-        /** Sin caracteres ambiguos (0/O, 1/I/L): 31 símbolos x 8 ≈ 40 bits, con límite de intentos en el endpoint. */
+        /** No ambiguous characters (0/O, 1/I/L): 31 symbols x 8 ≈ 40 bits, with an attempt limit on the endpoint. */
         private const val ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
         fun normalizeCode(code: String): String = code.uppercase().filter { it.isLetterOrDigit() }

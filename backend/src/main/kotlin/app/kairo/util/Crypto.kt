@@ -8,7 +8,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/** Cifrado AES-256-GCM para secretos guardados en la base (tokens de Google, cabeceras MCP). */
+/** AES-256-GCM encryption for secrets stored in the database (Google tokens, MCP headers). */
 class Crypto(key: ByteArray) {
     private val secretKey = SecretKeySpec(key, "AES")
     private val macKey = SecretKeySpec(sha256Bytes(key + "kairo-hmac".toByteArray()), "HmacSHA256")
@@ -24,7 +24,7 @@ class Crypto(key: ByteArray) {
 
     fun decrypt(token: String): String {
         val parts = token.split(':')
-        require(parts.size == 3 && parts[0] == "v1") { "Formato de secreto inválido" }
+        require(parts.size == 3 && parts[0] == "v1") { "Invalid secret format" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, unb64(parts[1])))
         return String(cipher.doFinal(unb64(parts[2])), Charsets.UTF_8)

@@ -37,9 +37,9 @@ data class Note(
     val createdAt: Instant,
     val updatedAt: Instant,
     val score: Double? = null,
-    /** Visible para toda la familia. */
+    /** Visible to the whole family. */
     val shared: Boolean = false,
-    /** Quién la creó (para lo compartido por otro miembro). */
+    /** Who created it (for what another member shared). */
     val ownerId: UUID? = null,
 )
 
@@ -68,7 +68,7 @@ data class Task(
     val updatedAt: Instant,
     val shared: Boolean = false,
     val ownerId: UUID? = null,
-    /** Miembro responsable (tareas familiares). */
+    /** Responsible member (family tasks). */
     val assigneeId: UUID? = null,
 )
 
@@ -102,9 +102,9 @@ data class Reminder(
     val source: String,
     val createdAt: Instant,
     val updatedAt: Instant,
-    /** A quién se le recuerda. */
+    /** Who is being reminded. */
     val ownerId: UUID? = null,
-    /** Quién lo programó, si fue otro miembro de la familia. */
+    /** Who set it, if it was another family member. */
     val createdBy: UUID? = null,
 )
 
@@ -150,7 +150,7 @@ data class Event(
     val ownerId: UUID? = null,
 )
 
-/** Aviso previo de un evento (según sus reminderMinutes). */
+/** Advance alert of an event (according to its reminderMinutes). */
 @Serializable
 data class EventAlert(
     val eventId: UUID,
@@ -228,7 +228,7 @@ data class Device(
 @Serializable
 data class McpServer(val id: UUID, val name: String, val url: String, val enabled: Boolean, val hasHeaders: Boolean, val createdAt: Instant)
 
-/** Referencia a una entidad afectada por una acción (para tarjetas en el chat y el log de actividad). */
+/** Reference to an entity affected by an action (for chat cards and the activity log). */
 @Serializable
 data class EntityRef(val type: String, val id: UUID, val title: String)
 

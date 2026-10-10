@@ -6,7 +6,10 @@ import app.kairo.db.str
 import app.kairo.db.uuid
 import app.kairo.realtime.EventTypes
 import app.kairo.realtime.ServerEvent
+import app.kairo.util.InvalidInput
+import app.kairo.util.M
 import app.kairo.util.jdkProxySelector
+import app.kairo.util.requireInput
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import kotlinx.coroutines.CancellationException
@@ -39,19 +42,19 @@ import java.util.Base64
 import java.util.Date
 import java.util.UUID
 
-/** Contenido de un push de APNs: el mismo `{type, data}` del WebSocket en `kairo`, más la alerta visible. */
+/** Content of an APNs push: the same `{type, data}` of the WebSocket under `kairo`, plus the visible alert. */
 object ApnsPayload {
-    /** Límite de Apple para notificaciones normales. */
+    /** Apple's limit for regular notifications. */
     const val MAX_BYTES = 4096
     private const val MAX_TITLE = 200
-    /** Los campos cortos de `data` (ids, fechas) nunca se recortan. */
+    /** The short `data` fields (ids, dates) are never trimmed. */
     private const val MIN_FIELD = 64
 
     fun build(event: ServerEvent, title: String, body: String, maxBytes: Int = MAX_BYTES): String {
         val t = ellipsize(title.trim(), MAX_TITLE)
         val b = body.trim()
         val longest = event.data.values.maxOfOrNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.length ?: 0 } ?: 0
-        // Recorta el cuerpo y los textos largos de `data` al mismo largo máximo: el mayor que quepa (búsqueda binaria)
+        // Trim the body and the long `data` texts to the same maximum length: the largest that fits (binary search)
         fun attempt(cap: Int) = encode(event, t, ellipsize(b, cap), shrink(event.data, maxOf(cap, MIN_FIELD)))
         fun fits(json: String) = json.toByteArray(Charsets.UTF_8).size <= maxBytes
         var hi = maxOf(b.length, longest)
@@ -66,7 +69,7 @@ object ApnsPayload {
             }
             return best
         }
-        // Último recurso (no pasa con los eventos actuales): sólo los campos cortos de `data`
+        // Last resort (does not happen with the current events): only the short `data` fields
         val short = JsonObject(event.data.filterValues { it !is JsonPrimitive || !it.isString || it.content.length <= MIN_FIELD })
         return encode(event, ellipsize(t, 60), "", short).takeIf { it.toByteArray(Charsets.UTF_8).size <= maxBytes }
             ?: encode(ServerEvent(event.type), ellipsize(t, 60), "", JsonObject(emptyMap()))
@@ -82,14 +85,14 @@ object ApnsPayload {
             put("thread-id", threadId(event))
             put("interruption-level", interruptionLevel(event))
             category(event)?.let { put("category", it) }
-            // Despierta la app en segundo plano para que sincronice (además de mostrar la alerta)
+            // Wakes the app in the background so it syncs (besides showing the alert)
             put("content-available", 1)
         })
         put("kairo", buildJsonObject {
             put("type", event.type)
             put("data", data)
         })
-        // Lo mismo que ponen las notificaciones locales de la app: para "Hecho", "Posponer" y abrir la sección
+        // Same as the app's local notifications carry: for "Done", "Snooze" and opening the section
         entityId(event)?.let { put("entityId", it) }
         put("destination", destination(event))
     }.toString()
@@ -107,7 +110,7 @@ object ApnsPayload {
         else -> "active"
     }
 
-    /** Categorías que registra la app (botones "Hecho" / "En 10 min" y "Escuchar"). */
+    /** Categories the app registers ("Done" / "In 10 min" and "Listen" buttons). */
     private fun category(event: ServerEvent): String? = when (event.type) {
         EventTypes.REMINDER_FIRE -> "kairo.reminder"
         EventTypes.BRIEFING_READY -> "kairo.briefing"
@@ -135,8 +138,8 @@ object ApnsPayload {
     }
 
     /**
-     * `apns-collapse-id`: la misma clave con la que la app deduplica (y con la que programa la alarma local),
-     * así el aviso que llega por push reemplaza al local en vez de duplicarse. Máximo 64 bytes.
+     * `apns-collapse-id`: the same key the app uses to deduplicate (and to schedule the local alarm),
+     * so the notice that arrives by push replaces the local one instead of being duplicated. 64 bytes at most.
      */
     fun collapseId(event: ServerEvent): String? {
         val id = event.str("id")
@@ -167,8 +170,8 @@ object ApnsPayload {
 }
 
 /**
- * Token de proveedor de APNs (JWT ES256 con la clave .p8): `kid` = id de la clave, `iss` = Team ID, `iat`.
- * Apple rechaza tokens de más de una hora y renovarlo más de una vez cada 20 minutos, así que se reutiliza ~50 min.
+ * APNs provider token (ES256 JWT with the .p8 key): `kid` = key id, `iss` = Team ID, `iat`.
+ * Apple rejects tokens older than an hour and renewing more than once every 20 minutes, so it is reused for ~50 min.
  */
 class ApnsJwt(
     private val keyId: String,
@@ -185,7 +188,7 @@ class ApnsJwt(
         return sign(now).also { cached = it to now }
     }
 
-    /** Tras `ExpiredProviderToken`: descarta el token si ya pasó el mínimo de 20 minutos. Devuelve si lo descartó. */
+    /** After `ExpiredProviderToken`: discards the token if the 20-minute minimum has passed. Returns whether it discarded it. */
     @Synchronized
     fun invalidate(): Boolean {
         val at = cached?.second ?: return true
@@ -204,30 +207,30 @@ class ApnsJwt(
         val REFRESH: Duration = Duration.ofMinutes(50)
         val MIN_REFRESH: Duration = Duration.ofMinutes(20)
 
-        /** Lee la clave `.p8` de Apple (PKCS#8 en PEM). Acepta `\n` literales y el contenido base64 sin cabeceras. */
+        /** Reads Apple's `.p8` key (PKCS#8 in PEM). Accepts literal `\n` and base64 content without headers. */
         fun parsePrivateKey(pem: String): ECPrivateKey {
             val text = pem.replace("\\n", "\n")
-            require(!text.contains("BEGIN EC PRIVATE KEY")) { "La clave debe ser PKCS#8 (el archivo .p8 de Apple, BEGIN PRIVATE KEY)" }
+            require(!text.contains("BEGIN EC PRIVATE KEY")) { "The key must be PKCS#8 (Apple's .p8 file, BEGIN PRIVATE KEY)" }
             val b64 = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("-----") }.joinToString("")
-            val der = runCatching { Base64.getMimeDecoder().decode(b64) }.getOrElse { throw IllegalArgumentException("La clave de APNs no es PEM/base64 válido") }
+            val der = runCatching { Base64.getMimeDecoder().decode(b64) }.getOrElse { throw IllegalArgumentException("The APNs key is not valid PEM/base64") }
             val key = runCatching { KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(der)) }
-                .getOrElse { throw IllegalArgumentException("La clave de APNs no es una clave EC PKCS#8 válida") }
-            return key as? ECPrivateKey ?: throw IllegalArgumentException("La clave de APNs no es una clave EC")
+                .getOrElse { throw IllegalArgumentException("The APNs key is not a valid PKCS#8 EC key") }
+            return key as? ECPrivateKey ?: throw IllegalArgumentException("The APNs key is not an EC key")
         }
     }
 }
 
 /**
- * Push nativo de Apple (APNs) para la app de iPhone: llega con la app cerrada. Es opcional; sin credenciales
- * los tokens se guardan igual (funcionan en cuanto se configure) y la app usa sus alarmas locales y el WebSocket.
- * HTTP/2 con el cliente del JDK y autenticación por token (.p8), sin certificados ni dependencias extra.
+ * Apple native push (APNs) for the iPhone app: it arrives with the app closed. It is optional; without credentials
+ * the tokens are stored anyway (they work as soon as it is configured) and the app uses its local alarms and the WebSocket.
+ * HTTP/2 with the JDK client and token authentication (.p8), with no certificates or extra dependencies.
  */
 class ApnsService(private val db: Db, private val cfg: AppConfig) {
     private val log = LoggerFactory.getLogger(ApnsService::class.java)
 
     private val jwt: ApnsJwt? = loadJwt()
 
-    /** Credenciales de APNs configuradas y válidas en el servidor. */
+    /** APNs credentials configured and valid on the server. */
     val available: Boolean get() = jwt != null
 
     private val http: HttpClient by lazy {
@@ -242,30 +245,30 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
         if (!cfg.apnsConfigured) {
             val started = listOf(cfg.apnsKeyId, cfg.apnsTeamId, cfg.apnsPrivateKey, cfg.apnsPrivateKeyFile).any { !it.isNullOrBlank() }
             if (started) {
-                log.warn("APNs desactivado: faltan APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC o la clave (APNS_PRIVATE_KEY / APNS_PRIVATE_KEY_FILE)")
+                log.warn("APNs disabled: APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC or the key (APNS_PRIVATE_KEY / APNS_PRIVATE_KEY_FILE) is missing")
             }
             return null
         }
         return runCatching {
             val pem = cfg.apnsPrivateKey?.takeIf { it.isNotBlank() }
                 ?: runCatching { File(cfg.apnsPrivateKeyFile!!).readText() }
-                    .getOrElse { throw IllegalArgumentException("no se pudo leer APNS_PRIVATE_KEY_FILE (${cfg.apnsPrivateKeyFile})") }
+                    .getOrElse { throw IllegalArgumentException("could not read APNS_PRIVATE_KEY_FILE (${cfg.apnsPrivateKeyFile})") }
             ApnsJwt(cfg.apnsKeyId!!, cfg.apnsTeamId!!, ApnsJwt.parsePrivateKey(pem)).also { it.token() }
-        }.onSuccess { log.info("APNs activo para {}", cfg.apnsTopic) }
-            .onFailure { log.warn("APNs desactivado: {}", it.message) }
+        }.onSuccess { log.info("APNs active for {}", cfg.apnsTopic) }
+            .onFailure { log.warn("APNs disabled: {}", it.message) }
             .getOrNull()
     }
 
     suspend fun register(userId: UUID, deviceId: UUID?, token: String, environment: String, kind: String = KIND_DEVICE, activityId: String? = null) {
-        val t = normalizeToken(token) ?: throw IllegalArgumentException("Token de APNs inválido (hexadecimal, 64 a 200 caracteres)")
-        val env = normalizeEnvironment(environment) ?: throw IllegalArgumentException("environment debe ser sandbox o production")
+        val t = normalizeToken(token) ?: throw InvalidInput(M.APNS_BAD_TOKEN)
+        val env = normalizeEnvironment(environment) ?: throw InvalidInput(M.APNS_BAD_ENV)
         val k = kind.trim().lowercase().ifEmpty { KIND_DEVICE }
-        require(k in KINDS) { "kind no soportado: usa device" }
+        requireInput(k in KINDS, M.APNS_BAD_KIND)
         val activity = activityId?.trim()?.takeIf { it.isNotEmpty() }?.take(200)
         db.tx {
-            // Un token por dispositivo: si la app recibió uno nuevo (reinstalación, restauración), el viejo ya no sirve
+            // One token per device: if the app received a new one (reinstall, restore), the old one is no longer useful
             if (deviceId != null) exec("delete from apns_tokens where device_id = ? and kind = ? and token <> ?", deviceId, k, t)
-            // Un token de otra cuenta no se reasigna: así nadie puede quitarle el push a otro ni recibir el suyo
+            // A token of another account is not reassigned: this way nobody can take someone else's push away or receive theirs
             val n = exec(
                 """insert into apns_tokens(user_id, device_id, token, environment, kind, activity_id) values (?, ?, ?, ?, ?, ?)
                    on conflict (token) do update set device_id = excluded.device_id,
@@ -273,7 +276,7 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
                    where apns_tokens.user_id = excluded.user_id""",
                 userId, deviceId, t, env, k, activity,
             )
-            require(n > 0) { "Ese token de APNs ya está registrado por otra cuenta" }
+            requireInput(n > 0, M.APNS_TOKEN_TAKEN)
         }
     }
 
@@ -284,7 +287,7 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
     suspend fun registeredDevices(userId: UUID): Int =
         db.read { one("select count(*) as n from apns_tokens where user_id = ?", userId) { it.getInt("n") } } ?: 0
 
-    /** Envía el evento como alerta a los iPhone del usuario. Devuelve cuántos lo aceptó Apple. */
+    /** Sends the event as an alert to the user's iPhones. Returns how many Apple accepted. */
     suspend fun send(userId: UUID, event: ServerEvent, title: String, body: String): Int {
         val signer = jwt ?: return 0
         val targets = db.read {
@@ -316,13 +319,13 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
             .build()
         val response = try {
             val r = http.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).await()
-            // Apple responde JSON corto; se lee como mucho MAX_RESPONSE_BYTES y se cierra el resto
+            // Apple answers short JSON; at most MAX_RESPONSE_BYTES are read and the rest is closed
             val body = withContext(Dispatchers.IO) { r.body().use { String(it.readNBytes(MAX_RESPONSE_BYTES), Charsets.UTF_8) } }
             r.statusCode() to body
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("APNs ({}) no respondió: {}", t.environment, (e.message ?: e.javaClass.simpleName).replace(t.token, "…"))
+            log.warn("APNs ({}) did not respond: {}", t.environment, (e.message ?: e.javaClass.simpleName).replace(t.token, "…"))
             return false
         }
         val (status, responseBody) = response
@@ -330,15 +333,15 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
         val reason = runCatching { Json.parseToJsonElement(responseBody).jsonObject["reason"]?.jsonPrimitive?.contentOrNull }.getOrNull()
         when {
             status == 410 || (status == 400 && reason in DEAD_TOKEN_REASONS) -> {
-                // El token ya no sirve (app desinstalada, otro entorno u otra app): la app se volverá a registrar
+                // The token is no longer useful (app uninstalled, another environment or another app): the app will register again
                 db.tx { exec("delete from apns_tokens where id = ?", t.id) }
-                log.info("APNs ({}): token descartado ({})", t.environment, reason ?: status)
+                log.info("APNs ({}): token discarded ({})", t.environment, reason ?: status)
             }
             status == 403 && reason in PROVIDER_TOKEN_REASONS -> {
                 val renewed = signer.invalidate()
-                log.warn("APNs ({}) rechazó el token de proveedor: {}{}", t.environment, reason, if (renewed) "; se renovará" else "")
+                log.warn("APNs ({}) rejected the provider token: {}{}", t.environment, reason, if (renewed) "; it will be renewed" else "")
             }
-            else -> log.warn("APNs ({}) falló: {} {}", t.environment, status, reason ?: "")
+            else -> log.warn("APNs ({}) failed: {} {}", t.environment, status, reason ?: "")
         }
         return false
     }
@@ -357,11 +360,11 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
         private val PROVIDER_TOKEN_REASONS = setOf("ExpiredProviderToken", "InvalidProviderToken")
         private val TOKEN_RE = Regex("^[0-9a-f]{64,200}$")
 
-        /** Token del dispositivo en hexadecimal (como lo arma la app con `%02x`), sin espacios ni `<>`; null si no es válido. */
+        /** Device token in hexadecimal (as the app builds it with `%02x`), without spaces or `<>`; null if not valid. */
         fun normalizeToken(token: String): String? =
             token.trim().removePrefix("<").removeSuffix(">").replace(" ", "").lowercase().takeIf { TOKEN_RE.matches(it) }
 
-        /** "sandbox" | "production" ("development", el valor de `aps-environment` en Xcode, equivale a sandbox). */
+        /** "sandbox" | "production" ("development", the `aps-environment` value in Xcode, is the same as sandbox). */
         fun normalizeEnvironment(env: String): String? = when (env.trim().lowercase()) {
             "sandbox", "development" -> ENV_SANDBOX
             "production" -> ENV_PRODUCTION

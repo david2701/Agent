@@ -37,26 +37,31 @@ import app.kairo.services.RecordingService
 import app.kairo.services.Schedulers
 import app.kairo.services.VoiceService
 import app.kairo.util.Crypto
+import app.kairo.util.Lang
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import java.util.UUID
 
-/** Inyección de dependencias manual: un solo lugar donde se construye todo. */
+/** Manual dependency injection: a single place where everything is built. */
 class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val crypto = Crypto(config.encryptionKey)
     val bus = EventBus()
 
     val users = UsersRepo(db)
-    val settings = SettingsService(users)
+    val settings = SettingsService(users, config.defaultLanguage)
     val family = FamilyRepo(db)
     val auth = AuthService(config, users, family)
-    val activity = ActivityRepo(db, bus, family)
+
+    /** Language of a user, for the texts the server writes on their behalf (activity, default names). */
+    private val langOf: suspend (UUID) -> Lang = { settings.lang(it) }
+    val activity = ActivityRepo(db, bus, family, langOf)
     val files = FilesRepo(db, crypto)
     val embedder = Embedder(nan, db, scope)
 
-    // Avisos sin Firebase: WebSocket + Web Push (UnifiedPush) + APNs (iPhone, opcional) + ntfy
+    // Notices without Firebase: WebSocket + Web Push (UnifiedPush) + APNs (iPhone, optional) + ntfy
     val ntfy = NtfyNotifier(config)
     val push = PushService(db, crypto, config)
     val apns = ApnsService(db, config)
@@ -65,9 +70,9 @@ class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
 
     val notes = NotesRepo(db, activity, embedder, files, nan, notifier)
     val tasks = TasksRepo(db, activity, notifier)
-    val places = PlacesRepo(db, activity)
+    val places = PlacesRepo(db, activity, langOf)
     val reminders = RemindersRepo(db, activity, notifier)
-    val lists = ListsRepo(db, activity, notifier)
+    val lists = ListsRepo(db, activity, notifier, langOf)
     val events = EventsRepo(db, activity, notifier)
     val memories = MemoriesRepo(db, activity, embedder)
     val conversations = ConversationsRepo(db)
@@ -76,7 +81,7 @@ class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
     val weather = WeatherService()
     val mcpClient = McpClient()
     val mcp = McpRegistry(db, crypto, mcpClient)
-    val google = GoogleCalendarService(config, db, crypto, events, bus)
+    val google = GoogleCalendarService(config, db, crypto, events, bus, langOf)
 
     val briefing = BriefingService(events, tasks, reminders, notes, lists, weather, settings, nan)
     val voice = VoiceService(nan, settings)

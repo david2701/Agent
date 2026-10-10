@@ -8,7 +8,13 @@ import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
+import app.kairo.services.NoticeText
 import app.kairo.services.Notifier
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.localized
+import app.kairo.util.requireInput
+import app.kairo.util.say
 import app.kairo.util.humanDateTime
 import app.kairo.util.zoneOf
 import java.sql.ResultSet
@@ -26,17 +32,17 @@ data class ReminderPatch(
 )
 
 /**
- * Recordatorios. Son personales, pero un miembro puede programarle uno a otro ("recuérdale a Sofía que...").
- * Quien lo programó lo ve en su lista y puede cambiarlo o cancelarlo; suena en el teléfono de quien lo recibe.
+ * Reminders. They are personal, but a member can set one for another ("remind Sofía to...").
+ * Whoever set it sees it in their list and can change or cancel it; it rings on the phone of whoever receives it.
  */
 class RemindersRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
 
-    /** El nombre del lugar sólo sale si el lugar sigue existiendo y lo puede ver el dueño del recordatorio. */
+    /** The place name only comes out if the place still exists and the reminder's owner can see it. */
     private val select = """select r.*, p.name as place_name from reminders r left join places p on p.id = r.place_id
         and p.deleted_at is null
         and (p.user_id = r.user_id or (p.shared and p.household_id = (select ru.household_id from users ru where ru.id = r.user_id)))"""
 
-    /** El recordatorio es de [userId] o él lo programó para otro. Dos parámetros: userId, userId. */
+    /** The reminder is [userId]'s or they set it for someone else. Two parameters: userId, userId. */
     private val mine = "(r.user_id = ? or r.created_by = ?)"
 
     suspend fun list(userId: UUID, statuses: List<String>? = null, limit: Int = 300): List<Reminder> = db.read {
@@ -64,10 +70,10 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
         placeTrigger: String? = null,
         taskId: UUID? = null,
         source: String,
-        /** Otro miembro que lo programa para [userId]. */
+        /** Another member who sets it for [userId]. */
         createdBy: UUID? = null,
     ): Reminder {
-        require(dueAt != null || placeId != null) { "El recordatorio necesita una fecha u un lugar" }
+        requireInput(dueAt != null || placeId != null, M.REMINDER_NEEDS_DATE_OR_PLACE)
         val rule = Recurrence.normalize(rrule)
         val next = computeNext(dueAt, rule, timezone, Instant.now().minusSeconds(60))
         val by = createdBy?.takeIf { it != userId }
@@ -81,26 +87,26 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             getTx(userId, id)!!
         }
         if (by == null) {
-            activity.record(userId, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, "Recordatorio: ${reminder.text}", source)
+            activity.record(userId, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, say(M.ACT_REMINDER, reminder.text), source)
         } else {
-            // Queda en la actividad de quien lo programó (para que pueda deshacerlo) y se refresca en ambos lados
-            val target = notifier.firstName(userId)
-            activity.record(by, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, "Recordatorio para $target: ${reminder.text}", source, alsoTo = listOf(userId))
-            val whenText = reminder.nextFireAt?.let { humanDateTime(it, zoneOf(timezone)) } ?: reminder.placeName?.let { "al llegar a $it" }
-            notifier.family(
-                by, listOf(userId), NoticeKinds.REMINDER, "${notifier.firstName(by)} te programó un recordatorio",
-                listOfNotNull(reminder.text, whenText).joinToString(" · "), EntityTypes.REMINDER, reminder.id,
-            )
+            // It stays in the activity of whoever set it (so they can undo it) and refreshes on both sides
+            activity.record(by, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, say(M.ACT_REMINDER_FOR, notifier.who(userId), reminder.text), source, alsoTo = listOf(userId))
+            val body = localized { lang ->
+                val whenText = reminder.nextFireAt?.let { humanDateTime(it, zoneOf(timezone), lang = lang) }
+                    ?: reminder.placeName?.let { M.WHEN_AT_PLACE_ARRIVE.t(lang, it) }
+                listOfNotNull(reminder.text, whenText).joinToString(" · ")
+            }
+            notifier.family(by, listOf(userId), NoticeKinds.REMINDER, NoticeText(say(M.NOTICE_REMINDER_SET, notifier.who(by)), body), EntityTypes.REMINDER, reminder.id)
         }
         return reminder
     }
 
-    /** Además del dueño, refresca a quien lo programó (o al revés). */
+    /** Besides the owner, refreshes whoever set it (or the other way around). */
     private fun others(userId: UUID, r: Reminder): List<UUID> = listOfNotNull(r.ownerId, r.createdBy).filter { it != userId }
 
     suspend fun update(userId: UUID, id: UUID, patch: ReminderPatch, source: String): Reminder? {
         val current = get(userId, id) ?: return null
-        // Lo mismo que al crear: el lugar tiene que estar disponible para quien recibe el aviso
+        // Same as on create: the place has to be available to whoever receives the reminder
         if (!patch.clearPlace && patch.placeId != null && patch.placeId != current.placeId) requirePlaceVisible(current.ownerId ?: userId, patch.placeId)
         val rule = if (patch.clearRrule) null else Recurrence.normalize(patch.rrule) ?: current.rrule
         val due = patch.dueAt ?: current.dueAt
@@ -118,11 +124,11 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             )
             getTx(userId, id)
         } ?: return null
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio editado: ${reminder.text}", source, alsoTo = others(userId, reminder))
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, say(M.ACT_REMINDER_EDITED, reminder.text), source, alsoTo = others(userId, reminder))
         return reminder
     }
 
-    /** Marca como hecho. Si es recurrente, sigue programado para la próxima vez. */
+    /** Marks as done. If it is recurring, it stays scheduled for the next time. */
     suspend fun complete(userId: UUID, id: UUID, source: String): Reminder? {
         val current = get(userId, id) ?: return null
         val reminder = db.tx {
@@ -137,7 +143,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             }
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.COMPLETED, EntityTypes.REMINDER, id, "Recordatorio hecho: ${current.text}", source, alsoTo = others(userId, current))
+        activity.record(userId, Kinds.COMPLETED, EntityTypes.REMINDER, id, say(M.ACT_REMINDER_DONE, current.text), source, alsoTo = others(userId, current))
         return reminder
     }
 
@@ -148,7 +154,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             exec("update reminders set status = 'scheduled', next_fire_at = ?, updated_at = now() where id = ?", at, id)
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Pospuesto $minutes min: ${current.text}", source, alsoTo = others(userId, current))
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, say(M.ACT_REMINDER_SNOOZED, minutes, current.text), source, alsoTo = others(userId, current))
         return reminder
     }
 
@@ -158,21 +164,21 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             exec("update reminders set status = 'cancelled', next_fire_at = null, updated_at = now() where id = ?", id)
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio cancelado: ${current.text}", source, alsoTo = others(userId, current))
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, say(M.ACT_REMINDER_CANCELLED, current.text), source, alsoTo = others(userId, current))
         return reminder
     }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): Reminder? {
         val current = get(userId, id) ?: return null
         db.tx { exec("update reminders set deleted_at = now() where id = ?", id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.REMINDER, id, "Recordatorio eliminado: ${current.text}", source, alsoTo = others(userId, current))
+        activity.record(userId, Kinds.DELETED, EntityTypes.REMINDER, id, say(M.ACT_REMINDER_DELETED, current.text), source, alsoTo = others(userId, current))
         return current
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
         db.tx { exec("update reminders r set deleted_at = null where $mine and r.id = ?", userId, userId, id) } > 0
 
-    /** Recordatorios vencidos para el planificador. Bloquea filas para que una sola instancia los dispare. */
+    /** Due reminders for the scheduler. It locks rows so a single instance fires them. */
     suspend fun claimDue(now: Instant, handle: suspend (Reminder, UUID) -> Unit) {
         val due = db.tx {
             val rows = query(
@@ -192,7 +198,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
         due.forEach { (r, userId) -> handle(r, userId) }
     }
 
-    /** Recordatorios que el teléfono debe programar como alarmas locales o geovallas. */
+    /** Reminders the phone must schedule as local alarms or geofences. */
     suspend fun forDevice(userId: UUID): List<Reminder> = db.read {
         query(
             "$select where r.user_id = ? and r.deleted_at is null and r.status = 'scheduled' order by r.next_fire_at nulls last limit 500",
@@ -200,12 +206,12 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
         ) { map(it) }
     }
 
-    /** El lugar existe, no está borrado y [ownerId] lo puede ver (suyo o compartido en su familia). */
+    /** The place exists, is not deleted and [ownerId] can see it (their own or shared in their family). */
     private suspend fun requirePlaceVisible(ownerId: UUID, placeId: UUID) {
         val ok = db.read {
             one("select 1 as ok from places where id = ? and deleted_at is null and ${visibleTo()}", placeId, ownerId, ownerId) { true }
         } ?: false
-        require(ok) { "Ese lugar no está disponible para esa persona; compártelo con la familia primero" }
+        requireInput(ok, M.PLACE_NOT_AVAILABLE)
     }
 
     private fun computeNext(dueAt: Instant?, rrule: String?, tz: String, after: Instant): Instant? {

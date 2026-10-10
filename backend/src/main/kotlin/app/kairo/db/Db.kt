@@ -16,26 +16,26 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 
-/** Valor jsonb. */
+/** jsonb value. */
 @JvmInline value class Jsonb(val json: String)
 
-/** Valor `vector` de pgvector. */
+/** pgvector `vector` value. */
 @JvmInline value class Vec(val values: FloatArray) {
     fun literal(): String = values.joinToString(",", "[", "]")
 }
 
-/** Arreglo `text[]`. */
+/** `text[]` array. */
 @JvmInline value class TextArray(val values: List<String>)
 
-/** Arreglo `uuid[]`. */
+/** `uuid[]` array. */
 @JvmInline value class UuidArray(val values: List<UUID>)
 
-/** Arreglo `integer[]`. */
+/** `integer[]` array. */
 @JvmInline value class IntArrayParam(val values: List<Int>)
 
 /**
- * Acceso a Postgres con JDBC simple. Todas las operaciones corren en Dispatchers.IO.
- * Elegimos JDBC directo (en vez de un ORM) para usar pgvector, jsonb y arreglos sin fricción.
+ * Postgres access with plain JDBC. All operations run on Dispatchers.IO.
+ * We chose direct JDBC (instead of an ORM) to use pgvector, jsonb and arrays without friction.
  */
 class Db(val dataSource: HikariDataSource) {
 
@@ -120,13 +120,13 @@ class Tx(val connection: Connection) {
                 is TextArray -> ps.setArray(idx, connection.createArrayOf("text", p.values.toTypedArray()))
                 is UuidArray -> ps.setArray(idx, connection.createArrayOf("uuid", p.values.toTypedArray()))
                 is IntArrayParam -> ps.setArray(idx, connection.createArrayOf("integer", p.values.toTypedArray()))
-                else -> error("Tipo de parámetro no soportado: ${p::class}")
+                else -> error("Unsupported parameter type: ${p::class}")
             }
         }
     }
 }
 
-// --- Lectura de columnas ---
+// --- Column reading ---
 
 fun ResultSet.uuid(col: String): UUID = getObject(col, UUID::class.java)
 fun ResultSet.uuidOrNull(col: String): UUID? = getObject(col)?.let { it as UUID }

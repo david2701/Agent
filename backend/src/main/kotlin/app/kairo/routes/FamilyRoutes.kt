@@ -10,6 +10,10 @@ import app.kairo.domain.Member
 import app.kairo.domain.Notice
 import app.kairo.domain.NoticeKinds
 import app.kairo.realtime.EventTypes
+import app.kairo.services.NoticeText
+import app.kairo.util.M
+import app.kairo.util.Plain
+import app.kairo.util.say
 import app.kairo.realtime.ServerEvent
 import app.kairo.util.InstantSerializer
 import app.kairo.util.UUIDSerializer
@@ -61,26 +65,24 @@ fun Route.familyRoutes(s: Services) {
             call.respond(HttpStatusCode.Created, InviteCreated(inv, code, joinLink(s, code)))
         }
         delete("/invites/{id}") {
-            if (!s.family.revokeInvite(call.userId(), call.uuidParam())) notFound("Invitación")
+            if (!s.family.revokeInvite(call.userId(), call.uuidParam())) notFound(M.NF_INVITATION)
             call.respond(OkResponse())
         }
 
         /**
-         * Código para que un miembro que olvidó su contraseña defina una nueva (vence en 24 horas).
-         * Quien tenga el código puede entrar a esa cuenta, así que se avisa al miembro y a toda la familia:
-         * un administrador no puede usarlo en silencio para leer lo personal de otro.
+         * Code for a member who forgot their password to set a new one (expires in 24 hours).
+         * Whoever has the code can get into that account, so the member and the whole family are notified:
+         * an administrator cannot quietly use it to read someone else's personal items.
          */
         post("/members/{id}/access-code") {
             val me = call.userId()
             val target = call.uuidParam()
             val (inv, code) = s.family.createInvite(me, "", "member", target)
-            val admin = s.notifier.firstName(me)
-            val member = s.users.byId(target)?.displayName ?: "un miembro"
+            val admin = s.notifier.who(me)
+            val member = s.users.byId(target)?.displayName?.let { Plain(it) } ?: say(M.A_MEMBER)
             s.notifier.everyone(
                 me, NoticeKinds.MESSAGE,
-                "$admin generó un código de acceso para $member",
-                "Con ese código se define una contraseña nueva para la cuenta de $member y se cierran sus sesiones. " +
-                    "Vale 24 horas. Si $member no lo pidió, hablen en familia.",
+                NoticeText(say(M.NOTICE_CODE_CREATED_TITLE, admin, member), say(M.NOTICE_CODE_CREATED_BODY, member)),
                 "family", target,
             )
             call.respond(HttpStatusCode.Created, InviteCreated(inv, code, joinLink(s, code)))
@@ -96,20 +98,20 @@ fun Route.familyRoutes(s: Services) {
             call.respond(OkResponse())
         }
 
-        /** Mensaje a la familia ("la cena está lista"): llega como aviso a cada uno. */
+        /** Message to the family ("dinner is ready"): it arrives as a notice to each one. */
         post("/message") {
             val b = call.receiveBody<FamilyMessage>()
-            val text = b.text.trim().take(500).ifEmpty { badRequest("Mensaje vacío") }
+            val text = b.text.trim().take(500).ifEmpty { badRequest(M.EMPTY_MESSAGE) }
             val me = call.userId()
             val members = s.family.memberIds(me)
             val to = (b.to?.filter { it in members } ?: members) - me
-            if (to.isEmpty()) badRequest("No hay a quién enviarlo")
-            s.notifier.family(me, to, NoticeKinds.MESSAGE, s.notifier.firstName(me), text)
+            if (to.isEmpty()) badRequest(M.NOBODY_TO_SEND)
+            s.notifier.family(me, to, NoticeKinds.MESSAGE, NoticeText(s.notifier.who(me), Plain(text)))
             call.respond(FamilyMessageResult(to.size))
         }
     }
 
-    // ------------------------------------------------------------ Avisos
+    // ------------------------------------------------------------ Notices
     route("/notices") {
         get {
             val q = call.request.queryParameters
@@ -129,24 +131,25 @@ fun Route.familyRoutes(s: Services) {
         }
     }
 
-    // ------------------------------------------------------------ Push propio (UnifiedPush / Web Push y APNs)
+    // ------------------------------------------------------------ Own push (UnifiedPush / Web Push and APNs)
     route("/push") {
         get { call.respond(PushConfig(s.push.vapidPublicKey(), s.push.registeredDevices(call.userId()))) }
         post("/register") {
             val b = call.receiveBody<PushRegister>()
             runCatching { s.push.register(call.userId(), call.deviceId(), b.endpoint, b.p256dh, b.auth) }
-                .getOrElse { badRequest(publicMessage(it, "Datos de push inválidos")) }
+                .getOrElse { badRequest(publicError(it, M.PUSH_DATA_INVALID)) }
             call.respond(PushConfig(s.push.vapidPublicKey(), s.push.registeredDevices(call.userId())))
         }
         delete("/register") {
             s.push.unregister(call.userId(), call.deviceId())
             call.respond(OkResponse())
         }
-        /** Envía un aviso de prueba sólo por push (Web Push y APNs), para comprobar que llega con la app cerrada. */
+        /** Sends a test notice through push only (Web Push and APNs), to check that it arrives with the app closed. */
         post("/test") {
             val me = call.userId()
-            val title = "Push de Kairo funcionando"
-            val body = "Este aviso llegó sin Firebase."
+            val lang = call.lang(s)
+            val title = M.PUSH_TEST_TITLE.t(lang)
+            val body = M.PUSH_TEST_BODY.t(lang)
             val event = ServerEvent(EventTypes.FAMILY_NOTICE, buildJsonObject {
                 put("id", UUID.randomUUID().toString())
                 put("kind", "test")
@@ -162,17 +165,17 @@ fun Route.familyRoutes(s: Services) {
             call.respond(PushTestResult(delivered))
         }
 
-        // -------------------------------------------------------- Push nativo de Apple (APNs)
+        // -------------------------------------------------------- Apple native push (APNs)
         route("/apns") {
-            /** available: el servidor tiene credenciales de APNs; registeredDevices: tokens de APNs de este usuario. */
+            /** available: the server has APNs credentials; registeredDevices: this user's APNs tokens. */
             get { call.respond(ApnsStatus(s.apns.available, s.apns.registeredDevices(call.userId()))) }
-            /** Se guarda aunque APNs no esté configurado: empieza a funcionar en cuanto se configure. */
+            /** It is stored even if APNs is not configured: it starts working as soon as it is configured. */
             post("/register") {
                 val b = call.receiveBody<ApnsRegister>()
                 try {
                     s.apns.register(call.userId(), call.deviceId(), b.token, b.environment, b.kind, b.activityId)
                 } catch (e: IllegalArgumentException) {
-                    badRequest(publicMessage(e, "Datos de APNs inválidos"))
+                    badRequest(publicError(e, M.APNS_DATA_INVALID))
                 }
                 call.respond(ApnsStatus(s.apns.available, s.apns.registeredDevices(call.userId())))
             }
@@ -184,4 +187,5 @@ fun Route.familyRoutes(s: Services) {
     }
 }
 
-fun joinLink(s: Services, code: String): String = "${s.config.publicUrl}/unirse?codigo=$code"
+/** Invite link the dashboard and the apps open: `/join?code=XXXX-XXXX` (the legacy `/unirse?codigo=` still works). */
+fun joinLink(s: Services, code: String): String = "${s.config.publicUrl}/join?code=$code"

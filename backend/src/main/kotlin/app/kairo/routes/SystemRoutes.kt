@@ -23,6 +23,8 @@ import app.kairo.integrations.GoogleStatus
 import app.kairo.realtime.ServerEvent
 import app.kairo.util.InstantSerializer
 import app.kairo.util.ApiJson
+import app.kairo.util.M
+import app.kairo.util.say
 import app.kairo.util.UUIDSerializer
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
@@ -71,7 +73,7 @@ import io.ktor.server.plugins.ratelimit.rateLimit
     val eventAlerts: List<app.kairo.domain.EventAlert>,
     val briefingEnabled: Boolean,
     val briefingTime: String,
-    /** Avisos de la familia sin leer de las últimas 48 horas: el teléfono muestra los que no le llegaron por push. */
+    /** Unread family notices from the last 48 hours: the phone shows the ones that did not reach it by push. */
     val notices: List<app.kairo.domain.Notice> = emptyList(),
     val pushRegistered: Boolean = false,
 )
@@ -95,15 +97,15 @@ data class ExportData(
 
 fun Route.systemRoutes(s: Services) {
 
-    // ------------------------------------------------------------ Actividad y deshacer
+    // ------------------------------------------------------------ Activity and undo
     get("/activity") {
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
         call.respond(s.activity.list(call.userId(), limit, call.instantQuery("before")))
     }
     post("/activity/{id}/undo") {
         val userId = call.userId()
-        val a: Activity = s.activity.get(userId, call.uuidParam()) ?: notFound("Actividad")
-        if (!a.undoable || a.entityId == null) badRequest("Esta acción no se puede deshacer")
+        val a: Activity = s.activity.get(userId, call.uuidParam()) ?: notFound(M.NF_ACTIVITY)
+        if (!a.undoable || a.entityId == null) badRequest(M.NOT_UNDOABLE)
         val id = a.entityId
         val ok = when (a.kind) {
             Kinds.CREATED -> when (a.entityType) {
@@ -125,27 +127,33 @@ fun Route.systemRoutes(s: Services) {
                 EntityTypes.MEMORY -> s.memories.restore(userId, id)
                 EntityTypes.PLACE -> s.places.restore(userId, id)
                 else -> false
-            }.also { if (it) s.activity.record(userId, Kinds.RESTORED, a.entityType, id, "Restaurado: ${a.summary.substringAfter(": ")}", "undo") }
+            }.also { if (it) s.activity.record(userId, Kinds.RESTORED, a.entityType, id, say(M.ACTIVITY_RESTORED, a.summary.substringAfter(": ")), "undo") }
             else -> false
         }
-        if (!ok) badRequest("No se pudo deshacer (puede que ya no exista)")
+        if (!ok) badRequest(M.UNDO_FAILED)
         s.activity.markUndone(a.id)
         call.respond(OkResponse())
     }
 
-    // ------------------------------------------------------------ Grabaciones
+    // ------------------------------------------------------------ Recordings
     route("/recordings") {
         get { call.respond(s.recordingsRepo.list(call.userId())) }
         post {
             val b = runCatching { call.receiveBody<RecordingCreate>() }.getOrDefault(RecordingCreate())
-            call.respond(HttpStatusCode.Created, s.recordingsRepo.create(call.userId(), b.title, if (call.request.headers["X-Kairo-Client"]?.lowercase() in setOf("android", "wear", "ios", "watch")) "app" else "dashboard"))
+            call.respond(
+                HttpStatusCode.Created,
+                s.recordingsRepo.create(
+                    call.userId(), b.title, if (call.request.headers["X-Kairo-Client"]?.lowercase() in setOf("android", "wear", "ios", "watch")) "app" else "dashboard",
+                    M.DEFAULT_RECORDING_TITLE.t(call.lang(s)),
+                ),
+            )
         }
-        get("/{id}") { call.respond(s.recordingsRepo.get(call.userId(), call.uuidParam()) ?: notFound("Grabación")) }
+        get("/{id}") { call.respond(s.recordingsRepo.get(call.userId(), call.uuidParam()) ?: notFound(M.NF_RECORDING)) }
         rateLimit(RECORDING_LIMIT) {
             post("/{id}/segments") {
                 val up = call.receiveUpload()
-                val audio = up.file ?: badRequest("Falta el audio")
-                val seq = up.fields["seq"]?.toIntOrNull() ?: badRequest("Falta seq")
+                val audio = up.file ?: badRequest(M.MISSING_AUDIO)
+                val seq = up.fields["seq"]?.toIntOrNull() ?: badRequest(M.MISSING_FIELD, "seq")
                 val user = s.users.byId(call.userId())!!
                 call.respond(s.recordings.addSegment(user, call.uuidParam(), seq, up.fields["duration"]?.toIntOrNull() ?: 0, audio, up.fileName ?: "seg.m4a", up.contentType ?: "audio/mp4"))
             }
@@ -155,7 +163,7 @@ fun Route.systemRoutes(s: Services) {
                 val b = runCatching { call.receiveBody<RecordingFinish>() }.getOrDefault(RecordingFinish())
                 val user = s.users.byId(call.userId())!!
                 val id = call.uuidParam()
-                s.recordingsRepo.get(user.id, id) ?: notFound("Grabación")
+                s.recordingsRepo.get(user.id, id) ?: notFound(M.NF_RECORDING)
                 s.recordings.finish(user, id, b.title)
                 call.respond(HttpStatusCode.Accepted, OkResponse())
             }
@@ -164,19 +172,19 @@ fun Route.systemRoutes(s: Services) {
                 call.respond(CreatedCount(s.recordings.createTasks(user, call.uuidParam())))
             }
         }
-        delete("/{id}") { if (!s.recordingsRepo.delete(call.userId(), call.uuidParam())) notFound("Grabación"); call.respond(OkResponse()) }
+        delete("/{id}") { if (!s.recordingsRepo.delete(call.userId(), call.uuidParam())) notFound(M.NF_RECORDING); call.respond(OkResponse()) }
     }
 
-    // ------------------------------------------------------------ Ajustes, dispositivos, modelos
+    // ------------------------------------------------------------ Settings, devices, models
     get("/settings") { call.respond(SettingsResponse(s.settings.get(call.userId()), s.config.googleEnabled, s.ntfy.enabled)) }
     patch("/settings") {
         val patch = call.receiveJsonObject()
-        val updated = runCatching { s.settings.patch(call.userId(), patch) { s.nan.models() } }.getOrElse { badRequest(publicMessage(it, "Ajustes inválidos")) }
+        val updated = runCatching { s.settings.patch(call.userId(), patch) { s.nan.models() } }.getOrElse { badRequest(publicError(it, M.INVALID_SETTINGS)) }
         call.respond(SettingsResponse(updated, s.config.googleEnabled, s.ntfy.enabled))
     }
     get("/geocode") {
-        val q = call.request.queryParameters["q"] ?: badRequest("Falta q")
-        call.respond<List<GeoPlace>>(s.weather.geocode(q))
+        val q = call.request.queryParameters["q"] ?: badRequest(M.MISSING_FIELD, "q")
+        call.respond<List<GeoPlace>>(s.weather.geocode(q, call.lang(s)))
     }
     get("/models") { call.respond(ModelsResponse(runCatching { s.nan.models() }.getOrDefault(emptyList()))) }
     get("/devices") {
@@ -184,12 +192,12 @@ fun Route.systemRoutes(s: Services) {
         call.respond(s.users.devices(call.userId()).map { it.copy(current = it.id == current) })
     }
     delete("/devices/{id}") {
-        if (!s.users.revokeDevice(call.userId(), call.uuidParam())) notFound("Dispositivo")
+        if (!s.users.revokeDevice(call.userId(), call.uuidParam())) notFound(M.NF_DEVICE)
         s.auth.forgetSessions()
         call.respond(OkResponse())
     }
 
-    /** Lo que el teléfono necesita para programar alarmas locales y geovallas sin depender de push. */
+    /** What the phone needs to schedule local alarms and geofences without depending on push. */
     get("/sync/device") {
         val userId = call.userId()
         call.deviceId()?.let { s.users.touchDevice(it) }
@@ -204,20 +212,20 @@ fun Route.systemRoutes(s: Services) {
         )
     }
 
-    // ------------------------------------------------------------ Archivos (URL firmada, sin cabecera de auth)
-    // Se registra fuera de authenticate; ver Application.kt
+    // ------------------------------------------------------------ Files (signed URL, no auth header)
+    // Registered outside authenticate; see Application.kt
 
     // ------------------------------------------------------------ Google Calendar
     route("/integrations/google") {
         get { call.respond<GoogleStatus>(s.google.status(call.userId())) }
         post("/auth-url") {
-            if (!s.config.googleEnabled) badRequest("Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en el servidor")
-            // El callback sólo vale en este navegador: el nonce va en una cookie HttpOnly y firmado en `state`
+            if (!s.config.googleEnabled) badRequest(M.GOOGLE_NOT_CONFIGURED)
+            // The callback is only valid in this browser: the nonce goes in an HttpOnly cookie and signed in `state`
             val nonce = call.issueGoogleOAuthNonce(s.config.publicUrl.startsWith("https"))
             call.respond(GoogleAuthUrl(s.google.authUrl(call.userId(), nonce)))
         }
         post("/sync") {
-            val r = runCatching { s.google.sync(call.userId()) }.getOrElse { badRequest(publicMessage(it, "No se pudo sincronizar con Google. Intenta de nuevo.")) }
+            val r = runCatching { s.google.sync(call.userId()) }.getOrElse { badRequest(publicError(it, M.GOOGLE_SYNC_FAILED)) }
             call.respond(SyncResult(r.pushed, r.pulled, r.deleted))
         }
         get("/calendars") { call.respond<List<GoogleCalendarInfo>>(s.google.calendars(call.userId())) }
@@ -226,7 +234,7 @@ fun Route.systemRoutes(s: Services) {
             s.google.setCalendar(call.userId(), b.calendarId)
             call.respond(s.google.status(call.userId()))
         }
-        /** Calendario de Google compartido con la familia para los eventos familiares (null = el principal). */
+        /** Google calendar shared with the family for family events (null = the primary one). */
         post("/family-calendar") {
             val b = call.receiveBody<GoogleFamilyCalendarSelect>()
             s.google.setFamilyCalendar(call.userId(), b.calendarId?.takeIf { it.isNotBlank() })
@@ -240,27 +248,27 @@ fun Route.systemRoutes(s: Services) {
         get { call.respond<List<McpServer>>(s.mcp.list(call.userId())) }
         post {
             val b = call.receiveBody<McpCreate>()
-            if (b.name.isBlank()) badRequest("Nombre vacío")
-            // Sólo los errores de validación (mensajes propios) llegan al cliente
+            if (b.name.isBlank()) badRequest(M.EMPTY_NAME)
+            // Only validation errors (own messages) reach the client
             val server = try {
                 s.mcp.create(call.userId(), b.name, b.url, b.headers)
             } catch (e: IllegalArgumentException) {
-                badRequest(publicMessage(e, "Datos inválidos"))
+                badRequest(publicError(e, M.INVALID_DATA))
             }
             call.respond(HttpStatusCode.Created, server)
         }
-        patch("/{id}") { call.respond(s.mcp.update(call.userId(), call.uuidParam(), call.receiveBody<McpPatch>().enabled) ?: notFound("Servidor")) }
-        delete("/{id}") { if (!s.mcp.delete(call.userId(), call.uuidParam())) notFound("Servidor"); call.respond(OkResponse()) }
+        patch("/{id}") { call.respond(s.mcp.update(call.userId(), call.uuidParam(), call.receiveBody<McpPatch>().enabled) ?: notFound(M.NF_SERVER)) }
+        delete("/{id}") { if (!s.mcp.delete(call.userId(), call.uuidParam())) notFound(M.NF_SERVER); call.respond(OkResponse()) }
         post("/{id}/test") {
-            // Mensaje genérico: el detalle del fallo (conexión rechazada, timeout, código HTTP) queda sólo en el log
-            // para que la prueba no sirva para escanear puertos de la red interna
+            // Generic message: the detail of the failure (connection refused, timeout, HTTP code) stays only in the log
+            // so the test cannot be used to scan the internal network's ports
             val tools = runCatching { s.mcp.test(call.userId(), call.uuidParam()) }
-                .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; badRequest(app.kairo.integrations.McpClient.GENERIC_ERROR) }
+                .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; badRequest(M.MCP_CONNECT_FAILED) }
             call.respond(McpTestResult(tools))
         }
     }
 
-    // ------------------------------------------------------------ Exportar todo
+    // ------------------------------------------------------------ Export everything
     get("/export") {
         val u = call.userId()
         val now = Instant.now()
@@ -280,7 +288,7 @@ fun Route.systemRoutes(s: Services) {
         call.respondText(ApiJson.encodeToString(ExportData.serializer(), data), ContentType.Application.Json)
     }
 
-    // ------------------------------------------------------------ Tiempo real
+    // ------------------------------------------------------------ Real time
     webSocket("/ws") {
         val principal = call.principal<JWTPrincipal>() ?: return@webSocket
         val userId = principal.subject?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return@webSocket
@@ -289,7 +297,7 @@ fun Route.systemRoutes(s: Services) {
         val forward = launch {
             s.bus.flow(userId).collect { ev -> send(Frame.Text(ApiJson.encodeToString(ServerEvent.serializer(), ev))) }
         }
-        // Ping cada 25 s; se cierra si revocan el dispositivo o cuando vence el access token
+        // Ping every 25 s; it closes if the device is revoked or when the access token expires
         val pinger = launch {
             keepAliveWhileValid(expiresAt, { s.auth.deviceStatus(deviceId, userId.toString()) != false }) { forward.cancel() }
         }
@@ -302,36 +310,36 @@ fun Route.systemRoutes(s: Services) {
     }
 }
 
-/** Rutas públicas: salud, archivos firmados y callback OAuth. */
+/** Public routes: health, signed files and the OAuth callback. */
 fun Route.publicRoutes(s: Services) {
     get("/health") { call.respond(HealthResponse("ok", "1.0.0")) }
 
     get("/files/{id}") {
         val id = call.uuidParam()
-        val exp = call.request.queryParameters["exp"]?.toLongOrNull() ?: throw ApiException(HttpStatusCode.Forbidden, "Enlace inválido")
-        val sig = call.request.queryParameters["sig"] ?: throw ApiException(HttpStatusCode.Forbidden, "Enlace inválido")
-        if (!s.files.verify(id, exp, sig)) throw ApiException(HttpStatusCode.Forbidden, "Enlace expirado")
-        val f = s.files.get(id) ?: notFound("Archivo")
-        // Sandbox CSP; en línea sólo imágenes rasterizadas y audio, lo demás como adjunto
+        val exp = call.request.queryParameters["exp"]?.toLongOrNull() ?: throw ApiException(HttpStatusCode.Forbidden, M.INVALID_LINK)
+        val sig = call.request.queryParameters["sig"] ?: throw ApiException(HttpStatusCode.Forbidden, M.INVALID_LINK)
+        if (!s.files.verify(id, exp, sig)) throw ApiException(HttpStatusCode.Forbidden, M.LINK_EXPIRED)
+        val f = s.files.get(id) ?: notFound(M.NF_FILE)
+        // Sandbox CSP; inline only raster images and audio, everything else as an attachment
         call.respondStoredFile(f.bytes, f.contentType)
     }
 
     get("/integrations/google/callback") {
-        val state = call.request.queryParameters["state"] ?: badRequest("Falta state")
+        val state = call.request.queryParameters["state"] ?: badRequest(M.MISSING_FIELD, "state")
         val code = call.request.queryParameters["code"]
         val nonce = call.takeGoogleOAuthNonce(s.config.publicUrl.startsWith("https"))
         val userId = s.google.verifyState(state, nonce)
-            ?: badRequest("Estado OAuth inválido o expirado. Vuelve a conectar desde Ajustes, en este mismo navegador.")
+            ?: badRequest(M.OAUTH_STATE_INVALID)
         if (code == null) {
-            call.respondRedirect("/ajustes?google=cancelado")
+            call.respondRedirect("/settings?google=canceled")
             return@get
         }
         val ok = runCatching { s.google.handleCallback(userId, code) }
         if (ok.isSuccess) {
             s.scope.launch { runCatching { s.google.sync(userId) } }
-            call.respondRedirect("/ajustes?google=conectado")
+            call.respondRedirect("/settings?google=connected")
         } else {
-            call.respondRedirect("/ajustes?google=error")
+            call.respondRedirect("/settings?google=error")
         }
     }
 }

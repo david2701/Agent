@@ -7,6 +7,8 @@ import app.kairo.db.str
 import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
 import app.kairo.realtime.EventBus
+import app.kairo.util.Lang
+import app.kairo.util.Say
 import java.sql.ResultSet
 import java.time.Instant
 import java.util.UUID
@@ -21,10 +23,28 @@ object Kinds {
 }
 
 /**
- * Registro de todo lo que cambia (lo haga el agente, el dashboard o la app).
- * Permite ver qué hizo Kairo y deshacer creaciones y borrados.
+ * Log of everything that changes (whether the agent, the dashboard or the app did it).
+ * It shows what Kairo did and allows undoing creations and deletions.
+ * Summaries are stored in the language of whoever acted ([langOf]).
  */
-class ActivityRepo(private val db: Db, private val bus: EventBus, private val family: FamilyRepo) {
+class ActivityRepo(
+    private val db: Db,
+    private val bus: EventBus,
+    private val family: FamilyRepo,
+    private val langOf: suspend (UUID) -> Lang = { Lang.DEFAULT },
+) {
+
+    /** Records a change whose summary is rendered in the actor's language. */
+    suspend fun record(
+        userId: UUID,
+        kind: String,
+        entityType: String,
+        entityId: UUID?,
+        summary: Say,
+        source: String,
+        shared: Boolean = false,
+        alsoTo: Collection<UUID> = emptyList(),
+    ): Unit = record(userId, kind, entityType, entityId, summary.text(runCatching { langOf(userId) }.getOrDefault(Lang.DEFAULT)), source, shared, alsoTo)
 
     suspend fun record(
         userId: UUID,
@@ -33,9 +53,9 @@ class ActivityRepo(private val db: Db, private val bus: EventBus, private val fa
         entityId: UUID?,
         summary: String,
         source: String,
-        /** Si es algo compartido, el cambio llega en vivo a toda la familia. */
+        /** If it is something shared, the change reaches the whole family live. */
         shared: Boolean = false,
-        /** Otros usuarios que deben refrescar (p. ej. a quien se le programó un recordatorio). */
+        /** Other users who must refresh (e.g. the person a reminder was set for). */
         alsoTo: Collection<UUID> = emptyList(),
     ) {
         db.tx {
@@ -47,7 +67,7 @@ class ActivityRepo(private val db: Db, private val bus: EventBus, private val fa
         bus.entityChanged(audience(userId, shared, alsoTo), entityType, entityId, kind)
     }
 
-    /** Avisa a los clientes conectados de un cambio menor que no se guarda en el historial. */
+    /** Tells the connected clients about a minor change that is not stored in the history. */
     suspend fun notify(userId: UUID, entityType: String, entityId: UUID?, kind: String, shared: Boolean = false) =
         bus.entityChanged(audience(userId, shared, emptyList()), entityType, entityId, kind)
 
