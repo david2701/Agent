@@ -12,6 +12,7 @@
 		11DB370242ECF48BCD740BDE /* ListsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C304053BD5B8D2CC40E389D1 /* ListsScreen.swift */; };
 		1B094C983E8CBDA0B438E320 /* KairoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857A38C946ECE0C1BEBD3EEF /* KairoApp.swift */; };
 		1B9B162022F98F2CA33981BD /* TodayScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1679E4951BB72CAF5529474E /* TodayScreen.swift */; };
+		1E856F6C810B6F72F9FCB3F6 /* FamilyScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77144B41F9E3F7564F77397 /* FamilyScreen.swift */; };
 		1ECA95E0AF7B7F3803E5BFD6 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = ED9C53F6EB9DD823B1B82795 /* KairoCore */; };
 		1F995A1BFC40C8A78E0B88D2 /* RemindersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2D562162860B13CEB6A7FC6 /* RemindersScreen.swift */; };
 		23E68E7CF05BEE67E352F3C5 /* KairoWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FF533D0653FE2A4FA01BAB68 /* KairoWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -39,11 +40,11 @@
 		8925A707400684B64A9EB091 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0DDAEA7300F693FAAFA0472B /* KairoUI */; };
 		8B4DB8F2E4033506305BD12E /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47745F20972C8216F5F5159B /* AppConfig.swift */; };
 		8DCF45AD02809D1B0FE154E3 /* KairoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 48EE6490929F9923A9D5E880 /* KairoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		8F85EE2E9209A3FABB3714B3 /* Pending.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC528C9E5F8716127C4149CD /* Pending.swift */; };
 		A1B2D93F93A8A9B709980371 /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E31B1DAFA869872A6C83069 /* Intents.swift */; };
 		A53834D73882B6630C6F62F8 /* Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979B193DF41BFF42244BBBF9 /* Rows.swift */; };
 		A84F7500D9F0FF75C87CC0E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3568EE34CF8AEAB25B548074 /* Assets.xcassets */; };
 		A9E3B51B3BB610170F9B39A7 /* NotesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EE4C28B55B879007F5D6C3 /* NotesScreen.swift */; };
+		AB72E4DEB4E77EA3ACF1D994 /* MoreScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963DF1176B1DEB3C50D90517 /* MoreScreens.swift */; };
 		AC055CF0B9EE8E79466E9FA2 /* KairoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FBCC43C160C59777C656610 /* KairoWatchApp.swift */; };
 		ADF87BCE7D88AB8C132F345A /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 305CF04161096F9D8756F9FF /* KairoCore */; };
 		B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E385C05FD9D47E0E19203EE /* TasksScreen.swift */; };
@@ -63,6 +64,7 @@
 		D7352370AAFE3FE9FA9B794B /* VoiceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FC7CD3EB2375E4566F6D14 /* VoiceLiveActivity.swift */; };
 		D9B777416E744E4262B7D603 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = D51B6538AA2C11FD51FF4D24 /* KairoCore */; };
 		DD1ADA0689185064F2FD7A66 /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F3D5EADDFCF5F97A5E8E312 /* KairoCore */; };
+		E6DD18D1C89333C5AB1D61CD /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0BAAFA2EDE0F01F4D5142C /* SettingsScreen.swift */; };
 		E946A8251FADBA9DBD7EFAE5 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47745F20972C8216F5F5159B /* AppConfig.swift */; };
 		F01D9C56AE43158924220086 /* Loadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50047D865C40A2A2F8B4FD03 /* Loadable.swift */; };
 		F3EBF077B5F0C795BD053D01 /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556F6860B7C3E208A85E22F8 /* LoginScreen.swift */; };
@@ -172,12 +174,15 @@
 		873CF4F6695286601659198D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyFields.swift; sourceTree = "<group>"; };
 		8B7733A998E5379EABF0A30B /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		8F0BAAFA2EDE0F01F4D5142C /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityTypes.swift; sourceTree = "<group>"; };
 		95FC7CD3EB2375E4566F6D14 /* VoiceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLiveActivity.swift; sourceTree = "<group>"; };
+		963DF1176B1DEB3C50D90517 /* MoreScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreens.swift; sourceTree = "<group>"; };
 		979B193DF41BFF42244BBBF9 /* Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rows.swift; sourceTree = "<group>"; };
 		97EE4C28B55B879007F5D6C3 /* NotesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesScreen.swift; sourceTree = "<group>"; };
 		9B4C1741C3580B70EDFCD6C6 /* TodayWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayWidget.swift; sourceTree = "<group>"; };
+		A77144B41F9E3F7564F77397 /* FamilyScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyScreen.swift; sourceTree = "<group>"; };
 		B40D1C8672319D772CC62B91 /* KairoWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KairoWatchWidgets.entitlements; sourceTree = "<group>"; };
 		BA4B1F6EA6AD5007CB02D4E7 /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
 		C304053BD5B8D2CC40E389D1 /* ListsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListsScreen.swift; sourceTree = "<group>"; };
@@ -192,7 +197,6 @@
 		F1BC264B672520EFA64455B6 /* KairoWatchWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoWatchWidgets.swift; sourceTree = "<group>"; };
 		F568FDAA84EC50943EFFE47A /* VoiceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceEngine.swift; sourceTree = "<group>"; };
 		F82D1DF35F72639DAEB61DDB /* WatchLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLink.swift; sourceTree = "<group>"; };
-		FC528C9E5F8716127C4149CD /* Pending.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pending.swift; sourceTree = "<group>"; };
 		FF533D0653FE2A4FA01BAB68 /* KairoWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = KairoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -364,11 +368,13 @@
 			children = (
 				BA4B1F6EA6AD5007CB02D4E7 /* CalendarScreen.swift */,
 				79B560A4B3CF5764C3495A4E /* ChatScreen.swift */,
+				A77144B41F9E3F7564F77397 /* FamilyScreen.swift */,
 				C304053BD5B8D2CC40E389D1 /* ListsScreen.swift */,
 				556F6860B7C3E208A85E22F8 /* LoginScreen.swift */,
+				963DF1176B1DEB3C50D90517 /* MoreScreens.swift */,
 				97EE4C28B55B879007F5D6C3 /* NotesScreen.swift */,
-				FC528C9E5F8716127C4149CD /* Pending.swift */,
 				D2D562162860B13CEB6A7FC6 /* RemindersScreen.swift */,
+				8F0BAAFA2EDE0F01F4D5142C /* SettingsScreen.swift */,
 				707F7FF55F1FD406C59510DE /* TalkView.swift */,
 				3E385C05FD9D47E0E19203EE /* TasksScreen.swift */,
 				1679E4951BB72CAF5529474E /* TodayScreen.swift */,
@@ -664,18 +670,20 @@
 				49D962722B3413C8CD9F4C94 /* ChatScreen.swift in Sources */,
 				C89275E93D4E94EABF00AC2F /* DeviceActionService.swift in Sources */,
 				7DF1562C34697CF19C2EF037 /* FamilyFields.swift in Sources */,
+				1E856F6C810B6F72F9FCB3F6 /* FamilyScreen.swift in Sources */,
 				4D7CF4DBD2641E627C322CCB /* Intents.swift in Sources */,
 				1B094C983E8CBDA0B438E320 /* KairoApp.swift in Sources */,
 				11DB370242ECF48BCD740BDE /* ListsScreen.swift in Sources */,
 				F01D9C56AE43158924220086 /* Loadable.swift in Sources */,
 				F3EBF077B5F0C795BD053D01 /* LoginScreen.swift in Sources */,
 				555FAE1C2571BAFF435E761B /* MeetingRecorder.swift in Sources */,
+				AB72E4DEB4E77EA3ACF1D994 /* MoreScreens.swift in Sources */,
 				A9E3B51B3BB610170F9B39A7 /* NotesScreen.swift in Sources */,
 				B58BFA163634DEA089B883CC /* NotificationService.swift in Sources */,
-				8F85EE2E9209A3FABB3714B3 /* Pending.swift in Sources */,
 				1F995A1BFC40C8A78E0B88D2 /* RemindersScreen.swift in Sources */,
 				C6BD8E282EAB9C68652BBAE8 /* RootView.swift in Sources */,
 				A53834D73882B6630C6F62F8 /* Rows.swift in Sources */,
+				E6DD18D1C89333C5AB1D61CD /* SettingsScreen.swift in Sources */,
 				C9AC3A239D61DD317D0AACCC /* SyncService.swift in Sources */,
 				4F19CCD0ACB9FC0AFB96FDDE /* TalkView.swift in Sources */,
 				B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */,
