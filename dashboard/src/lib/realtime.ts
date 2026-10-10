@@ -5,10 +5,11 @@ import { toast } from '@/components/ui/toast'
 import { api, getAccessToken, refreshSession } from './api'
 import { entityHref } from './entities'
 import { firstName } from './family'
+import { t } from './i18n'
 import { invalidateEntity, keys } from './queries'
 import type { FamilyInfo, NoticesResponse, ServerEvent } from './types'
 
-/* Estado de la conexión en tiempo real (para un aviso discreto si se cae). */
+/* Real-time connection state (for a discreet notice if it drops). */
 type ConnState = 'connecting' | 'open' | 'offline'
 let connState: ConnState = 'connecting'
 const connSubs = new Set<() => void>()
@@ -26,7 +27,7 @@ export function useRealtimeState() {
   )
 }
 
-/* Notificaciones del navegador */
+/* Browser notifications */
 const ASKED_KEY = 'kairo-notif-asked'
 
 export function notificationsSupported() {
@@ -38,7 +39,7 @@ export async function requestNotifications(): Promise<NotificationPermission | '
   try {
     localStorage.setItem(ASKED_KEY, '1')
   } catch {
-    /* nada */
+    /* no storage */
   }
   return Notification.requestPermission()
 }
@@ -51,7 +52,7 @@ function alreadyAsked() {
   }
 }
 
-/** Notificación del sistema solo si la pestaña no está a la vista (si está, basta el aviso en pantalla). */
+/** System notification only when the tab is not visible (when it is, the on-screen notice is enough). */
 function systemNotification(body: string, tag: string, onClick?: () => void, title = 'Kairo') {
   if (!notificationsSupported() || Notification.permission !== 'granted' || document.visibilityState === 'visible') return
   try {
@@ -62,7 +63,7 @@ function systemNotification(body: string, tag: string, onClick?: () => void, tit
       n.close()
     }
   } catch {
-    /* algunos navegadores solo permiten notificaciones desde un service worker */
+    /* some browsers only allow notifications from a service worker */
   }
 }
 
@@ -83,14 +84,14 @@ function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireA
 
   const actions = [
     {
-      label: 'Hecho',
+      label: t('realtime.done'),
       onClick: async () => {
         await api.post(`/reminders/${data.id}/done`)
         invalidateEntity(qc, 'reminder')
       },
     },
     {
-      label: 'Posponer 10 min',
+      label: t('realtime.snooze10'),
       onClick: async () => {
         await api.post(`/reminders/${data.id}/snooze`, { minutes: 10 })
         invalidateEntity(qc, 'reminder')
@@ -100,7 +101,7 @@ function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireA
   const canAsk = notificationsSupported() && Notification.permission === 'default' && !alreadyAsked()
   if (canAsk) {
     actions.push({
-      label: 'Activar avisos',
+      label: t('realtime.enableAlerts'),
       onClick: async () => {
         await requestNotifications()
       },
@@ -110,7 +111,9 @@ function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireA
   toast({
     id: `rem-${key}`,
     title: data.text,
-    description: [data.recurring ? 'Recordatorio que se repite' : 'Recordatorio', from && `de ${from}`].filter(Boolean).join(' '),
+    description: [data.recurring ? t('realtime.reminderRepeating') : t('realtime.reminder'), from && t('realtime.fromName', { name: from })]
+      .filter(Boolean)
+      .join(' '),
     actions,
     duration: 0,
     icon: createElement(BellRinging, { className: 'size-5 text-accent-strong' }),
@@ -122,11 +125,11 @@ function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireA
 type NoticeEvent = Extract<ServerEvent, { type: 'family.notice' }>['data']
 const seenNotices = new Set<string>()
 
-/** Aviso de la familia: tarjeta en pantalla, notificación si la pestaña está oculta y recarga de Novedades. */
+/** Family notice: an on-screen card, a system notification if the tab is hidden, and a refresh of Updates. */
 function onFamilyNotice(qc: QueryClient, data: NoticeEvent, navigate?: (to: string) => void) {
   if (seenNotices.has(data.id)) return
   seenNotices.add(data.id)
-  // Cuenta optimista mientras llega la lista nueva (el indicador de la barra responde al instante).
+  // Optimistic count while the new list arrives (the bar indicator reacts instantly).
   const cached = qc.getQueryData<NoticesResponse>(keys.notices)
   if (cached && !cached.notices.some((n) => n.id === data.id)) {
     qc.setQueryData<NoticesResponse>(keys.notices, {
@@ -149,7 +152,7 @@ function onFamilyNotice(qc: QueryClient, data: NoticeEvent, navigate?: (to: stri
   }
   void qc.invalidateQueries({ queryKey: keys.notices })
 
-  const href = data.entityType && data.entityId ? (data.entityType === 'family' ? '/familia' : entityHref(data.entityType, data.entityId)) : '/familia'
+  const href = data.entityType && data.entityId ? (data.entityType === 'family' ? '/family' : entityHref(data.entityType, data.entityId)) : '/family'
   const open = () => {
     void api
       .post('/notices/read', { ids: [data.id] })
@@ -161,13 +164,13 @@ function onFamilyNotice(qc: QueryClient, data: NoticeEvent, navigate?: (to: stri
     id: `notice-${data.id}`,
     title: data.title,
     description: data.body || undefined,
-    actions: navigate && href ? [{ label: 'Ver', onClick: open }] : undefined,
+    actions: navigate && href ? [{ label: t('realtime.view'), onClick: open }] : undefined,
     icon: createElement(UsersThree, { className: 'size-5 text-muted' }),
   })
   systemNotification(data.body || data.title, `notice-${data.id}`, open, data.body ? data.title : 'Kairo')
 }
 
-/** WebSocket /api/ws con reconexión exponencial. */
+/** WebSocket /api/ws with exponential reconnection. */
 export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigate?: (to: string) => void) {
   const qc = useQueryClient()
 
@@ -194,8 +197,8 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigat
           qc.setQueryData(keys.briefing, msg.data)
           toast({
             id: 'briefing',
-            title: 'Tu resumen del día está listo',
-            actions: onBriefing ? [{ label: 'Ver', onClick: onBriefing }] : undefined,
+            title: t('realtime.briefingReady'),
+            actions: onBriefing ? [{ label: t('realtime.view'), onClick: onBriefing }] : undefined,
           })
           break
         case 'recording.updated':
@@ -221,7 +224,7 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigat
       if (stopped) return
       setConn(attempt === 0 ? 'connecting' : connState)
       let token = getAccessToken()
-      // Si la conexión anterior nunca abrió, puede ser un token vencido.
+      // If the previous connection never opened, the token may have expired.
       if (!token || (attempt > 0 && !opened)) token = (await refreshSession())?.accessToken ?? null
       if (!token || stopped) {
         if (!stopped) schedule()
@@ -233,7 +236,7 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigat
       ws = sock
       sock.onopen = () => {
         opened = true
-        if (attempt > 0) void qc.invalidateQueries() // recupera lo que pasó sin conexión
+        if (attempt > 0) void qc.invalidateQueries() // catch up on what happened while offline
         attempt = 0
         setConn('open')
       }
@@ -241,12 +244,12 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigat
         try {
           handle(JSON.parse(String(m.data)) as ServerEvent)
         } catch {
-          /* mensaje desconocido */
+          /* unknown message */
         }
       }
       sock.onclose = (ev) => {
         if (ws === sock) ws = null
-        // 1008: el servidor cerró porque venció el token; el siguiente intento lo renueva primero
+        // 1008: the server closed because the token expired; the next attempt renews it first
         if (ev.code === 1008) opened = false
         schedule()
       }

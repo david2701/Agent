@@ -21,6 +21,7 @@ import { Kbd } from '@/components/ui/misc'
 import { newTurn, useAgentRunner } from '@/lib/agent'
 import { cn } from '@/lib/cn'
 import { useFamilyInfo } from '@/lib/family'
+import { t } from '@/lib/i18n'
 import { useTheme } from '@/lib/theme'
 import { ALL_NAV } from './nav'
 
@@ -40,7 +41,7 @@ function normalize(s: string) {
     .replace(/[̀-ͯ]/g, '')
 }
 
-/** Paleta de comandos (Ctrl/Cmd+K): preguntar a Kairo desde cualquier sitio o saltar a una sección. */
+/** Command palette (Ctrl/Cmd+K): ask Kairo from anywhere or jump to a section. */
 export function CommandPalette({ open, onClose, prefill }: { open: boolean; onClose: () => void; prefill: string }) {
   const ref = useRef<HTMLDialogElement>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -66,7 +67,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
     }
   }, [open, prefill])
 
-  // Al cerrar se olvida la conversación rápida (salvo que siga respondiendo).
+  // Closing forgets the quick conversation (unless it is still replying).
   useEffect(() => {
     if (!open && !runner.busy) {
       const t = setTimeout(() => {
@@ -85,27 +86,27 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
   const commands = useMemo<Command[]>(() => {
     const pages: Command[] = ALL_NAV.map((n) => {
       const Icon = n.icon
-      return { id: `nav-${n.to}`, label: n.label, hint: 'Ir a', icon: <Icon className="size-[18px]" />, run: () => go(n.to) }
+      return { id: `nav-${n.to}`, label: t(n.labelKey), hint: t('palette.goTo'), icon: <Icon className="size-[18px]" />, run: () => go(n.to) }
     })
     const actions: Command[] = [
-      { id: 'new-note', label: 'Nueva nota', icon: <NotePencil className="size-[18px]" />, run: () => go('/notas/nueva'), keywords: 'crear escribir' },
-      { id: 'new-task', label: 'Nueva tarea', icon: <CheckSquare className="size-[18px]" />, run: () => go('/tareas?nueva=1'), keywords: 'crear pendiente' },
-      { id: 'new-reminder', label: 'Nuevo recordatorio', icon: <Bell className="size-[18px]" />, run: () => go('/recordatorios?nuevo=1'), keywords: 'crear aviso alarma' },
-      { id: 'new-event', label: 'Nuevo evento', icon: <CalendarPlus className="size-[18px]" />, run: () => go('/calendario?nuevo=1'), keywords: 'crear cita reunion calendario' },
+      { id: 'new-note', label: t('palette.newNote'), icon: <NotePencil className="size-[18px]" />, run: () => go('/notes/new'), keywords: t('palette.newNote.kw') },
+      { id: 'new-task', label: t('palette.newTask'), icon: <CheckSquare className="size-[18px]" />, run: () => go('/tasks?new=1'), keywords: t('palette.newTask.kw') },
+      { id: 'new-reminder', label: t('palette.newReminder'), icon: <Bell className="size-[18px]" />, run: () => go('/reminders?new=1'), keywords: t('palette.newReminder.kw') },
+      { id: 'new-event', label: t('palette.newEvent'), icon: <CalendarPlus className="size-[18px]" />, run: () => go('/calendar?new=1'), keywords: t('palette.newEvent.kw') },
       ...(fam.isAdmin
-        ? [{ id: 'invite', label: 'Invitar a la familia', icon: <UserPlus className="size-[18px]" />, run: () => go('/familia?invitar=1'), keywords: 'familia miembro codigo invitacion' }]
+        ? [{ id: 'invite', label: t('palette.invite'), icon: <UserPlus className="size-[18px]" />, run: () => go('/family?invite=1'), keywords: t('palette.invite.kw') }]
         : []),
       ...(fam.hasOthers
-        ? [{ id: 'notice', label: 'Enviar aviso a la familia', icon: <PaperPlaneTilt className="size-[18px]" />, run: () => go('/familia#aviso'), keywords: 'familia mensaje avisar' }]
+        ? [{ id: 'notice', label: t('palette.notice'), icon: <PaperPlaneTilt className="size-[18px]" />, run: () => go('/family#notice'), keywords: t('palette.notice.kw') }]
         : []),
       {
         id: 'theme',
-        label: resolved === 'dark' ? 'Usar tema claro' : 'Usar tema oscuro',
+        label: resolved === 'dark' ? t('palette.themeLight') : t('palette.themeDark'),
         icon: resolved === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />,
         run: () => {
           setMode(resolved === 'dark' ? 'light' : 'dark')
         },
-        keywords: 'tema modo oscuro claro apariencia',
+        keywords: t('palette.theme.kw'),
       },
     ]
     return [...actions, ...pages]
@@ -117,7 +118,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
     ? {
         id: 'ask',
         label: query.trim(),
-        hint: 'Preguntar a Kairo',
+        hint: t('palette.askKairo'),
         icon: <Sparkle className="size-[18px]" />,
         run: () => void askKairo(query.trim()),
       }
@@ -163,7 +164,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
   return createPortal(
     <dialog
       ref={ref}
-      aria-label="Preguntar a Kairo o buscar"
+      aria-label={t('palette.dialogLabel')}
       onCancel={(e) => {
         e.preventDefault()
         onClose()
@@ -181,8 +182,8 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={answering ? 'Pregunta algo más' : 'Pregúntale a Kairo o busca una sección'}
-            aria-label="Pregunta o comando"
+            placeholder={answering ? t('palette.followUp') : t('palette.placeholder')}
+            aria-label={t('palette.inputLabel')}
             role="combobox"
             aria-expanded={!answering}
             aria-controls="palette-options"
@@ -192,7 +193,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
           {answering && query.trim() ? (
             <button
               type="button"
-              aria-label="Enviar"
+              aria-label={t('common.send')}
               onClick={() => void askKairo(query.trim())}
               disabled={runner.busy}
               className="flex size-8 items-center justify-center rounded-full bg-accent text-on-accent active:scale-95 disabled:opacity-40"
@@ -209,7 +210,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
             <div className="grid gap-4 px-4 py-4">
               <ThreadItems items={items} animateNew compact />
               {runner.turn?.status === 'streaming' && !runner.turn.text && runner.turn.tools.length === 0 && (
-                <p className="k-shimmer-text text-base">Pensando…</p>
+                <p className="k-shimmer-text text-base">{t('palette.thinking')}</p>
               )}
             </div>
           ) : (
@@ -227,7 +228,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
                   >
                     <span className={cn('flex shrink-0', c.id === 'ask' ? 'text-accent-strong' : 'text-faint')}>{c.icon}</span>
                     <span className="min-w-0 flex-1 truncate">
-                      {c.id === 'ask' && <span className="mr-1.5 text-muted">Preguntar a Kairo:</span>}
+                      {c.id === 'ask' && <span className="mr-1.5 text-muted">{t('palette.askKairoColon')}</span>}
                       <span className={cn(c.id === 'ask' ? 'text-fg' : '')}>{c.label}</span>
                     </span>
                     {c.hint && c.id !== 'ask' && <span className="shrink-0 text-sm text-faint">{c.hint}</span>}
@@ -235,7 +236,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
                   </button>
                 </li>
               ))}
-              {options.length === 0 && <li className="px-3 py-6 text-center text-base text-muted">Sin resultados</li>}
+              {options.length === 0 && <li className="px-3 py-6 text-center text-base text-muted">{t('palette.noResults')}</li>}
             </ul>
           )}
         </div>
@@ -243,7 +244,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
         <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-sm text-faint">
           {answering ? (
             <>
-              <span className="truncate">{runner.busy ? 'Kairo está respondiendo…' : 'Puedes seguir preguntando aquí.'}</span>
+              <span className="truncate">{runner.busy ? t('palette.replying') : t('palette.keepAsking')}</span>
               {conversationId && (
                 <button
                   type="button"
@@ -251,7 +252,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
                   className="flex shrink-0 items-center gap-1.5 rounded-[8px] px-2 py-1 font-medium text-fg transition-colors hover:bg-surface-2"
                 >
                   <ChatCircleDots className="size-4" />
-                  Abrir conversación
+                  {t('palette.openConversation')}
                 </button>
               )}
             </>
@@ -259,10 +260,10 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
             <>
               <span className="hidden items-center gap-1.5 sm:flex">
                 <Kbd>↑</Kbd>
-                <Kbd>↓</Kbd> para moverte
+                <Kbd>↓</Kbd> {t('palette.toMove')}
               </span>
               <span className="flex items-center gap-1.5">
-                <Kbd>Enter</Kbd> para elegir
+                <Kbd>Enter</Kbd> {t('palette.toSelect')}
               </span>
             </>
           )}

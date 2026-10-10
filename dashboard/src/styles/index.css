@@ -18,7 +18,7 @@
   font-display: swap;
 }
 
-/* Tokens de DESIGN.md. Claro por defecto, oscuro con la clase .dark en <html>. */
+/* DESIGN.md tokens. Light by default, dark with the .dark class on <html>. */
 :root {
   --bg: #f3f4f5;
   --surface: #fcfcfd;
@@ -79,7 +79,7 @@
   --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
-  /* Escala web: 12 / 13 / 14 (cuerpo) / 16 / 20 / 28 / 40 */
+  /* Web scale: 12 / 13 / 14 (body) / 16 / 20 / 28 / 40 */
   --text-*: initial;
   --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;
@@ -96,7 +96,7 @@
   --text-2xl: 2.5rem;
   --text-2xl--line-height: 2.75rem;
 
-  /* Radios: controles 10px, tarjetas 16px, píldoras completas */
+  /* Radii: controls 10px, cards 16px, full pills */
   --radius-control: 10px;
   --radius-card: 16px;
 
@@ -156,7 +156,7 @@
     color: inherit;
   }
 
-  /* Los elementos de una grilla pueden encogerse: evita que un texto truncado ensanche la columna. */
+  /* Grid items may shrink: keeps truncated text from widening the column. */
   .grid > * {
     min-width: 0;
   }
@@ -165,7 +165,7 @@
     background: var(--scrim);
   }
 
-  /* Barra de desplazamiento discreta */
+  /* Discreet scrollbar */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
@@ -173,7 +173,7 @@
 }
 
 @layer components {
-  /* Diálogos nativos con entrada/salida suave (CSS, sin JS) */
+  /* Native dialogs with a smooth enter/exit (CSS, no JS) */
   .k-dialog {
     opacity: 0;
     transform: translateY(8px) scale(0.985);
@@ -224,7 +224,7 @@
     animation: k-shimmer 1.6s var(--ease-kairo) infinite;
   }
 
-  /* Markdown de Kairo y de las notas */
+  /* Markdown of Kairo's replies and of notes */
   .k-prose {
     @apply text-base leading-relaxed text-fg;
     overflow-wrap: anywhere;
@@ -332,7 +332,7 @@
   }
 }
 
-/* Línea de herramienta en curso: brillo que recorre el texto (solo mientras trabaja) */
+/* Tool line in progress: a shimmer sweeps across the text (only while it works) */
 .k-shimmer-text {
   background: linear-gradient(90deg, var(--text-muted) 20%, var(--text) 50%, var(--text-muted) 80%);
   background-size: 220% 100%;
@@ -342,7 +342,7 @@
   animation: k-text-shimmer 1.9s linear infinite;
 }
 
-/* Cursor fijo al final del texto que llega en streaming */
+/* Fixed cursor at the end of text that is streaming in */
 .k-streaming > :last-child::after {
   content: '';
   display: inline-block;

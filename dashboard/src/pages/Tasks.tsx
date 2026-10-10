@@ -28,9 +28,10 @@ import { Chip, PageHeader, Segmented } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { PRIORITY_LABEL, STATUS_LABEL } from '@/lib/entities'
+import { priorityLabel, statusLabel } from '@/lib/entities'
 import { useFamilyInfo } from '@/lib/family'
 import { isoDate } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { useTaskActions, type TaskPatch } from '@/lib/mutations'
 import { invalidateEntity, keys, useProjects, useTasks, useTasksAssignedToMe } from '@/lib/queries'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/lib/types'
@@ -38,46 +39,46 @@ import { undoLatest } from '@/lib/undo'
 import { useStored } from '@/lib/useStored'
 
 const COLUMNS: TaskStatus[] = ['todo', 'doing', 'done']
-/** all, none (sin proyecto), mine (asignadas a mí) o el id de un proyecto */
+/** all, none (no project), mine (assigned to me) or a project id */
 type Filter = 'all' | 'none' | 'mine' | string
 
-export default function Tareas() {
+export default function TasksPage() {
   const qc = useQueryClient()
   const [params, setParams] = useSearchParams()
   const tasks = useTasks()
   const projects = useProjects()
   const fam = useFamilyInfo()
   const [view, setView] = useStored<'board' | 'list'>('kairo-tasks-view', 'board')
-  const [filter, setFilter] = useState<Filter>(() => params.get('proyecto') ?? (params.get('asignadas') ? 'mine' : 'all'))
+  const [filter, setFilter] = useState<Filter>(() => params.get('project') ?? (params.get('assigned') ? 'mine' : 'all'))
   const mine = useTasksAssignedToMe(filter === 'mine' || fam.hasOthers)
   const isProject = filter !== 'all' && filter !== 'none' && filter !== 'mine'
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
   const [projectsOpen, setProjectsOpen] = useState(false)
   const { update, complete } = useTaskActions()
 
-  // Enlaces profundos: ?tarea=id, ?nueva=1, ?proyecto=id
+  // Deep links: ?task=id, ?new=1, ?project=id, ?assigned=1
   useEffect(() => {
-    const tid = params.get('tarea')
+    const tid = params.get('task')
     if (tid && tasks.data) {
-      const t = tasks.data.find((x) => x.id === tid)
-      if (t) setEditing(t)
-      params.delete('tarea')
+      const found = tasks.data.find((x) => x.id === tid)
+      if (found) setEditing(found)
+      params.delete('task')
       setParams(params, { replace: true })
     }
-    if (params.get('nueva')) {
+    if (params.get('new')) {
       setEditing('new')
-      params.delete('nueva')
+      params.delete('new')
       setParams(params, { replace: true })
     }
-    const pid = params.get('proyecto')
+    const pid = params.get('project')
     if (pid) {
       setFilter(pid)
-      params.delete('proyecto')
+      params.delete('project')
       setParams(params, { replace: true })
     }
-    if (params.get('asignadas')) {
+    if (params.get('assigned')) {
       setFilter('mine')
-      params.delete('asignadas')
+      params.delete('assigned')
       setParams(params, { replace: true })
     }
   }, [params, setParams, tasks.data])
@@ -99,16 +100,16 @@ export default function Tareas() {
         projectId: isProject ? filter : undefined,
         assigneeId: filter === 'mine' && fam.me ? fam.me : undefined,
       }),
-    onSuccess: (t) => {
+    onSuccess: (task) => {
       invalidateEntity(qc, 'task')
       toast({
-        title: 'Tarea creada',
-        description: t.title,
+        title: t('tasks.created'),
+        description: task.title,
         tone: 'success',
-        actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'task', t.id, 'created').catch((e) => toastError(e, 'No se pudo deshacer')) }],
+        actions: [{ label: t('common.undo'), onClick: () => undoLatest(qc, 'task', task.id, 'created').catch((e) => toastError(e, t('common.couldNotUndo'))) }],
       })
     },
-    onError: (e) => toastError(e, 'No se pudo crear la tarea'),
+    onError: (e) => toastError(e, t('tasks.err.create')),
   })
 
   const counts = useMemo(() => {
@@ -125,34 +126,34 @@ export default function Tareas() {
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
       <PageHeader
-        title="Tareas"
+        title={t('nav.tasks')}
         actions={
           <>
             <Segmented
-              label="Vista"
+              label={t('tasks.view')}
               value={view}
               onChange={setView}
               options={[
-                { value: 'board', label: 'Tablero', icon: <Kanban className="size-4" /> },
-                { value: 'list', label: 'Lista', icon: <ListBullets className="size-4" /> },
+                { value: 'board', label: t('tasks.board'), icon: <Kanban className="size-4" /> },
+                { value: 'list', label: t('tasks.list'), icon: <ListBullets className="size-4" /> },
               ]}
             />
             <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
-              Nueva tarea
+              {t('tasks.new')}
             </Button>
           </>
         }
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto scrollbar-none max-sm:-mx-4 max-sm:px-4" role="group" aria-label="Filtrar por proyecto">
+        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto scrollbar-none max-sm:-mx-4 max-sm:px-4" role="group" aria-label={t('tasks.filterProject')}>
           <Chip selected={filter === 'all'} onClick={() => setFilter('all')}>
-            Todas <span className="font-mono text-xs opacity-70">{counts.all}</span>
+            {t('common.allFem')} <span className="font-mono text-xs opacity-70">{counts.all}</span>
           </Chip>
           {(fam.hasOthers || filter === 'mine') && (
             <Chip selected={filter === 'mine'} onClick={() => setFilter('mine')}>
               <UserCircle className="size-3.5" />
-              Asignadas a mí <span className="font-mono text-xs opacity-70">{counts.mine}</span>
+              {t('tasks.assignedToMe')} <span className="font-mono text-xs opacity-70">{counts.mine}</span>
             </Chip>
           )}
           {(projects.data ?? []).map((p) => (
@@ -161,16 +162,16 @@ export default function Tareas() {
             </Chip>
           ))}
           <Chip selected={filter === 'none'} onClick={() => setFilter('none')}>
-            Sin proyecto <span className="font-mono text-xs opacity-70">{counts.none}</span>
+            {t('tasks.noProject')} <span className="font-mono text-xs opacity-70">{counts.none}</span>
           </Chip>
         </div>
         <Button size="sm" variant="ghost" icon={<FolderSimple className="size-4" />} onClick={() => setProjectsOpen(true)}>
-          Proyectos
+          {t('tasks.projects')}
         </Button>
       </div>
 
       <QuickAdd
-        onAdd={(t) => quickAdd.mutate(t)}
+        onAdd={(title) => quickAdd.mutate(title)}
         loading={quickAdd.isPending}
         projectName={projects.data?.find((p) => p.id === filter)?.name}
         mine={filter === 'mine'}
@@ -183,20 +184,20 @@ export default function Tareas() {
       ) : filter === 'mine' && visible.length === 0 ? (
         <EmptyState
           icon={<UserCircle />}
-          title="Nada asignado a ti"
-          description="Cuando alguien de la familia te asigne una tarea, aparece aquí y te llega un aviso."
+          title={t('tasks.emptyMine')}
+          description={t('tasks.emptyMineHint')}
         />
       ) : (tasks.data ?? []).length === 0 ? (
         <EmptyState
           icon={<CheckSquare />}
-          title="No tienes tareas"
-          description="Escribe una arriba o pídele a Kairo: “agrega comprar el regalo de mamá para el viernes”."
+          title={t('tasks.empty')}
+          description={t('tasks.emptyHint')}
         />
       ) : view === 'board' ? (
         <Board
           tasks={visible}
           onOpen={setEditing}
-          onMove={(t, patch) => update.mutate({ id: t.id, patch })}
+          onMove={(task, patch) => update.mutate({ id: task.id, patch })}
         />
       ) : (
         <ListView tasks={visible} onOpen={setEditing} onToggle={complete} />
@@ -214,13 +215,13 @@ export default function Tareas() {
   )
 }
 
-function QuickAdd({ onAdd, loading, projectName, mine }: { onAdd: (t: string) => void; loading: boolean; projectName?: string; mine?: boolean }) {
+function QuickAdd({ onAdd, loading, projectName, mine }: { onAdd: (title: string) => void; loading: boolean; projectName?: string; mine?: boolean }) {
   const [value, setValue] = useState('')
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const t = value.trim()
-    if (!t) return
-    onAdd(t)
+    const title = value.trim()
+    if (!title) return
+    onAdd(title)
     setValue('')
   }
   return (
@@ -229,12 +230,12 @@ function QuickAdd({ onAdd, loading, projectName, mine }: { onAdd: (t: string) =>
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={projectName ? `Agregar tarea en ${projectName}` : mine ? 'Agregar una tarea a tu cargo' : 'Agregar una tarea y pulsar Enter'}
-        aria-label="Agregar tarea rápida"
+        placeholder={projectName ? t('tasks.quickInProject', { project: projectName }) : mine ? t('tasks.quickMine') : t('tasks.quickPlaceholder')}
+        aria-label={t('tasks.quickLabel')}
         className="h-11 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-faint"
       />
       <Button size="sm" type="submit" variant={value.trim() ? 'primary' : 'ghost'} disabled={!value.trim()} loading={loading}>
-        Agregar
+        {t('common.add')}
       </Button>
     </form>
   )
@@ -242,7 +243,7 @@ function QuickAdd({ onAdd, loading, projectName, mine }: { onAdd: (t: string) =>
 
 function BoardSkeleton() {
   return (
-    <div className="mt-6 grid gap-4 md:grid-cols-3" aria-busy="true" aria-label="Cargando tareas">
+    <div className="mt-6 grid gap-4 md:grid-cols-3" aria-busy="true" aria-label={t('tasks.loading')}>
       {[4, 2, 3].map((n, c) => (
         <div key={c} className="grid content-start gap-2 rounded-card border border-line bg-surface p-3">
           <Skeleton className="mb-2 h-4 w-24" />
@@ -255,7 +256,7 @@ function BoardSkeleton() {
   )
 }
 
-/* ---------------------------------------------------------------- Tablero */
+/* ---------------------------------------------------------------- Board */
 
 function sortOf(list: Task[]) {
   return [...list].sort((a, b) => a.sort - b.sort || a.createdAt.localeCompare(b.createdAt))
@@ -344,10 +345,10 @@ function Board({ tasks, onOpen, onMove }: { tasks: Task[]; onOpen: (t: Task) => 
     onMove(task, statusChanged ? { status: col, sort } : { sort })
     if (statusChanged) {
       toast({
-        title: `Movida a ${STATUS_LABEL[col]}`,
+        title: t('tasks.movedTo', { status: statusLabel(col) }),
         description: task.title,
         tone: col === 'done' ? 'success' : 'default',
-        actions: [{ label: 'Deshacer', onClick: () => onMove(task, { status: task.status, sort: task.sort }) }],
+        actions: [{ label: t('common.undo'), onClick: () => onMove(task, { status: task.status, sort: task.sort }) }],
       })
     }
   }
@@ -367,13 +368,13 @@ function Board({ tasks, onOpen, onMove }: { tasks: Task[]; onOpen: (t: Task) => 
       }}
       accessibility={{
         screenReaderInstructions: {
-          draggable: 'Para mover una tarea, pulsa espacio. Usa las flechas para cambiarla de lugar o de columna y espacio otra vez para soltarla. Esc cancela.',
+          draggable: t('tasks.dndInstructions'),
         },
         announcements: {
-          onDragStart: ({ active }) => `Tomaste ${byId.get(String(active.id))?.title ?? 'la tarea'}.`,
-          onDragOver: ({ over }) => (over ? `Sobre ${STATUS_LABEL[findCol(String(over.id)) ?? 'todo']}.` : 'Fuera de las columnas.'),
-          onDragEnd: ({ over }) => (over ? `Soltaste la tarea en ${STATUS_LABEL[findCol(String(over.id)) ?? 'todo']}.` : 'Movimiento cancelado.'),
-          onDragCancel: () => 'Movimiento cancelado.',
+          onDragStart: ({ active }) => t('tasks.dndPicked', { title: byId.get(String(active.id))?.title ?? t('tasks.dndTheTask') }),
+          onDragOver: ({ over }) => (over ? t('tasks.dndOver', { status: statusLabel(findCol(String(over.id)) ?? 'todo') }) : t('tasks.dndOutside')),
+          onDragEnd: ({ over }) => (over ? t('tasks.dndDropped', { status: statusLabel(findCol(String(over.id)) ?? 'todo') }) : t('tasks.dndCanceled')),
+          onDragCancel: () => t('tasks.dndCanceled'),
         },
       }}
     >
@@ -400,28 +401,28 @@ function Column({ status, ids, byId, onOpen }: { status: TaskStatus; ids: string
         'rounded-card border bg-surface transition-colors duration-200',
         isOver ? 'border-[color-mix(in_srgb,var(--accent)_45%,var(--border))]' : 'border-line',
       )}
-      aria-label={STATUS_LABEL[status]}
+      aria-label={statusLabel(status)}
     >
       <header className="flex items-center justify-between px-4 pt-3.5 pb-2">
         <h2 className="flex items-baseline gap-2 text-base font-semibold">
-          {STATUS_LABEL[status]}
+          {statusLabel(status)}
           <span className="font-mono text-sm font-normal text-faint tnum">{ids.length}</span>
         </h2>
       </header>
       <SortableContext items={shown} strategy={verticalListSortingStrategy}>
         <div ref={setNodeRef} className="grid min-h-24 content-start gap-2 px-2.5 pb-2.5">
           {shown.map((id) => {
-            const t = byId.get(id)
-            return t ? <SortableCard key={id} task={t} onOpen={onOpen} /> : null
+            const task = byId.get(id)
+            return task ? <SortableCard key={id} task={task} onOpen={onOpen} /> : null
           })}
           {ids.length === 0 && (
             <p className="rounded-control border border-dashed border-line px-3 py-6 text-center text-sm text-faint">
-              {status === 'doing' ? 'Arrastra aquí lo que estás haciendo' : status === 'done' ? 'Lo terminado aparece aquí' : 'Nada por hacer'}
+              {status === 'doing' ? t('tasks.colDoing') : status === 'done' ? t('tasks.colDone') : t('tasks.colTodo')}
             </p>
           )}
           {ids.length > shown.length && (
             <button type="button" onClick={() => setShowAll(true)} className="py-1.5 text-sm text-muted hover:text-fg">
-              Ver {ids.length - shown.length} más
+              {t('common.seeMore', { count: ids.length - shown.length })}
             </button>
           )}
         </div>
@@ -439,7 +440,7 @@ function SortableCard({ task, onOpen }: { task: Task; onOpen: (t: Task) => void 
       className={cn('touch-manipulation', isDragging && 'opacity-35')}
       {...attributes}
       {...listeners}
-      aria-roledescription="Tarea arrastrable"
+      aria-roledescription={t('tasks.draggable')}
       onClick={() => onOpen(task)}
       onKeyDown={(e) => {
         listeners?.onKeyDown?.(e)
@@ -475,7 +476,7 @@ function CardBody({ task, overlay, reduce }: { task: Task; overlay?: boolean; re
   )
 }
 
-/* ---------------------------------------------------------------- Lista */
+/* ---------------------------------------------------------------- List */
 
 function ListView({ tasks, onOpen, onToggle }: { tasks: Task[]; onOpen: (t: Task) => void; onToggle: (t: Task, done: boolean) => void }) {
   return (
@@ -484,9 +485,9 @@ function ListView({ tasks, onOpen, onToggle }: { tasks: Task[]; onOpen: (t: Task
         const list = sortOf(tasks.filter((t) => t.status === s))
         if (list.length === 0) return null
         return (
-          <section key={s} className="rounded-card border border-line bg-surface px-4 pt-3.5 pb-1.5" aria-label={STATUS_LABEL[s]}>
+          <section key={s} className="rounded-card border border-line bg-surface px-4 pt-3.5 pb-1.5" aria-label={statusLabel(s)}>
             <h2 className="flex items-baseline gap-2 text-base font-semibold">
-              {STATUS_LABEL[s]}
+              {statusLabel(s)}
               <span className="font-mono text-sm font-normal text-faint tnum">{list.length}</span>
             </h2>
             <div className="mt-1 divide-y divide-line">
@@ -501,15 +502,15 @@ function ListView({ tasks, onOpen, onToggle }: { tasks: Task[]; onOpen: (t: Task
   )
 }
 
-/* ---------------------------------------------------------------- Diálogo de tarea */
+/* ---------------------------------------------------------------- Task dialog */
 
-function splitDue(t: Task | null): { date: string; time: string } {
-  if (!t) return { date: '', time: '' }
-  if (t.dueAt) {
-    const d = new Date(t.dueAt)
+function splitDue(task: Task | null): { date: string; time: string } {
+  if (!task) return { date: '', time: '' }
+  if (task.dueAt) {
+    const d = new Date(task.dueAt)
     return { date: isoDate(d), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
   }
-  return { date: t.dueDate ?? '', time: '' }
+  return { date: task.dueDate ?? '', time: '' }
 }
 
 function TaskDialog({
@@ -545,23 +546,23 @@ function TaskDialog({
 
   useEffect(() => {
     if (!task) return
-    const t = task === 'new' ? null : task
-    const due = splitDue(t)
-    setTitle(t?.title ?? '')
-    setNotes(t?.notes ?? '')
-    setStatus(t?.status ?? 'todo')
-    setPriority(t?.priority ?? 'medium')
+    const current = task === 'new' ? null : task
+    const due = splitDue(current)
+    setTitle(current?.title ?? '')
+    setNotes(current?.notes ?? '')
+    setStatus(current?.status ?? 'todo')
+    setPriority(current?.priority ?? 'medium')
     setDate(due.date)
     setTimeV(due.time)
-    setProjectId(t ? (t.projectId ?? '') : (defaultProjectId ?? ''))
+    setProjectId(current ? (current.projectId ?? '') : (defaultProjectId ?? ''))
     setNewProject('')
-    setTags(t?.tags.join(', ') ?? '')
-    setShared(t?.shared ?? false)
-    setAssigneeId(t ? (t.assigneeId ?? '') : (defaultAssigneeId ?? ''))
+    setTags(current?.tags.join(', ') ?? '')
+    setShared(current?.shared ?? false)
+    setAssigneeId(current ? (current.assigneeId ?? '') : (defaultAssigneeId ?? ''))
     setError(null)
   }, [task, defaultProjectId, defaultAssigneeId])
 
-  // Asignarla a otra persona la vuelve familiar (lo hace el servidor); solo quien la creó puede dejar de compartirla.
+  // Assigning it to someone else makes it a family task (the server does that); only whoever created it can stop sharing it.
   const owner = editing?.ownerId ?? fam.me
   const isOwner = fam.isMine(editing?.ownerId)
   const assignedToOther = !!assigneeId && assigneeId !== owner
@@ -603,27 +604,27 @@ function TaskDialog({
       if (!body.dueAt) delete body.dueAt
       return api.post<Task>('/tasks', body)
     },
-    onSuccess: (t) => {
+    onSuccess: (saved) => {
       invalidateEntity(qc, 'task')
       void qc.invalidateQueries({ queryKey: keys.projects })
       onClose()
-      if (editing) toast({ title: 'Tarea guardada', description: t.title })
+      if (editing) toast({ title: t('tasks.saved'), description: saved.title })
       else
         toast({
-          title: 'Tarea creada',
-          description: t.title,
+          title: t('tasks.created'),
+          description: saved.title,
           tone: 'success',
-          actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'task', t.id, 'created').catch((e) => toastError(e, 'No se pudo deshacer')) }],
+          actions: [{ label: t('common.undo'), onClick: () => undoLatest(qc, 'task', saved.id, 'created').catch((e) => toastError(e, t('common.couldNotUndo'))) }],
         })
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo guardar'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('places.err.save')),
   })
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return setError('La tarea necesita un título.')
-    if (timeV && !date) return setError('Elige una fecha para la hora.')
-    if (projectId === '__new' && !newProject.trim()) return setError('Escribe el nombre del proyecto nuevo.')
+    if (!title.trim()) return setError(t('tasks.err.needTitle'))
+    if (timeV && !date) return setError(t('tasks.err.needDate'))
+    if (projectId === '__new' && !newProject.trim()) return setError(t('tasks.err.needProjectName'))
     setError(null)
     save.mutate()
   }
@@ -632,112 +633,112 @@ function TaskDialog({
     <Dialog
       open={!!task}
       onClose={onClose}
-      title={editing ? 'Editar tarea' : 'Nueva tarea'}
+      title={editing ? t('tasks.editTitle') : t('tasks.new')}
       size="md"
       footer={
         <>
           {editing && (
             <Button variant="ghost" className="mr-auto text-danger hover:text-danger" icon={<Trash className="size-4" />} onClick={() => setConfirm(true)}>
-              Eliminar
+              {t('common.delete')}
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="submit" form="task-form" loading={save.isPending}>
-            Guardar
+            {t('common.save')}
           </Button>
         </>
       }
     >
       <form id="task-form" onSubmit={submit} className="grid gap-4">
-        <Field label="Título" error={error && !title.trim() ? error : null}>
+        <Field label={t('common.title')} error={error && !title.trim() ? error : null}>
           {(id, d) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus aria-describedby={d} aria-invalid={!!error && !title.trim()} />}
         </Field>
         <div className="grid gap-1.5">
-          <span className="text-sm font-medium">Estado</span>
+          <span className="text-sm font-medium">{t('tasks.status')}</span>
           <Segmented
-            label="Estado"
+            label={t('tasks.status')}
             value={status}
             onChange={setStatus}
-            options={COLUMNS.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+            options={COLUMNS.map((s) => ({ value: s, label: statusLabel(s) }))}
             className="w-fit"
           />
         </div>
         <div className="grid gap-1.5">
-          <span className="text-sm font-medium">Prioridad</span>
+          <span className="text-sm font-medium">{t('tasks.priority')}</span>
           <Segmented
-            label="Prioridad"
+            label={t('tasks.priority')}
             value={priority}
             onChange={setPriority}
-            options={(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))}
+            options={(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((p) => ({ value: p, label: priorityLabel(p) }))}
             className="w-fit max-w-full overflow-x-auto"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Fecha" optional>
+          <Field label={t('tasks.date')} optional>
             {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
           </Field>
-          <Field label="Hora" optional>
+          <Field label={t('tasks.time')} optional>
             {(id) => <Input id={id} type="time" value={timeV} onChange={(e) => setTimeV(e.target.value)} disabled={!date} />}
           </Field>
         </div>
-        <Field label="Proyecto" optional>
+        <Field label={t('tasks.project')} optional>
           {(id) => (
             <Select id={id} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">Sin proyecto</option>
+              <option value="">{t('tasks.noProject')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-              <option value="__new">Nuevo proyecto…</option>
+              <option value="__new">{t('tasks.newProjectOption')}</option>
             </Select>
           )}
         </Field>
         {projectId === '__new' && (
-          <Field label="Nombre del proyecto nuevo">
-            {(id) => <Input id={id} value={newProject} onChange={(e) => setNewProject(e.target.value)} placeholder="Viaje a Cartagena" />}
+          <Field label={t('tasks.newProjectName')}>
+            {(id) => <Input id={id} value={newProject} onChange={(e) => setNewProject(e.target.value)} placeholder={t('tasks.newProjectPlaceholder')} />}
           </Field>
         )}
         {showFamily && (
           <div className="grid gap-1.5">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Responsable">
+              <Field label={t('tasks.assignee')}>
                 {(id) => (
                   <Select id={id} value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-                    <option value="">Sin asignar</option>
+                    <option value="">{t('tasks.unassigned')}</option>
                     {fam.members.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.id === fam.me ? `${m.displayName} (tú)` : m.displayName}
+                        {m.id === fam.me ? t('tasks.nameYou', { name: m.displayName }) : m.displayName}
                       </option>
                     ))}
                   </Select>
                 )}
               </Field>
               <div className="grid content-start gap-1.5">
-                <span className="text-sm font-medium">Familiar</span>
+                <span className="text-sm font-medium">{t('tasks.family')}</span>
                 <label className="flex h-10 items-center justify-between gap-3 rounded-control border border-line px-3">
-                  <span className="truncate text-base text-muted">{effectiveShared ? 'La ve toda la familia' : 'Solo tú la ves'}</span>
-                  <Switch checked={effectiveShared} onChange={setShared} disabled={!isOwner || assignedToOther} label="Tarea familiar" />
+                  <span className="truncate text-base text-muted">{effectiveShared ? t('tasks.seenByFamily') : t('tasks.onlyYou')}</span>
+                  <Switch checked={effectiveShared} onChange={setShared} disabled={!isOwner || assignedToOther} label={t('tasks.familyTask')} />
                 </label>
               </div>
             </div>
             <p className="text-sm text-muted">
               {!isOwner && editing?.shared
-                ? `Compartida por ${ownerName ?? 'otra persona'}. Solo quien la creó puede dejar de compartirla.`
+                ? t('tasks.sharedBy', { name: ownerName ?? t('reminder.someoneElse') })
                 : assignedToOther
-                  ? 'Al asignarla a otra persona queda como familiar y le llega un aviso.'
+                  ? t('tasks.assignedHint')
                   : effectiveShared
-                    ? 'Todos en la familia la ven y pueden editarla.'
-                    : 'Es personal: nadie más la ve.'}
+                    ? t('tasks.sharedHint')
+                    : t('tasks.personalHint')}
             </p>
           </div>
         )}
-        <Field label="Notas" optional>
+        <Field label={t('nav.notes')} optional>
           {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />}
         </Field>
-        <Field label="Etiquetas" optional hint="Separadas por comas.">
+        <Field label={t('tasks.tags')} optional hint={t('tasks.tagsHint')}>
           {(id, d) => <Input id={id} value={tags} onChange={(e) => setTags(e.target.value)} aria-describedby={d} />}
         </Field>
         {error && title.trim() && (
@@ -754,14 +755,14 @@ function TaskDialog({
           setConfirm(false)
           onClose()
         }}
-        title="¿Eliminar esta tarea?"
-        description="Podrás deshacerlo desde el aviso o desde Actividad."
+        title={t('tasks.deleteTitle')}
+        description={t('notes.deleteBody')}
       />
     </Dialog>
   )
 }
 
-/* ---------------------------------------------------------------- Proyectos */
+/* ---------------------------------------------------------------- Projects */
 
 function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onClose: () => void; projects: Project[]; tasks: Task[] }) {
   const qc = useQueryClient()
@@ -778,7 +779,7 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
       setName('')
       refresh()
     },
-    onError: (e) => toastError(e, 'No se pudo crear el proyecto'),
+    onError: (e) => toastError(e, t('tasks.err.createProject')),
   })
   const rename = useMutation({
     mutationFn: ({ id, name: n }: { id: string; name: string }) => api.patch<Project>(`/projects/${id}`, { name: n }),
@@ -786,21 +787,21 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
       setEditing(null)
       refresh()
     },
-    onError: (e) => toastError(e, 'No se pudo renombrar'),
+    onError: (e) => toastError(e, t('lists.err.rename')),
   })
   const remove = useMutation({
     mutationFn: (p: Project) => api.del(`/projects/${p.id}`),
     onSuccess: () => {
       setDeleting(null)
       refresh()
-      toast({ title: 'Proyecto eliminado' })
+      toast({ title: t('tasks.projectDeleted') })
     },
-    onError: (e) => toastError(e, 'No se pudo eliminar'),
+    onError: (e) => toastError(e, t('common.couldNotDelete')),
   })
-  const count = (id: string) => tasks.filter((t) => t.projectId === id && t.status !== 'done').length
+  const count = (id: string) => tasks.filter((task) => task.projectId === id && task.status !== 'done').length
 
   return (
-    <Dialog open={open} onClose={onClose} title="Proyectos" description="Agrupa tus tareas. Borrar un proyecto no borra sus tareas.">
+    <Dialog open={open} onClose={onClose} title={t('tasks.projects')} description={t('tasks.projectsHint')}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -808,13 +809,13 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
         }}
         className="flex gap-2"
       >
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del proyecto" aria-label="Nombre del proyecto nuevo" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('tasks.projectName')} aria-label={t('tasks.newProjectName')} />
         <Button type="submit" variant="primary" disabled={!name.trim()} loading={create.isPending}>
-          Crear
+          {t('common.create')}
         </Button>
       </form>
       <ul className="mt-4 divide-y divide-line">
-        {projects.length === 0 && <li className="py-6 text-center text-base text-muted">Aún no tienes proyectos.</li>}
+        {projects.length === 0 && <li className="py-6 text-center text-base text-muted">{t('tasks.noProjects')}</li>}
         {projects.map((p) => (
           <li key={p.id} className="flex items-center gap-2 py-2">
             {editing?.id === p.id ? (
@@ -825,9 +826,9 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
                   if (editing.name.trim()) rename.mutate({ id: p.id, name: editing.name.trim() })
                 }}
               >
-                <Input value={editing.name} onChange={(e) => setEditing({ id: p.id, name: e.target.value })} autoFocus aria-label="Nuevo nombre" />
+                <Input value={editing.name} onChange={(e) => setEditing({ id: p.id, name: e.target.value })} autoFocus aria-label={t('lists.newName')} />
                 <Button type="submit" size="md" loading={rename.isPending}>
-                  Guardar
+                  {t('common.save')}
                 </Button>
               </form>
             ) : (
@@ -835,10 +836,10 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
                 <FolderSimple className="size-4 shrink-0 text-faint" />
                 <span className="min-w-0 flex-1 truncate text-base">{p.name}</span>
                 <span className="font-mono text-sm text-faint">{count(p.id)}</span>
-                <IconButton label={`Renombrar ${p.name}`} size="sm" onClick={() => setEditing({ id: p.id, name: p.name })}>
+                <IconButton label={t('tasks.renameNamed', { name: p.name })} size="sm" onClick={() => setEditing({ id: p.id, name: p.name })}>
                   <PencilSimple className="size-4" />
                 </IconButton>
-                <IconButton label={`Eliminar ${p.name}`} size="sm" tone="danger" onClick={() => setDeleting(p)}>
+                <IconButton label={t('common.deleteNamed', { name: p.name })} size="sm" tone="danger" onClick={() => setDeleting(p)}>
                   <Trash className="size-4" />
                 </IconButton>
               </>
@@ -851,8 +852,8 @@ function ProjectsDialog({ open, onClose, projects, tasks }: { open: boolean; onC
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && remove.mutate(deleting)}
         loading={remove.isPending}
-        title={`¿Eliminar ${deleting?.name ?? 'el proyecto'}?`}
-        description="Sus tareas se conservan y quedan sin proyecto."
+        title={t('tasks.deleteProjectTitle', { name: deleting?.name ?? t('tasks.theProject') })}
+        description={t('tasks.deleteProjectBody')}
       />
     </Dialog>
   )

@@ -17,7 +17,7 @@ interface MenuProps {
   className?: string
 }
 
-/** Menú contextual accesible (flechas, Esc, clic fuera). */
+/** Accessible context menu (arrows, Esc, click outside). */
 export function Menu({ trigger, items, align = 'end', className }: MenuProps) {
   const [open, setOpen] = useState(false)
   const [up, setUp] = useState(false)

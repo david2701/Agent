@@ -39,7 +39,7 @@ export interface Note {
   createdAt: ISOInstant
   updatedAt: ISOInstant
   score: number | null
-  /** Familiar: la ven y editan todos los miembros del hogar. */
+  /** Family: every member of the household can see and edit it. */
   shared: boolean
   ownerId: string | null
 }
@@ -65,7 +65,7 @@ export interface Task {
   updatedAt: ISOInstant
   shared: boolean
   ownerId: string | null
-  /** Responsable (otro miembro la vuelve familiar). */
+  /** Assignee (assigning another member makes it a family item). */
   assigneeId: string | null
 }
 
@@ -95,9 +95,9 @@ export interface Reminder {
   source: string
   createdAt: ISOInstant
   updatedAt: ISOInstant
-  /** Para quién suena. */
+  /** Who it rings for. */
   ownerId: string | null
-  /** Quién lo programó (otro miembro, o null si fue el propio dueño). */
+  /** Who scheduled it (another member, or null if the owner did). */
   createdBy: string | null
 }
 
@@ -336,7 +336,7 @@ export interface McpServer {
   createdAt: ISOInstant
 }
 
-/* Familia */
+/* Family */
 export interface Household {
   id: string
   name: string
@@ -360,7 +360,7 @@ export interface FamilyInfo {
 
 export interface Invitation {
   id: string
-  /** invite: nuevo miembro · reset: contraseña nueva para un miembro existente */
+  /** invite: new member · reset: new password for an existing member */
   kind: 'invite' | 'reset'
   name: string
   role: FamilyRole
@@ -407,7 +407,7 @@ export interface PushConfig {
   registeredDevices: number
 }
 
-/* Eventos del agente (SSE) */
+/* Agent events (SSE) */
 export type DeviceAction =
   | { type: 'timer'; seconds: number; label?: string }
   | { type: 'alarm'; hour: number; minute: number; label?: string; days?: number[] }

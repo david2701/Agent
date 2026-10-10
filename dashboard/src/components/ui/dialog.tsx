@@ -2,6 +2,7 @@ import { X } from '@phosphor-icons/react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 import { IconButton } from './button'
 
 interface DialogProps {
@@ -12,7 +13,7 @@ interface DialogProps {
   children: ReactNode
   footer?: ReactNode
   size?: 'sm' | 'md' | 'lg'
-  /** Oculta el encabezado visible (el título sigue para lectores de pantalla). */
+  /** Hides the visible header (the title is still there for screen readers). */
   bare?: boolean
   className?: string
 }
@@ -20,8 +21,8 @@ interface DialogProps {
 const widths = { sm: 'sm:w-[min(100%-2rem,26rem)]', md: 'sm:w-[min(100%-2rem,34rem)]', lg: 'sm:w-[min(100%-2rem,46rem)]' }
 
 /**
- * Diálogo modal sobre <dialog> nativo: foco atrapado, Esc y fondo inerte del navegador.
- * En pantallas pequeñas se presenta como hoja inferior.
+ * Modal dialog on the native <dialog>: focus trapped, Esc and an inert background from the browser.
+ * On small screens it is presented as a bottom sheet.
  */
 export function Dialog({ open, onClose, title, description, children, footer, size = 'md', bare, className }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -76,7 +77,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
             </h2>
             {description && <div className="mt-1 text-sm text-muted">{description}</div>}
           </div>
-          <IconButton label="Cerrar" size="sm" onClick={onClose} className="-mr-1.5">
+          <IconButton label={t('common.close')} size="sm" onClick={onClose} className="-mr-1.5">
             <X className="size-4" />
           </IconButton>
         </div>
@@ -98,7 +99,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Eliminar',
+  confirmLabel = t('common.delete'),
   loading,
 }: {
   open: boolean
@@ -122,7 +123,7 @@ export function ConfirmDialog({
             className="h-9 rounded-control px-3.5 text-base font-medium text-muted transition-colors hover:bg-surface-2 hover:text-fg active:scale-[0.98]"
             onClick={onClose}
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             type="button"

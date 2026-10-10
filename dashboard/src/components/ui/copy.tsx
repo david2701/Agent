@@ -1,10 +1,11 @@
 import { Check, Copy } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 import { Button } from './button'
 import { toast } from './toast'
 
-/** Copia al portapapeles y recuerda unos segundos que se copió (para cambiar la etiqueta del botón). */
+/** Copies to the clipboard and remembers for a few seconds that it did (to swap the button label). */
 export function useCopy(ms = 1800) {
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -22,7 +23,7 @@ export function useCopy(ms = 1800) {
       timer.current = setTimeout(() => setCopied(false), ms)
       return true
     } catch {
-      toast({ title: 'No se pudo copiar', description: 'Selecciona el texto y cópialo a mano.', tone: 'danger' })
+      toast({ title: t('common.couldNotCopy'), description: t('common.couldNotCopyHint'), tone: 'danger' })
       return false
     }
   }
@@ -31,8 +32,8 @@ export function useCopy(ms = 1800) {
 
 export function CopyButton({
   value,
-  label = 'Copiar',
-  copiedLabel = 'Copiado',
+  label = t('common.copy'),
+  copiedLabel = t('common.copied'),
   variant = 'quiet',
   size = 'sm',
   className,
@@ -59,11 +60,11 @@ export function CopyButton({
   )
 }
 
-/** Valor de una línea (URL, enlace) con botón de copiar. */
+/** One-line value (URL, link) with a copy button. */
 export function CopyField({
   value,
-  label = 'Copiar',
-  copiedLabel = 'Copiada',
+  label = t('common.copy'),
+  copiedLabel = t('common.copiedFem'),
   className,
 }: {
   value: string

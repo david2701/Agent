@@ -17,7 +17,7 @@ function readMode(): ThemeMode {
     const v = localStorage.getItem(KEY)
     if (v === 'light' || v === 'dark') return v
   } catch {
-    /* almacenamiento bloqueado */
+    /* storage blocked */
   }
   return 'system'
 }
@@ -49,7 +49,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (m === 'system') localStorage.removeItem(KEY)
       else localStorage.setItem(KEY, m)
     } catch {
-      /* sin almacenamiento */
+      /* no storage */
     }
   }, [])
 
@@ -61,6 +61,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme fuera de ThemeProvider')
+  if (!ctx) throw new Error('useTheme outside ThemeProvider')
   return ctx
 }

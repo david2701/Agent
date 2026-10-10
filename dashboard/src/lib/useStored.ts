@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-/** Estado guardado en localStorage (preferencias de este navegador). */
+/** State kept in localStorage (preferences of this browser). */
 export function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
@@ -16,7 +16,7 @@ export function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
       try {
         localStorage.setItem(key, JSON.stringify(v))
       } catch {
-        /* sin almacenamiento */
+        /* no storage */
       }
     },
     [key],
@@ -24,7 +24,7 @@ export function useStored<T>(key: string, initial: T): [T, (v: T) => void] {
   return [value, set]
 }
 
-/** Valor con retraso (para búsquedas mientras se escribe). */
+/** Debounced value (for searches while typing). */
 export function useDebounced<T>(value: T, ms = 300): T {
   const [v, setV] = useState(value)
   useEffect(() => {

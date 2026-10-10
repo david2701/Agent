@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, streamAgent } from './api'
+import { t } from './i18n'
 import { invalidateEntity, keys } from './queries'
 import type { AgentEvent, DeviceAction, EntityRef, FileRef } from './types'
 
@@ -37,7 +38,7 @@ export function applyEvent(t: Turn, ev: AgentEvent): Turn {
     case 'transcript':
       return { ...t, userText: ev.text, status: 'streaming' }
     case 'delta':
-      // Cada paso nuevo reemplaza el texto previo (el preámbulo antes de usar herramientas).
+      // Each new step replaces the previous text (the preamble before using tools).
       if (ev.step !== t.step) return { ...t, step: ev.step, text: ev.text, status: 'streaming' }
       return { ...t, text: t.text + ev.text, status: 'streaming' }
     case 'tool_start':
@@ -84,14 +85,14 @@ interface RunOptions {
   onDone?: (turn: Turn) => void | Promise<void>
 }
 
-/** Ejecuta turnos del agente (texto o voz) y expone el estado del turno en curso. */
+/** Runs agent turns (text or voice) and exposes the state of the turn in progress. */
 export function useAgentRunner() {
   const qc = useQueryClient()
   const [turn, setTurn] = useState<Turn | null>(null)
   const abort = useRef<AbortController | null>(null)
   const latest = useRef<Turn | null>(null)
 
-  // Aborta al desmontar de verdad (el doble montaje de StrictMode no corta el stream).
+  // Aborts on a real unmount (StrictMode's double mount does not cut the stream).
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -121,13 +122,13 @@ export function useAgentRunner() {
         await streamAgent(endpoint, body, update, ctrl.signal)
         const final = latest.current
         if (final && final.status !== 'done' && final.status !== 'error') {
-          const broken: Turn = { ...final, status: 'error', error: 'La respuesta se cortó antes de terminar.' }
+          const broken: Turn = { ...final, status: 'error', error: t('agent.cutOff') }
           latest.current = broken
           setTurn(broken)
         }
       } catch (e) {
         if (ctrl.signal.aborted) return
-        const msg = e instanceof ApiError || e instanceof Error ? e.message : 'No pude contactar a Kairo.'
+        const msg = e instanceof ApiError || e instanceof Error ? e.message : t('agent.cantReach')
         const broken: Turn = { ...(latest.current ?? initial), status: 'error', error: msg }
         latest.current = broken
         setTurn(broken)

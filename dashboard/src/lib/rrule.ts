@@ -1,30 +1,30 @@
-/** Presets de recurrencia y su RRULE (RFC 5545). */
+import { intlLocale, t } from './i18n'
+
+/** Recurrence presets and their RRULE (RFC 5545). */
 
 export type RecurrencePreset = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly'
 
 const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const
-const DAY_NAMES: Record<string, string> = {
-  MO: 'lunes',
-  TU: 'martes',
-  WE: 'miércoles',
-  TH: 'jueves',
-  FR: 'viernes',
-  SA: 'sábado',
-  SU: 'domingo',
+
+/** Day name in the active language ("lunes" / "Monday"). 2024-01-07 was a Sunday. */
+function dayName(code: string): string | undefined {
+  const idx = BYDAY.indexOf(code as (typeof BYDAY)[number])
+  if (idx < 0) return undefined
+  return new Intl.DateTimeFormat(intlLocale(), { weekday: 'long' }).format(new Date(2024, 0, 7 + idx))
 }
 
 export function presetLabel(p: RecurrencePreset, date: Date | null): string {
   switch (p) {
     case 'none':
-      return 'No se repite'
+      return t('rrule.none')
     case 'daily':
-      return 'Cada día'
+      return t('rrule.daily')
     case 'weekdays':
-      return 'Días hábiles (lunes a viernes)'
+      return t('rrule.weekdays')
     case 'weekly':
-      return date ? `Cada semana el ${DAY_NAMES[BYDAY[date.getDay()]]}` : 'Cada semana'
+      return date ? t('rrule.weeklyOnDay', { day: dayName(BYDAY[date.getDay()]) ?? '' }) : t('rrule.weekly')
     case 'monthly':
-      return date ? `Cada mes el día ${date.getDate()}` : 'Cada mes'
+      return date ? t('rrule.monthlyOnDay', { day: date.getDate() }) : t('rrule.monthly')
   }
 }
 
@@ -62,32 +62,31 @@ function parse(rrule: string): Record<string, string> {
   return out
 }
 
-/** Descripción breve en español: "cada lunes", "de lunes a viernes". */
+/** Short description in the active language: "Every Monday", "Monday to Friday". */
 export function describeRrule(rrule: string | null): string {
   if (!rrule) return ''
   const p = parse(rrule)
   const interval = Number(p.INTERVAL ?? '1') || 1
-  const days = p.BYDAY?.split(',').map((d) => DAY_NAMES[d.slice(-2)]).filter(Boolean) ?? []
+  const days = p.BYDAY?.split(',').map((d) => dayName(d.slice(-2))).filter((d): d is string => !!d) ?? []
   switch (p.FREQ) {
     case 'DAILY':
-      return interval === 1 ? 'Cada día' : `Cada ${interval} días`
+      return interval === 1 ? t('rrule.daily') : t('rrule.everyNDays', { count: interval })
     case 'WEEKLY':
-      if (days.length === 5 && p.BYDAY === 'MO,TU,WE,TH,FR') return 'De lunes a viernes'
-      if (days.length) return `${interval === 1 ? 'Cada' : `Cada ${interval} semanas el`} ${joinEs(days)}`
-      return interval === 1 ? 'Cada semana' : `Cada ${interval} semanas`
+      if (days.length === 5 && p.BYDAY === 'MO,TU,WE,TH,FR') return t('rrule.mondayToFriday')
+      if (days.length) return interval === 1 ? t('rrule.weeklyOn', { days: joinList(days) }) : t('rrule.everyNWeeksOn', { count: interval, days: joinList(days) })
+      return interval === 1 ? t('rrule.weekly') : t('rrule.everyNWeeks', { count: interval })
     case 'MONTHLY':
-      if (p.BYMONTHDAY) return `Cada mes el día ${p.BYMONTHDAY}`
-      return interval === 1 ? 'Cada mes' : `Cada ${interval} meses`
+      if (p.BYMONTHDAY) return t('rrule.monthlyOnDay', { day: p.BYMONTHDAY })
+      return interval === 1 ? t('rrule.monthly') : t('rrule.everyNMonths', { count: interval })
     case 'YEARLY':
-      return 'Cada año'
+      return t('rrule.yearly')
     case 'HOURLY':
-      return interval === 1 ? 'Cada hora' : `Cada ${interval} horas`
+      return interval === 1 ? t('rrule.hourly') : t('rrule.everyNHours', { count: interval })
     default:
-      return 'Recurrente'
+      return t('rrule.recurring')
   }
 }
 
-function joinEs(items: string[]) {
-  if (items.length <= 1) return items.join('')
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+function joinList(items: string[]) {
+  return new Intl.ListFormat(intlLocale(), { style: 'long', type: 'conjunction' }).format(items)
 }

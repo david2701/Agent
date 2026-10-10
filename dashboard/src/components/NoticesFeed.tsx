@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
 import { cn } from '@/lib/cn'
 import { entityHref } from '@/lib/entities'
 import { relative } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { useMarkNoticesRead } from '@/lib/mutations'
 import type { Notice } from '@/lib/types'
 
@@ -34,16 +35,16 @@ function noticeIcon(n: Notice): Icon {
   }
 }
 
-/** Adónde lleva un aviso al tocarlo (la entidad compartida o la página de Familia). */
+/** Where a notice leads when tapped (the shared entity or the Family page). */
 export function noticeHref(n: Pick<Notice, 'entityType' | 'entityId'>): string | null {
   if (!n.entityType || !n.entityId) return null
-  if (n.entityType === 'family') return '/familia'
+  if (n.entityType === 'family') return '/family'
   return entityHref(n.entityType, n.entityId)
 }
 
 export function NoticesSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="grid gap-4 py-1" aria-busy="true" aria-label="Cargando novedades">
+    <div className="grid gap-4 py-1" aria-busy="true" aria-label={t('notices.loading')}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="flex items-start gap-3">
           <Skeleton className="size-8 shrink-0 rounded-full" />
@@ -58,8 +59,8 @@ export function NoticesSkeleton({ rows = 4 }: { rows?: number }) {
 }
 
 /**
- * Lista de avisos de la familia (Novedades). Lo no leído lleva punto ámbar y título destacado;
- * tocar un aviso lo marca como leído y abre lo que compartieron.
+ * List of family notices (Updates). Unread ones get an amber dot and a highlighted title;
+ * tapping a notice marks it as read and opens whatever was shared.
  */
 export function NoticesFeed({
   notices,
@@ -75,7 +76,7 @@ export function NoticesFeed({
   error?: Error | null
   onRetry?: () => void
   limit?: number
-  /** Se llama antes de navegar (por ejemplo, para cerrar el diálogo). */
+  /** Called before navigating (e.g. to close the dialog). */
   onNavigate?: () => void
   className?: string
 }) {
@@ -90,8 +91,8 @@ export function NoticesFeed({
       <EmptyState
         compact
         icon={<UsersThree />}
-        title="Sin novedades"
-        description="Aquí verás lo que tu familia comparte contigo, las tareas que te asignan y sus avisos."
+        title={t('notices.empty')}
+        description={t('notices.emptyHint')}
       />
     )
 
@@ -119,7 +120,7 @@ export function NoticesFeed({
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-3">
                 <span className={cn('min-w-0 flex-1 text-base leading-snug break-words', unread ? 'font-medium text-fg' : 'text-muted')}>
-                  {unread && <span className="sr-only">Sin leer: </span>}
+                  {unread && <span className="sr-only">{t('notices.unreadPrefix')} </span>}
                   {n.title}
                 </span>
                 <time dateTime={n.createdAt} className="shrink-0 font-mono text-xs text-faint tnum">
@@ -137,7 +138,7 @@ export function NoticesFeed({
                 type="button"
                 onClick={open}
                 className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-control px-2 py-2.5 text-left transition-colors hover:bg-surface-2"
-                title={href ? 'Abrir' : 'Marcar como leído'}
+                title={href ? t('notices.open') : t('notices.markRead')}
               >
                 {content}
               </button>

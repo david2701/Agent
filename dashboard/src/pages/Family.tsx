@@ -13,8 +13,6 @@ import {
   UserPlus,
 } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/family'
@@ -29,30 +27,31 @@ import { Chip, PageHeader, Panel, SectionHeader, Segmented, Tag } from '@/compon
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { firstName, ROLE_LABEL, useFamilyInfo, type FamilyView } from '@/lib/family'
-import { longDate, plural, shortDate, time, toDate } from '@/lib/format'
+import { firstName, roleLabel, useFamilyInfo, type FamilyView } from '@/lib/family'
+import { dayMonthLong, longDate, shortDate, time, toDate } from '@/lib/format'
+import { intlLocale, t, tn } from '@/lib/i18n'
 import { useMarkNoticesRead } from '@/lib/mutations'
 import { keys, useInvites, useNotices } from '@/lib/queries'
 import type { FamilyInfo, FamilyRole, Household, Invitation, InviteCreated, Member } from '@/lib/types'
 
 const MESSAGE_MAX = 500
 
-/** "Vence el sábado 17 de octubre a las 9:00" */
+/** "Expires Saturday, October 17 at 9:00 AM" */
 function expiresLabel(iso: string) {
-  return `Vence el ${longDate(iso)} a las ${time(iso)}`
+  return t('family.expires', { date: longDate(iso), time: time(iso) })
 }
 
-export default function Familia() {
+export default function FamilyPage() {
   const fam = useFamilyInfo()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const [inviteOpen, setInviteOpen] = useState(false)
 
-  // ?invitar=1 abre el diálogo (desde Hoy o la paleta de comandos); #novedades y #aviso desplazan hasta la sección.
+  // ?invite=1 opens the dialog (from Today or the command palette); #updates and #notice scroll to the section.
   useEffect(() => {
-    if (!params.get('invitar') || !fam.query.data) return
+    if (!params.get('invite') || !fam.query.data) return
     if (fam.isAdmin) setInviteOpen(true)
-    params.delete('invitar')
+    params.delete('invite')
     setParams(params, { replace: true })
   }, [params, setParams, fam.query.data, fam.isAdmin])
 
@@ -60,13 +59,13 @@ export default function Familia() {
     if (location.hash && fam.query.data) requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' }))
   }, [location.hash, fam.query.data])
 
-  if (fam.query.isLoading) return <FamiliaSkeleton />
+  if (fam.query.isLoading) return <FamilySkeleton />
   if (fam.query.isError || !fam.household)
     return (
       <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
-        <PageHeader title="Familia" />
+        <PageHeader title={t('nav.family')} />
         <Panel className="mt-7">
-          <ErrorState message={(fam.query.error as Error | null)?.message ?? 'No se pudo leer la familia.'} onRetry={() => void fam.query.refetch()} />
+          <ErrorState message={(fam.query.error as Error | null)?.message ?? t('family.err.load')} onRetry={() => void fam.query.refetch()} />
         </Panel>
       </div>
     )
@@ -92,9 +91,9 @@ export default function Familia() {
   )
 }
 
-function FamiliaSkeleton() {
+function FamilySkeleton() {
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9" aria-busy="true" aria-label="Cargando familia">
+    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9" aria-busy="true" aria-label={t('today.loadingFamily')}>
       <div className="grid gap-2">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-4 w-80 max-w-full" />
@@ -113,7 +112,7 @@ function FamiliaSkeleton() {
   )
 }
 
-/* ---------------------------------------------------------------- Encabezado */
+/* ---------------------------------------------------------------- Header */
 
 function HouseholdHeader({ fam, household, onInvite }: { fam: FamilyView; household: Household; onInvite: () => void }) {
   const qc = useQueryClient()
@@ -124,9 +123,9 @@ function HouseholdHeader({ fam, household, onInvite }: { fam: FamilyView; househ
       const prev = qc.getQueryData<FamilyInfo>(keys.family)
       if (prev) qc.setQueryData<FamilyInfo>(keys.family, { ...prev, household: h })
       setEditing(null)
-      toast({ title: 'Nombre guardado', description: h.name })
+      toast({ title: t('family.nameSaved'), description: h.name })
     },
-    onError: (e) => toastError(e, 'No se pudo cambiar el nombre'),
+    onError: (e) => toastError(e, t('family.err.rename')),
   })
 
   const submit = (e: FormEvent) => {
@@ -148,21 +147,21 @@ function HouseholdHeader({ fam, household, onInvite }: { fam: FamilyView; househ
           }}
           maxLength={60}
           autoFocus
-          aria-label="Nombre de la familia"
+          aria-label={t('family.nameLabel')}
           className="h-10 w-[min(100%,22rem)] text-md font-semibold"
         />
         <Button type="submit" variant="primary" loading={rename.isPending} disabled={!editing.trim()}>
-          Guardar
+          {t('common.save')}
         </Button>
         <Button variant="ghost" onClick={() => setEditing(null)}>
-          Cancelar
+          {t('common.cancel')}
         </Button>
       </form>
     ) : (
       <span className="flex items-center gap-1.5">
         <span className="min-w-0 break-words">{household.name}</span>
         {fam.isAdmin && (
-          <IconButton label="Cambiar el nombre de la familia" size="sm" onClick={() => setEditing(household.name)}>
+          <IconButton label={t('family.renameHousehold')} size="sm" onClick={() => setEditing(household.name)}>
             <PencilSimple className="size-4" />
           </IconButton>
         )}
@@ -172,11 +171,11 @@ function HouseholdHeader({ fam, household, onInvite }: { fam: FamilyView; househ
   return (
     <PageHeader
       title={title}
-      description={`${plural(fam.members.length, 'miembro', 'miembros')}. Lo que marcan como familiar lo ven y editan todos; lo personal sigue siendo de cada uno.`}
+      description={tn('family.membersLine', fam.members.length)}
       actions={
         fam.isAdmin && editing === null ? (
           <Button variant="primary" icon={<UserPlus className="size-4" />} onClick={onInvite}>
-            Invitar a alguien
+            {t('family.invite')}
           </Button>
         ) : undefined
       }
@@ -184,7 +183,7 @@ function HouseholdHeader({ fam, household, onInvite }: { fam: FamilyView; househ
   )
 }
 
-/* ---------------------------------------------------------------- Miembros */
+/* ---------------------------------------------------------------- Members */
 
 function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void }) {
   const qc = useQueryClient()
@@ -196,9 +195,9 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
     onSuccess: (m) => {
       void qc.invalidateQueries({ queryKey: keys.family })
       const name = firstName(m.displayName)
-      toast({ title: m.role === 'admin' ? `Ahora ${name} puede administrar la familia` : `${name} ya no administra la familia` })
+      toast({ title: m.role === 'admin' ? t('family.nowAdmin', { name }) : t('family.noLongerAdmin', { name }) })
     },
-    onError: (e) => toastError(e, 'No se pudo cambiar el rol'),
+    onError: (e) => toastError(e, t('family.err.role')),
   })
 
   const accessCode = useMutation({
@@ -207,7 +206,7 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
       setAccess(r)
       void qc.invalidateQueries({ queryKey: keys.invites })
     },
-    onError: (e) => toastError(e, 'No se pudo generar el código'),
+    onError: (e) => toastError(e, t('family.err.code')),
   })
 
   const remove = useMutation({
@@ -215,44 +214,44 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
     onSuccess: (m) => {
       setRemoving(null)
       void qc.invalidateQueries({ queryKey: keys.family })
-      toast({ title: `${firstName(m.displayName)} ya no está en la familia`, description: 'Lo que había compartido ahora es tuyo.' })
+      toast({ title: t('family.removed', { name: firstName(m.displayName) }), description: t('family.removedBody') })
     },
-    onError: (e) => toastError(e, 'No se pudo quitar de la familia'),
+    onError: (e) => toastError(e, t('family.err.remove')),
   })
 
   const members = [...fam.members].sort((a, b) => Number(b.id === fam.me) - Number(a.id === fam.me) || a.joinedAt.localeCompare(b.joinedAt))
 
   return (
     <Panel className="p-5" aria-labelledby="members-title">
-      <SectionHeader id="members-title" title="Miembros" count={fam.members.length} />
+      <SectionHeader id="members-title" title={t('family.members')} count={fam.members.length} />
       <ul className="mt-2 divide-y divide-line">
         {members.map((m) => {
           const me = m.id === fam.me
-          const role = <Tag tone="neutral">{ROLE_LABEL[m.role] ?? m.role}</Tag>
+          const role = <Tag tone="neutral">{roleLabel(m.role)}</Tag>
           return (
             <li key={m.id} className="flex items-center gap-3 py-3">
               <Avatar name={m.displayName} size="lg" />
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="min-w-0 truncate text-base font-medium text-fg">{m.displayName}</span>
-                  {me && <span className="text-sm font-medium text-accent-strong">Tú</span>}
+                  {me && <span className="text-sm font-medium text-accent-strong">{t('app.you')}</span>}
                   <span className="sm:hidden">{role}</span>
                 </p>
                 <p className="truncate text-sm text-muted">{m.email}</p>
-                <p className="text-xs text-faint">Desde el {format(toDate(m.joinedAt), "d 'de' MMMM", { locale: es })}</p>
+                <p className="text-xs text-faint">{t('family.joined', { date: dayMonthLong(toDate(m.joinedAt)) })}</p>
               </div>
               <span className="max-sm:hidden">{role}</span>
               {fam.isAdmin && !me ? (
                 <Menu
                   items={[
-                    { label: 'Generar código de acceso', icon: <Key className="size-4" />, onSelect: () => accessCode.mutate(m), disabled: accessCode.isPending },
+                    { label: t('family.genCode'), icon: <Key className="size-4" />, onSelect: () => accessCode.mutate(m), disabled: accessCode.isPending },
                     m.role === 'admin'
-                      ? { label: 'Quitar administrador', icon: <ShieldSlash className="size-4" />, onSelect: () => setRole.mutate({ m, role: 'member' }) }
-                      : { label: 'Hacer administrador', icon: <ShieldCheck className="size-4" />, onSelect: () => setRole.mutate({ m, role: 'admin' }) },
-                    { label: 'Quitar de la familia', icon: <UserMinus className="size-4" />, tone: 'danger', onSelect: () => setRemoving(m) },
+                      ? { label: t('family.removeAdmin'), icon: <ShieldSlash className="size-4" />, onSelect: () => setRole.mutate({ m, role: 'member' }) }
+                      : { label: t('family.makeAdmin'), icon: <ShieldCheck className="size-4" />, onSelect: () => setRole.mutate({ m, role: 'admin' }) },
+                    { label: t('family.removeFromFamily'), icon: <UserMinus className="size-4" />, tone: 'danger', onSelect: () => setRemoving(m) },
                   ]}
                   trigger={(p) => (
-                    <IconButton label={`Opciones de ${m.displayName}`} {...p}>
+                    <IconButton label={t('family.optionsFor', { name: m.displayName })} {...p}>
                       <DotsThree className="size-5" weight="bold" />
                     </IconButton>
                   )}
@@ -267,9 +266,9 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
 
       {!fam.hasOthers && fam.isAdmin && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-control border border-dashed border-line px-4 py-3.5">
-          <p className="min-w-0 flex-1 basis-56 text-base text-muted">Por ahora estás solo. Invita a tu familia para compartir listas, eventos, tareas y notas.</p>
+          <p className="min-w-0 flex-1 basis-56 text-base text-muted">{t('family.aloneHint')}</p>
           <Button size="sm" icon={<UserPlus className="size-4" />} onClick={onInvite}>
-            Invitar
+            {t('family.inviteShort')}
           </Button>
         </div>
       )}
@@ -279,31 +278,26 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
         onClose={() => setRemoving(null)}
         onConfirm={() => removing && remove.mutate(removing)}
         loading={remove.isPending}
-        title={`¿Quitar a ${removing ? firstName(removing.displayName) : 'este miembro'} de la familia?`}
-        description={
-          <>
-            Se borran su cuenta y sus datos personales: notas, tareas, recordatorios y todo lo que no compartió. Lo que había compartido con la familia
-            pasa a ser tuyo, así nadie lo pierde. No se puede deshacer.
-          </>
-        }
-        confirmLabel="Quitar de la familia"
+        title={t('family.removeTitle', { name: removing ? firstName(removing.displayName) : t('family.thisMember') })}
+        description={t('family.removeBody')}
+        confirmLabel={t('family.removeFromFamily')}
       />
 
       <Dialog
         open={!!access}
         onClose={() => setAccess(null)}
-        title={access ? `Código de acceso para ${firstName(access.member.displayName)}` : 'Código de acceso'}
-        description="Para quien olvidó su contraseña: con este código define una nueva."
+        title={access ? t('family.accessCodeFor', { name: firstName(access.member.displayName) }) : t('family.accessCode')}
+        description={t('family.accessCodeHint')}
         footer={
           <Button variant="primary" onClick={() => setAccess(null)}>
-            Listo
+            {t('common.done')}
           </Button>
         }
       >
         {access && (
           <CodeResult
             result={access.result}
-            note={`Sirve una sola vez durante 24 horas. Al usarlo, ${firstName(access.member.displayName)} define una contraseña nueva y se cierran sus otras sesiones.`}
+            note={t('family.accessCodeNote', { name: firstName(access.member.displayName) })}
           />
         )}
       </Dialog>
@@ -311,28 +305,28 @@ function MembersPanel({ fam, onInvite }: { fam: FamilyView; onInvite: () => void
   )
 }
 
-/** Código grande en Geist Mono, enlace y vencimiento, con botones de copiar. */
+/** Large code in Geist Mono, link and expiry, with copy buttons. */
 function CodeResult({ result, note }: { result: InviteCreated; note: string }) {
   return (
     <div className="grid gap-4">
       <div className="rounded-card border border-line bg-bg px-4 py-5 text-center">
-        <p className="text-sm text-muted">Código</p>
+        <p className="text-sm text-muted">{t('family.code')}</p>
         <p className="mt-2 font-mono text-xl leading-none font-medium tracking-[0.08em] text-fg select-all tnum sm:text-2xl" data-testid="family-code">
           {result.code}
         </p>
         <p className="mt-3 text-sm text-muted">{expiresLabel(result.invitation.expiresAt)}</p>
-        <CopyButton value={result.code} label="Copiar código" className="mt-4" />
+        <CopyButton value={result.code} label={t('family.copyCode')} className="mt-4" />
       </div>
       <div className="grid gap-1.5">
-        <p className="text-sm font-medium text-fg">Enlace</p>
-        <CopyField value={result.link} label="Copiar enlace" copiedLabel="Copiado" />
+        <p className="text-sm font-medium text-fg">{t('family.link')}</p>
+        <CopyField value={result.link} label={t('family.copyLink')} copiedLabel={t('common.copied')} />
       </div>
       <p className="text-sm text-muted">{note}</p>
     </div>
   )
 }
 
-/* ---------------------------------------------------------------- Invitar */
+/* ---------------------------------------------------------------- Invite */
 
 function InviteDialog({ open, onClose, householdName }: { open: boolean; onClose: () => void; householdName: string }) {
   const qc = useQueryClient()
@@ -355,7 +349,7 @@ function InviteDialog({ open, onClose, householdName }: { open: boolean; onClose
       setResult(r)
       void qc.invalidateQueries({ queryKey: keys.invites })
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo crear la invitación'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('family.err.createInvite')),
   })
 
   const submit = (e: FormEvent) => {
@@ -370,8 +364,8 @@ function InviteDialog({ open, onClose, householdName }: { open: boolean; onClose
     <Dialog
       open={open}
       onClose={onClose}
-      title={result ? (invitedName ? `Invitación para ${invitedName}` : 'Invitación lista') : 'Invitar a alguien'}
-      description={result ? 'Compártela por el medio que prefieras.' : `Se unirá a ${householdName} con su propia cuenta y su espacio personal.`}
+      title={result ? (invitedName ? t('family.inviteFor', { name: invitedName }) : t('family.inviteReady')) : t('family.invite')}
+      description={result ? t('family.shareAnyWay') : t('family.willJoin', { household: householdName })}
       footer={
         result ? (
           <>
@@ -382,49 +376,47 @@ function InviteDialog({ open, onClose, householdName }: { open: boolean; onClose
                 setName('')
               }}
             >
-              Invitar a otra persona
+              {t('family.inviteAnother')}
             </Button>
             <Button variant="primary" onClick={onClose}>
-              Listo
+              {t('common.done')}
             </Button>
           </>
         ) : (
           <>
             <Button variant="ghost" onClick={onClose}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" type="submit" form="invite-form" loading={create.isPending}>
-              Crear invitación
+              {t('family.createInvite')}
             </Button>
           </>
         )
       }
     >
       {result ? (
-        <CodeResult result={result} note="Sirve una sola vez. Al usarla, crea su cuenta y aparece en la lista de miembros." />
+        <CodeResult result={result} note={t('family.inviteNote')} />
       ) : (
         <form id="invite-form" onSubmit={submit} className="grid gap-4">
-          <Field label="Nombre" optional hint="Lo verá al abrir la invitación y queda como su nombre en Kairo.">
+          <Field label={t('common.name')} optional hint={t('family.inviteNameHint')}>
             {(id, d) => (
-              <Input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Valentina" autoFocus aria-describedby={d} />
+              <Input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={t('family.inviteNamePlaceholder')} autoFocus aria-describedby={d} />
             )}
           </Field>
           <div className="grid gap-1.5">
-            <span className="text-sm font-medium">Rol</span>
+            <span className="text-sm font-medium">{t('family.role')}</span>
             <Segmented
-              label="Rol"
+              label={t('family.role')}
               value={role}
               onChange={setRole}
               options={[
-                { value: 'member', label: 'Miembro' },
-                { value: 'admin', label: 'Administrador' },
+                { value: 'member', label: t('role.member') },
+                { value: 'admin', label: t('role.admin') },
               ]}
               className="w-fit"
             />
             <p className="text-sm text-muted">
-              {role === 'member'
-                ? 'Ve y edita lo familiar. Lo suyo es privado, también para ti.'
-                : 'Además de lo familiar, puede invitar, quitar miembros y generar códigos de acceso.'}
+              {role === 'member' ? t('family.roleMemberHint') : t('family.roleAdminHint')}
             </p>
           </div>
           {error && <FormError>{error}</FormError>}
@@ -448,26 +440,26 @@ function InvitesPanel({ fam }: { fam: FamilyView }) {
     mutationFn: (i: Invitation) => api.del(`/family/invites/${i.id}`).then(() => i),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.invites })
-      toast({ title: 'Invitación revocada', description: 'Ese código ya no sirve.' })
+      toast({ title: t('family.inviteRevoked'), description: t('family.inviteRevokedBody') })
     },
-    onError: (e) => toastError(e, 'No se pudo revocar'),
+    onError: (e) => toastError(e, t('family.err.revoke')),
   })
 
   const label = (i: Invitation) => {
-    if (i.kind === 'reset') return `Código de acceso de ${fam.nameOf(i.targetUserId) ?? 'un miembro'}`
-    return i.name ? `Invitación para ${i.name}` : 'Invitación sin nombre'
+    if (i.kind === 'reset') return t('family.accessCodeOf', { name: fam.nameOf(i.targetUserId) ?? t('family.aMember') })
+    return i.name ? t('family.inviteFor', { name: i.name }) : t('family.unnamedInvite')
   }
 
   return (
     <Panel className="p-5" aria-labelledby="invites-title">
-      <SectionHeader id="invites-title" title="Invitaciones pendientes" count={invites.data ? pending.length : undefined} />
-      <p className="mt-1 text-sm text-muted">Los códigos solo se muestran al crearlos. Si alguien perdió el suyo, revócalo y crea otro.</p>
+      <SectionHeader id="invites-title" title={t('family.pendingInvites')} count={invites.data ? pending.length : undefined} />
+      <p className="mt-1 text-sm text-muted">{t('family.pendingHint')}</p>
       {invites.isLoading ? (
         <SkeletonRows rows={2} className="mt-4" />
       ) : invites.isError ? (
         <ErrorState message={(invites.error as Error).message} onRetry={() => void invites.refetch()} className="py-6" />
       ) : pending.length === 0 ? (
-        <p className="mt-3 text-base text-muted">No hay invitaciones pendientes.</p>
+        <p className="mt-3 text-base text-muted">{t('family.noPending')}</p>
       ) : (
         <ul className="mt-2 divide-y divide-line">
           {pending.map((i) => {
@@ -478,8 +470,8 @@ function InvitesPanel({ fam }: { fam: FamilyView }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-base text-fg">{label(i)}</p>
                   <p className="text-sm text-muted">
-                    {i.kind === 'invite' && <>{ROLE_LABEL[i.role] ?? i.role}. </>}
-                    Vence el {shortDate(i.expiresAt)}, <span className="font-mono">{time(i.expiresAt)}</span>
+                    {i.kind === 'invite' && <>{roleLabel(i.role)}. </>}
+                    {t('family.expiresOn')} {shortDate(i.expiresAt)}, <span className="font-mono">{time(i.expiresAt)}</span>
                   </p>
                 </div>
                 <Button
@@ -488,7 +480,7 @@ function InvitesPanel({ fam }: { fam: FamilyView }) {
                   loading={revoke.isPending && revoke.variables?.id === i.id}
                   onClick={() => revoke.mutate(i)}
                 >
-                  Revocar
+                  {t('family.revoke')}
                 </Button>
               </li>
             )
@@ -503,10 +495,10 @@ function OnlyAdminsPanel({ fam }: { fam: FamilyView }) {
   const admins = fam.members.filter((m) => m.role === 'admin').map((m) => firstName(m.displayName))
   return (
     <Panel className="p-5" aria-labelledby="invites-title">
-      <SectionHeader id="invites-title" title="Invitaciones" />
+      <SectionHeader id="invites-title" title={t('family.invites')} />
       <p className="mt-2 text-base text-muted">
-        Solo quien administra la familia puede invitar a alguien o generar códigos de acceso.
-        {admins.length > 0 && <> Pídeselo a {admins.join(' o ')}.</>}
+        {t('family.onlyAdmins')}
+        {admins.length > 0 && <> {t('family.askAdmins', { admins: new Intl.ListFormat(intlLocale(), { type: 'disjunction' }).format(admins) })}</>}
       </p>
     </Panel>
   )
@@ -515,20 +507,20 @@ function OnlyAdminsPanel({ fam }: { fam: FamilyView }) {
 function HowItWorksPanel() {
   return (
     <Panel className="p-5" aria-labelledby="how-title">
-      <SectionHeader id="how-title" title="Qué ve cada quien" />
+      <SectionHeader id="how-title" title={t('family.whoSees')} />
       <dl className="mt-3 grid gap-3">
         <div className="flex gap-3">
           <LockSimple className="mt-0.5 size-[18px] shrink-0 text-faint" aria-hidden />
           <div>
-            <dt className="text-base font-medium text-fg">Personal</dt>
-            <dd className="text-sm text-muted">Solo lo ves tú. Nadie más, tampoco quien administra la familia.</dd>
+            <dt className="text-base font-medium text-fg">{t('family.personal')}</dt>
+            <dd className="text-sm text-muted">{t('family.personalHint')}</dd>
           </div>
         </div>
         <div className="flex gap-3">
           <House className="mt-0.5 size-[18px] shrink-0 text-faint" aria-hidden />
           <div>
-            <dt className="text-base font-medium text-fg">Familiar</dt>
-            <dd className="text-sm text-muted">Lo ven y editan todos. Solo quien lo creó puede dejar de compartirlo.</dd>
+            <dt className="text-base font-medium text-fg">{t('family.tag')}</dt>
+            <dd className="text-sm text-muted">{t('family.sharedHint')}</dd>
           </div>
         </div>
       </dl>
@@ -536,7 +528,7 @@ function HowItWorksPanel() {
   )
 }
 
-/* ---------------------------------------------------------------- Aviso */
+/* ---------------------------------------------------------------- Notice */
 
 function MessagePanel({ fam }: { fam: FamilyView }) {
   const [text, setText] = useState('')
@@ -549,29 +541,29 @@ function MessagePanel({ fam }: { fam: FamilyView }) {
     onSuccess: (r) => {
       setText('')
       setTo([])
-      toast({ title: 'Aviso enviado', description: `Le llegó a ${plural(r.sent, 'persona', 'personas')}.`, tone: 'success' })
+      toast({ title: t('family.noticeSent'), description: tn('family.sentTo', r.sent), tone: 'success' })
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo enviar'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('family.err.send')),
   })
 
   const toggle = (id: string) => {
     const next = to.includes(id) ? to.filter((x) => x !== id) : [...to, id]
-    // Elegir a todos uno por uno equivale a "Todos".
+    // Picking everyone one by one is the same as "Everyone".
     setTo(next.length === others.length ? [] : next)
   }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!text.trim()) return setError('Escribe el aviso.')
+    if (!text.trim()) return setError(t('family.err.writeNotice'))
     setError(null)
     send.mutate()
   }
 
   return (
-    <Panel className="scroll-mt-6 p-5" id="aviso" aria-labelledby="msg-title">
-      <SectionHeader id="msg-title" title="Enviar aviso" />
+    <Panel className="scroll-mt-6 p-5" id="notice" aria-labelledby="msg-title">
+      <SectionHeader id="msg-title" title={t('family.sendNotice')} />
       {!fam.hasOthers ? (
-        <p className="mt-2 text-base text-muted">Cuando alguien más se una podrás enviarle avisos que le llegan al instante.</p>
+        <p className="mt-2 text-base text-muted">{t('family.noticeEmpty')}</p>
       ) : (
         <form onSubmit={submit} className="mt-3 grid gap-3">
           <Textarea
@@ -584,15 +576,15 @@ function MessagePanel({ fam }: { fam: FamilyView }) {
               }
             }}
             rows={3}
-            placeholder="La cena está lista"
-            aria-label="Mensaje para la familia"
+            placeholder={t('family.noticePlaceholder')}
+            aria-label={t('family.noticeLabel')}
             aria-invalid={!!error && !text.trim()}
             className="min-h-20"
           />
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Para">
-            <span className="mr-1 text-sm text-muted">Para</span>
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t('family.to')}>
+            <span className="mr-1 text-sm text-muted">{t('family.to')}</span>
             <Chip selected={to.length === 0} onClick={() => setTo([])}>
-              Todos
+              {t('family.everyone')}
             </Chip>
             {others.map((m) => (
               <Chip key={m.id} selected={to.includes(m.id)} onClick={() => toggle(m.id)}>
@@ -610,7 +602,7 @@ function MessagePanel({ fam }: { fam: FamilyView }) {
               {text.length}/{MESSAGE_MAX}
             </span>
             <Button type="submit" variant={text.trim() ? 'primary' : 'secondary'} disabled={!text.trim()} loading={send.isPending} icon={<PaperPlaneTilt className="size-4" />}>
-              Enviar
+              {t('common.send')}
             </Button>
           </div>
         </form>
@@ -619,7 +611,7 @@ function MessagePanel({ fam }: { fam: FamilyView }) {
   )
 }
 
-/* ---------------------------------------------------------------- Novedades */
+/* ---------------------------------------------------------------- Updates */
 
 const FEED_PAGE = 8
 
@@ -630,16 +622,16 @@ function NoticesPanel() {
   const unread = notices.data?.unread ?? 0
   const total = notices.data?.notices.length ?? 0
   return (
-    <Panel className="scroll-mt-6 p-5" id="novedades" aria-labelledby="news-title">
+    <Panel className="scroll-mt-6 p-5" id="updates" aria-labelledby="news-title">
       <SectionHeader
         id="news-title"
         title={
           <>
-            Novedades
+            {t('app.updates')}
             {unread > 0 && (
               <span className="font-mono text-sm font-normal text-faint tnum">
                 {unread}
-                <span className="max-sm:sr-only"> sin leer</span>
+                <span className="max-sm:sr-only"> {t('family.unreadSuffix')}</span>
               </span>
             )}
           </>
@@ -647,8 +639,8 @@ function NoticesPanel() {
         action={
           unread > 0 ? (
             <Button size="sm" variant="ghost" icon={<Checks className="size-4" />} onClick={() => markAll.mutate(undefined)}>
-              <span className="max-sm:hidden">Marcar todo como leído</span>
-              <span className="sm:hidden">Todo leído</span>
+              <span className="max-sm:hidden">{t('app.markAllRead')}</span>
+              <span className="sm:hidden">{t('family.allRead')}</span>
             </Button>
           ) : undefined
         }
@@ -663,7 +655,7 @@ function NoticesPanel() {
         />
         {total > FEED_PAGE && (
           <button type="button" onClick={() => setExpanded((e) => !e)} className="mt-1 rounded-[6px] py-1.5 text-sm text-muted hover:text-fg">
-            {expanded ? 'Ver menos' : `Ver ${total - FEED_PAGE} más`}
+            {expanded ? t('family.showLess') : t('common.seeMore', { count: total - FEED_PAGE })}
           </button>
         )}
       </div>

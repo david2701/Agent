@@ -26,17 +26,13 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
 import { compactWhen } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { keys, useConversations, useMessages, useSettings } from '@/lib/queries'
 import type { Conversation } from '@/lib/types'
 import { useStored } from '@/lib/useStored'
-import { useVoice } from '@/lib/voice'
+import { stripWakePhrase, useVoice } from '@/lib/voice'
 
-const SUGGESTIONS = [
-  '¿Qué tengo esta semana?',
-  'Anota que el código de la portería es 4821',
-  'Crea una tarea para revisar el contrato del arriendo el lunes',
-  'Recuérdame tomar la vitamina D todos los días a las 8',
-]
+const suggestions = () => [t('chat.suggestion1'), t('chat.suggestion2'), t('chat.suggestion3'), t('chat.suggestion4')]
 
 export default function Chat() {
   const { id } = useParams<{ id?: string }>()
@@ -68,13 +64,13 @@ export default function Chat() {
   const turnVisible = !!pending && pending.convId === id && !!runner.turn
 
   const finishTurn = useCallback(
-    async (t: Turn) => {
-      if (t.conversationId) await qc.invalidateQueries({ queryKey: keys.messages(t.conversationId) })
-      if (t.status === 'done') {
+    async (turn: Turn) => {
+      if (turn.conversationId) await qc.invalidateQueries({ queryKey: keys.messages(turn.conversationId) })
+      if (turn.status === 'done') {
         setPending(null)
         runner.reset()
         const s = settings.data?.settings
-        if (voiceReplyRef.current && t.spoken) void voice.say(t.spoken, { voice: s?.voice, speed: s?.voiceSpeed })
+        if (voiceReplyRef.current && turn.spoken) void voice.say(turn.spoken, { voice: s?.voice, speed: s?.voiceSpeed })
         else voice.setPhase('off')
       } else {
         voice.setPhase('off')
@@ -103,7 +99,9 @@ export default function Chat() {
     async (text: string) => {
       if (runner.busy) return
       const convId = idRef.current
-      await runner.run('/chat', { message: text, conversationId: convId, channel: 'chat' }, newTurn('chat', text), begin(convId))
+      // "Hey Kairo, ..." / "Oye Kairo, ..." typed by habit: the wake phrase is not part of the request.
+      const message = stripWakePhrase(text) || text
+      await runner.run('/chat', { message, conversationId: convId, channel: 'chat' }, newTurn('chat', message), begin(convId))
     },
     [begin, runner],
   )
@@ -111,13 +109,13 @@ export default function Chat() {
   sendVoiceRef.current = (blob: Blob, ext: string) => {
     const convId = idRef.current
     const fd = new FormData()
-    fd.append('file', blob, `voz.${ext}`)
+    fd.append('file', blob, `voice.${ext}`)
     if (convId) fd.append('conversationId', convId)
     fd.append('channel', 'voice')
     void runner.run('/voice/turn', fd, newTurn('voice', null), begin(convId))
   }
 
-  // Mensaje o voz pedidos desde Hoy o la paleta
+  // A message or voice request coming from Today or the palette
   const consumed = useRef(false)
   useEffect(() => {
     const st = location.state as { ask?: string; voice?: boolean } | null
@@ -160,11 +158,11 @@ export default function Chat() {
     mutationFn: (c: Conversation) => api.del(`/conversations/${c.id}`).then(() => c),
     onSuccess: (c) => {
       void qc.invalidateQueries({ queryKey: keys.conversations })
-      toast({ title: 'Conversación eliminada', description: c.title })
+      toast({ title: t('chat.deleted'), description: c.title })
       if (c.id === id) navigate('/chat')
       setConfirmDelete(null)
     },
-    onError: (e) => toastError(e, 'No se pudo eliminar'),
+    onError: (e) => toastError(e, t('common.couldNotDelete')),
   })
 
   const isNew = !id && !turnVisible
@@ -177,12 +175,12 @@ export default function Chat() {
     else if (!runner.busy) void voice.start()
   }
 
-  const showThinking = turnVisible && runner.turn && runner.busy && !runner.turn.text && runner.turn.tools.every((t) => t.status === 'done')
+  const showThinking = turnVisible && runner.turn && runner.busy && !runner.turn.text && runner.turn.tools.every((tool) => tool.status === 'done')
 
   return (
     <div className="flex h-[calc(100dvh-56px-68px-env(safe-area-inset-bottom))] md:h-[100dvh]">
-      {/* Lista de conversaciones */}
-      <aside className="hidden w-[300px] shrink-0 flex-col border-r border-line lg:flex" aria-label="Conversaciones">
+      {/* Conversation list */}
+      <aside className="hidden w-[300px] shrink-0 flex-col border-r border-line lg:flex" aria-label={t('chat.conversations')}>
         <ConversationList
           conversations={conversations.data}
           loading={conversations.isLoading}
@@ -191,21 +189,21 @@ export default function Chat() {
         />
       </aside>
 
-      {/* Hilo */}
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Conversación">
+      {/* Thread */}
+      <section className="flex min-w-0 flex-1 flex-col" aria-label={t('chat.conversation')}>
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-3 md:h-16 md:px-5">
-          <IconButton label="Historial de conversaciones" className="lg:hidden" onClick={() => setHistoryOpen(true)}>
+          <IconButton label={t('chat.history')} className="lg:hidden" onClick={() => setHistoryOpen(true)}>
             <ClockCounterClockwise className="size-5" />
           </IconButton>
           <h1 className="min-w-0 flex-1 truncate text-md font-semibold tracking-tight">
-            {id ? current?.title ?? (conversations.isLoading ? '' : 'Conversación') : 'Nueva conversación'}
+            {id ? current?.title ?? (conversations.isLoading ? '' : t('chat.conversation')) : t('chat.new')}
           </h1>
           <label className="hidden items-center gap-2.5 text-sm text-muted sm:flex">
-            Responder con voz
-            <Switch checked={voiceReply} onChange={setVoiceReply} label="Responder con voz" />
+            {t('chat.voiceReply')}
+            <Switch checked={voiceReply} onChange={setVoiceReply} label={t('chat.voiceReply')} />
           </label>
           <IconButton
-            label={voiceReply ? 'Desactivar respuesta con voz' : 'Responder con voz'}
+            label={voiceReply ? t('chat.voiceReplyOff') : t('chat.voiceReply')}
             className="sm:hidden"
             tone={voiceReply ? 'accent' : 'default'}
             onClick={() => setVoiceReply(!voiceReply)}
@@ -215,11 +213,11 @@ export default function Chat() {
           {id && (
             <Menu
               items={[
-                { label: 'Nueva conversación', icon: <NotePencil className="size-4" />, onSelect: () => navigate('/chat') },
-                current && { label: 'Eliminar conversación', icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => setConfirmDelete(current) },
+                { label: t('chat.new'), icon: <NotePencil className="size-4" />, onSelect: () => navigate('/chat') },
+                current && { label: t('chat.delete'), icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => setConfirmDelete(current) },
               ]}
               trigger={(p) => (
-                <IconButton label="Más opciones" {...p}>
+                <IconButton label={t('chat.moreOptions')} {...p}>
                   <DotsThree className="size-5" weight="bold" />
                 </IconButton>
               )}
@@ -242,7 +240,7 @@ export default function Chat() {
                 {showThinking && (
                   <div className="flex items-center gap-3 pl-0.5" role="status">
                     <VoiceOrb state="thinking" className="size-6" />
-                    <span className="k-shimmer-text text-base">{runner.turn?.status === 'transcribing' ? 'Transcribiendo…' : 'Pensando…'}</span>
+                    <span className="k-shimmer-text text-base">{runner.turn?.status === 'transcribing' ? t('chat.transcribing') : t('palette.thinking')}</span>
                   </div>
                 )}
               </>
@@ -272,27 +270,27 @@ export default function Chat() {
             )}
             <Composer
               ref={composer}
-              onSend={(t) => void sendText(t)}
+              onSend={(text) => void sendText(text)}
               onMic={onMic}
               micActive={voice.phase === 'listening'}
               busy={runner.busy}
               onStop={() => {
                 runner.cancel()
                 voice.setPhase('off')
-                const t = runner.turn
-                if (t) runner.setTurn({ ...t, status: 'error', error: 'Detuviste la respuesta.' })
+                const turn = runner.turn
+                if (turn) runner.setTurn({ ...turn, status: 'error', error: t('chat.stoppedReply') })
               }}
-              placeholder="Escribe a Kairo"
+              placeholder={t('composer.placeholder')}
               autoFocus
             />
             <p className="mt-2 hidden text-center text-xs text-faint md:block">
-              Enter para enviar, Shift + Enter para un salto de línea.
+              {t('chat.sendHint')}
             </p>
           </div>
         </div>
       </section>
 
-      <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} title="Conversaciones" size="sm">
+      <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} title={t('chat.conversations')} size="sm">
         <div className="-mx-5 -mt-2">
           <ConversationList
             conversations={conversations.data}
@@ -309,8 +307,8 @@ export default function Chat() {
         onClose={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && removeConv.mutate(confirmDelete)}
         loading={removeConv.isPending}
-        title="¿Eliminar esta conversación?"
-        description="Se borra el historial de mensajes. Las notas, tareas y recordatorios que Kairo creó se conservan."
+        title={t('chat.deleteTitle')}
+        description={t('chat.deleteBody')}
       />
     </div>
   )
@@ -327,9 +325,9 @@ function VoiceBar({
   onFinish: () => void
   onCancel: () => void
 }) {
-  const label = phase === 'listening' ? 'Escuchando' : phase === 'thinking' ? 'Pensando' : 'Hablando'
+  const label = phase === 'listening' ? t('orb.listening') : phase === 'thinking' ? t('orb.thinking') : t('orb.speaking')
   const hint =
-    phase === 'listening' ? 'Habla con naturalidad; se envía cuando haces una pausa.' : phase === 'thinking' ? 'Kairo está preparando la respuesta.' : 'Toca Detener para interrumpir.'
+    phase === 'listening' ? t('chat.hintListening') : phase === 'thinking' ? t('chat.hintThinking') : t('chat.hintSpeaking')
   return (
     <div className="mb-3 flex items-center gap-4 rounded-card border border-line bg-surface px-4 py-3" role="status" aria-live="polite">
       <VoiceOrb state={phase === 'off' ? 'idle' : phase} getLevel={getLevel} className="size-12 shrink-0" />
@@ -340,11 +338,11 @@ function VoiceBar({
       <div className="flex shrink-0 gap-2">
         {phase === 'listening' && (
           <Button size="sm" variant="primary" onClick={onFinish}>
-            Enviar
+            {t('common.send')}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={onCancel}>
-          {phase === 'speaking' ? 'Detener' : 'Cancelar'}
+          {phase === 'speaking' ? t('composer.stop') : t('common.cancel')}
         </Button>
       </div>
     </div>
@@ -355,12 +353,10 @@ function NewConversation({ name, orb, onPick, getLevel }: { name?: string; orb: 
   return (
     <div className="flex min-h-[52dvh] flex-col items-center justify-center py-6 text-center">
       <VoiceOrb state={orb} getLevel={getLevel} className="size-24 md:size-28" />
-      <h2 className="mt-7 text-lg font-semibold tracking-tight md:text-xl">¿En qué te ayudo{name ? `, ${name}` : ''}?</h2>
-      <p className="mt-2 max-w-[46ch] text-base text-muted">
-        Escribe o toca el micrófono. Kairo guarda notas, crea tareas, recordatorios y eventos, y te avisa lo que hizo.
-      </p>
+      <h2 className="mt-7 text-lg font-semibold tracking-tight md:text-xl">{name ? t('chat.helpName', { name }) : t('chat.helpYou')}</h2>
+      <p className="mt-2 max-w-[46ch] text-base text-muted">{t('chat.intro')}</p>
       <div className="mt-7 grid w-full max-w-xl gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s) => (
+        {suggestions().map((s) => (
           <button
             key={s}
             type="button"
@@ -377,7 +373,7 @@ function NewConversation({ name, orb, onPick, getLevel }: { name?: string; orb: 
 
 function ThreadSkeleton() {
   return (
-    <div className="grid gap-6" aria-busy="true" aria-label="Cargando mensajes">
+    <div className="grid gap-6" aria-busy="true" aria-label={t('chat.loadingMessages')}>
       <div className="flex justify-end">
         <Skeleton className="h-10 w-2/5 rounded-[16px]" />
       </div>
@@ -423,15 +419,15 @@ function ConversationList({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn('grid gap-2 px-3', embedded ? 'pb-3' : 'pt-4 pb-3')}>
         <Button variant="secondary" className="w-full" icon={<NotePencil className="size-4" />} onClick={() => navigate('/chat')}>
-          Nueva conversación
+          {t('chat.new')}
         </Button>
         <label className="relative block">
-          <span className="sr-only">Buscar conversaciones</span>
+          <span className="sr-only">{t('chat.searchConversations')}</span>
           <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar"
+            placeholder={t('chat.search')}
             className="h-9 w-full rounded-control border border-line bg-surface pr-3 pl-9 text-base outline-none transition-colors focus:border-accent"
           />
         </label>
@@ -449,7 +445,7 @@ function ConversationList({
         ) : list.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
             <ChatCircleDots className="size-6 text-faint" />
-            <p className="text-base text-muted">{q ? 'Ninguna conversación coincide.' : 'Tus conversaciones aparecerán aquí.'}</p>
+            <p className="text-base text-muted">{q ? t('chat.noMatch') : t('chat.emptyList')}</p>
           </div>
         ) : (
           <ul className="grid gap-0.5">
@@ -465,14 +461,14 @@ function ConversationList({
                   }
                 >
                   <span className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate text-base text-fg">{c.title || 'Sin título'}</span>
+                    <span className="min-w-0 flex-1 truncate text-base text-fg">{c.title || t('chat.untitled')}</span>
                     <span className="shrink-0 font-mono text-xs text-faint">{compactWhen(c.updatedAt)}</span>
                   </span>
                   {c.preview && !c.preview.startsWith(c.title) && <span className="mt-0.5 block truncate text-sm text-muted">{c.preview}</span>}
                 </NavLink>
                 <button
                   type="button"
-                  aria-label={`Eliminar ${c.title}`}
+                  aria-label={t('common.deleteNamed', { name: c.title })}
                   onClick={() => onDelete(c)}
                   className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-[8px] text-faint opacity-0 transition-[opacity,color] group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 max-lg:opacity-100"
                 >

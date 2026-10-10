@@ -1,16 +1,17 @@
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 import { Button } from './button'
 
 export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden className={cn('k-skeleton', className)} />
 }
 
-/** Filas de esqueleto que imitan una lista con título y metadatos. */
+/** Skeleton rows that mimic a list with a title and metadata. */
 export function SkeletonRows({ rows = 4, className, withIcon = true }: { rows?: number; className?: string; withIcon?: boolean }) {
   return (
-    <div className={cn('grid gap-4', className)} aria-busy="true" aria-label="Cargando">
+    <div className={cn('grid gap-4', className)} aria-busy="true" aria-label={t('common.loading')}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="flex items-center gap-3">
           {withIcon && <Skeleton className="size-[18px] shrink-0 rounded-[6px]" />}
@@ -65,12 +66,12 @@ export function ErrorState({ message, onRetry, className }: { message: string; o
     <div role="alert" className={cn('flex flex-col items-center gap-3 px-6 py-10 text-center', className)}>
       <WarningCircle className="size-6 text-danger" />
       <div className="grid gap-1">
-        <p className="text-base font-medium text-fg">No se pudo cargar</p>
+        <p className="text-base font-medium text-fg">{t('common.couldNotLoad')}</p>
         <p className="max-w-[44ch] text-sm text-muted">{message}</p>
       </div>
       {onRetry && (
         <Button size="sm" onClick={onRetry} icon={<ArrowClockwise className="size-4" />}>
-          Reintentar
+          {t('common.retry')}
         </Button>
       )}
     </div>

@@ -1,18 +1,20 @@
 import { useReducedMotion } from 'motion/react'
 import { memo, useEffect, useRef } from 'react'
 import { cn } from '@/lib/cn'
+import { t, type TKey } from '@/lib/i18n'
 
 export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 /*
- * Orbe de voz: la misma geometría de la marca (anillo de 300° con hueco arriba a la derecha
- * y punto ámbar en el centro del hueco). Respira en reposo, se deforma con el micrófono al
- * escuchar, gira al pensar y ondula al hablar. Se dibuja fuera del ciclo de React (rAF + refs).
+ * Voice orb: the same geometry as the brand mark (a 300° ring with a gap at the top right
+ * and an amber dot in the middle of the gap). It breathes at rest, deforms with the microphone
+ * while listening, spins while thinking and ripples while speaking. Drawn outside the React
+ * cycle (rAF + refs).
  */
 
 const C = 100
 const R = 60
-const START = (-10 * Math.PI) / 180 // el arco va de -10° a 290° (sentido horario en pantalla)
+const START = (-10 * Math.PI) / 180 // the arc runs from -10° to 290° (clockwise on screen)
 const SPAN = (300 * Math.PI) / 180
 const DOT_ANGLE = (-40 * Math.PI) / 180
 const N = 120
@@ -33,7 +35,7 @@ const STATIC_PATH = arcPath(() => R)
 
 interface Props {
   state: OrbState
-  /** Nivel de audio 0..1 (micrófono o reproducción). */
+  /** Audio level 0..1 (microphone or playback). */
   getLevel?: () => number
   className?: string
   label?: string
@@ -90,7 +92,7 @@ export const VoiceOrb = memo(function VoiceOrb({ state, getLevel, className, lab
         targetScale = 1 + level * 0.04
       }
       if (s !== 'thinking') {
-        // Vuelve suavemente a la orientación de la marca
+        // Smoothly returns to the brand mark's orientation
         const back = ((rot % 360) + 360) % 360
         rot = back > 180 ? rot + (360 - back) * Math.min(1, dt * 4) : rot - back * Math.min(1, dt * 4)
       }
@@ -121,7 +123,7 @@ export const VoiceOrb = memo(function VoiceOrb({ state, getLevel, className, lab
       viewBox="0 0 200 200"
       className={cn('overflow-visible', className)}
       role="img"
-      aria-label={label ?? ORB_LABELS[state]}
+      aria-label={label ?? orbLabel(state)}
       data-state={state}
     >
       <g ref={group}>
@@ -141,9 +143,6 @@ export const VoiceOrb = memo(function VoiceOrb({ state, getLevel, className, lab
   )
 })
 
-export const ORB_LABELS: Record<OrbState, string> = {
-  idle: 'Kairo en reposo',
-  listening: 'Escuchando',
-  thinking: 'Pensando',
-  speaking: 'Hablando',
+export function orbLabel(state: OrbState): string {
+  return t(`orb.${state}` as TKey)
 }

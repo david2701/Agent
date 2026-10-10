@@ -1,6 +1,7 @@
 import { ArrowUp, Microphone, Stop } from '@phosphor-icons/react'
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 
 export interface ComposerHandle {
   focus: () => void
@@ -20,9 +21,9 @@ interface Props {
   label?: string
 }
 
-/** Caja de mensaje: Enter envía, Shift+Enter hace salto de línea. */
+/** Message box: Enter sends, Shift+Enter inserts a line break. */
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { onSend, onMic, micActive, busy, onStop, placeholder = 'Escribe a Kairo', autoFocus, size = 'md', className, label = 'Mensaje para Kairo' },
+  { onSend, onMic, micActive, busy, onStop, placeholder = t('composer.placeholder'), autoFocus, size = 'md', className, label = t('composer.label') },
   ref,
 ) {
   const [value, setValue] = useState('')
@@ -82,9 +83,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <button
           type="button"
           onClick={onMic}
-          aria-label={micActive ? 'Terminar de hablar' : 'Hablar con Kairo'}
+          aria-label={micActive ? t('composer.stopTalking') : t('composer.talkToKairo')}
           aria-pressed={micActive}
-          title={micActive ? 'Terminar de hablar' : 'Hablar'}
+          title={micActive ? t('composer.stopTalking') : t('composer.talk')}
           className={cn(
             'flex shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-200 active:scale-95',
             lg ? 'size-11' : 'size-9',
@@ -98,8 +99,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <button
           type="button"
           onClick={onStop}
-          aria-label="Detener respuesta"
-          title="Detener"
+          aria-label={t('composer.stopReply')}
+          title={t('composer.stop')}
           className={cn(
             'flex shrink-0 items-center justify-center rounded-full bg-fg text-bg transition-transform active:scale-95',
             lg ? 'size-11' : 'size-9',
@@ -111,8 +112,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <button
           type="submit"
           disabled={!value.trim() || busy}
-          aria-label="Enviar"
-          title="Enviar (Enter)"
+          aria-label={t('common.send')}
+          title={t('composer.sendEnter')}
           className={cn(
             'flex shrink-0 items-center justify-center rounded-full transition-[background-color,opacity,transform] duration-200 active:scale-95 disabled:opacity-35',
             lg ? 'size-11' : 'size-9',

@@ -1,6 +1,7 @@
 import { api } from './api'
+import { t } from './i18n'
 
-/** Utilidades de audio del navegador: grabar el micrófono, medir nivel y reproducir la voz de Kairo. */
+/** Browser audio utilities: record the microphone, measure the level and play Kairo's voice. */
 
 let ctx: AudioContext | null = null
 
@@ -10,7 +11,7 @@ export function audioContext(): AudioContext | null {
   return ctx
 }
 
-/** Llamar dentro de un gesto del usuario para permitir audio posterior. */
+/** Call inside a user gesture to allow audio afterwards. */
 export function unlockAudio() {
   const c = audioContext()
   if (c && c.state === 'suspended') void c.resume()
@@ -46,13 +47,13 @@ function rmsLevel(analyser: AnalyserNode, buf: Uint8Array<ArrayBuffer>) {
 
 export function micErrorMessage(e: unknown): string {
   const name = (e as { name?: string })?.name
-  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Permite el acceso al micrófono en tu navegador para hablar con Kairo.'
-  if (name === 'NotFoundError') return 'No encontré un micrófono conectado.'
-  if (name === 'NotReadableError') return 'Otra aplicación está usando el micrófono.'
-  return 'No pude iniciar el micrófono.'
+  if (name === 'NotAllowedError' || name === 'SecurityError') return t('audio.micDenied')
+  if (name === 'NotFoundError') return t('audio.micNotFound')
+  if (name === 'NotReadableError') return t('audio.micBusy')
+  return t('audio.micFailed')
 }
 
-/** Grabación corta (un turno de voz). */
+/** Short recording (one voice turn). */
 export class MicRecorder {
   private stream: MediaStream | null = null
   private recorder: MediaRecorder | null = null
@@ -112,7 +113,7 @@ export class MicRecorder {
     try {
       if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop()
     } catch {
-      /* ya detenido */
+      /* already stopped */
     }
     this.release()
   }
@@ -127,8 +128,8 @@ export class MicRecorder {
 }
 
 /**
- * Grabación larga por segmentos: reinicia el MediaRecorder cada `segmentMs` para que cada
- * segmento sea un archivo completo, y entrega cada uno a `onSegment`.
+ * Long recording in segments: restarts the MediaRecorder every `segmentMs` so each
+ * segment is a complete file, and hands each one to `onSegment`.
  */
 export class SegmentRecorder {
   private stream: MediaStream | null = null
@@ -202,7 +203,7 @@ export class SegmentRecorder {
     }, this.segmentMs)
   }
 
-  /** Detiene y espera a que el último segmento se entregue. */
+  /** Stops and waits for the last segment to be delivered. */
   stop(): Promise<void> {
     this.stopping = true
     if (this.timer) clearTimeout(this.timer)
@@ -223,7 +224,7 @@ export class SegmentRecorder {
     try {
       if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop()
     } catch {
-      /* nada */
+      /* nothing */
     }
     this.release()
   }
@@ -243,7 +244,7 @@ export interface Speech {
 
 let current: Speech | null = null
 
-/** Pide el audio a /voice/speak y lo reproduce. Devuelve un control con nivel de salida. */
+/** Requests audio from /voice/speak and plays it. Returns a control with the output level. */
 export async function speak(text: string, opts: { voice?: string; speed?: number } = {}): Promise<Speech> {
   current?.stop()
   const blob = await api.blob('/voice/speak', {
@@ -256,7 +257,7 @@ export async function speak(text: string, opts: { voice?: string; speed?: number
   let analyser: AnalyserNode | null = null
   let buf: Uint8Array<ArrayBuffer> | null = null
   const c = audioContext()
-  // Solo se enruta por el AudioContext si está activo; si no, el audio sonaría mudo.
+  // Only route through the AudioContext when it is running; otherwise the audio would be silent.
   if (c && c.state === 'running') {
     try {
       const src = c.createMediaElementSource(audio)
@@ -284,7 +285,7 @@ export async function speak(text: string, opts: { voice?: string; speed?: number
   const speech: Speech = {
     level: () => {
       if (analyser && buf) return rmsLevel(analyser, buf) * 1.2
-      // Sin analizador: una ondulación suave para el orbe
+      // No analyser: a gentle wave for the orb
       const t = (performance.now() - t0) / 1000
       return audio.paused ? 0 : 0.35 + 0.25 * Math.sin(t * 9) * Math.sin(t * 2.3)
     },
@@ -299,7 +300,7 @@ export async function speak(text: string, opts: { voice?: string; speed?: number
     await audio.play()
   } catch {
     finish()
-    throw new Error('El navegador bloqueó la reproducción. Toca el botón para escuchar.')
+    throw new Error(t('audio.playbackBlocked'))
   }
   return speech
 }

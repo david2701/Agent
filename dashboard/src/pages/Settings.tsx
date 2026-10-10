@@ -29,6 +29,7 @@ import { speak, unlockAudio } from '@/lib/audio'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
 import { relative, shortDate } from '@/lib/format'
+import { intlLocale, t, useI18n, type LangPref } from '@/lib/i18n'
 import {
   keys,
   useDevices,
@@ -43,19 +44,19 @@ import {
 import { notificationsSupported, requestNotifications } from '@/lib/realtime'
 import type { GeoPlace, McpServer, SettingsResponse, User, UserSettings } from '@/lib/types'
 
-const SECTIONS = [
-  { id: 'perfil', label: 'Perfil' },
-  { id: 'asistente', label: 'Asistente' },
-  { id: 'voz', label: 'Voz' },
-  { id: 'resumen', label: 'Resumen diario' },
-  { id: 'ubicacion', label: 'Ubicación' },
-  { id: 'lugares', label: 'Lugares' },
-  { id: 'notificaciones', label: 'Notificaciones' },
-  { id: 'google', label: 'Google Calendar' },
-  { id: 'mcp', label: 'Conexiones MCP' },
-  { id: 'dispositivos', label: 'Dispositivos' },
-  { id: 'seguridad', label: 'Seguridad' },
-  { id: 'datos', label: 'Datos' },
+const sections = () => [
+  { id: 'profile', label: t('settings.sec.profile') },
+  { id: 'assistant', label: t('settings.sec.assistant') },
+  { id: 'voice', label: t('settings.sec.voice') },
+  { id: 'briefing', label: t('settings.sec.briefing') },
+  { id: 'location', label: t('settings.sec.location') },
+  { id: 'places', label: t('settings.sec.places') },
+  { id: 'notifications', label: t('settings.sec.notifications') },
+  { id: 'google', label: t('settings.sec.google') },
+  { id: 'mcp', label: t('settings.sec.mcp') },
+  { id: 'devices', label: t('settings.sec.devices') },
+  { id: 'security', label: t('settings.sec.security') },
+  { id: 'data', label: t('settings.sec.data') },
 ]
 
 function usePatchSettings() {
@@ -65,13 +66,13 @@ function usePatchSettings() {
     onSuccess: (r) => {
       qc.setQueryData(keys.settings, r)
       void qc.invalidateQueries({ queryKey: keys.today })
-      toast({ id: 'settings-saved', title: 'Ajuste guardado', duration: 2000 })
+      toast({ id: 'settings-saved', title: t('settings.saved'), duration: 2000 })
     },
-    onError: (e) => toastError(e, 'No se pudo guardar el ajuste'),
+    onError: (e) => toastError(e, t('settings.err.save')),
   })
 }
 
-export default function Ajustes() {
+export default function SettingsPage() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const settings = useSettings()
@@ -79,9 +80,10 @@ export default function Ajustes() {
   useEffect(() => {
     const g = params.get('google')
     if (!g) return
-    if (g === 'conectado') toast({ title: 'Google Calendar conectado', description: 'Sincronizando tus eventos.', tone: 'success' })
-    else if (g === 'cancelado') toast({ title: 'Conexión con Google cancelada' })
-    else toast({ title: 'No se pudo conectar Google Calendar', description: 'Inténtalo de nuevo.', tone: 'danger' })
+    // The server redirects back with ?google=connected|canceled (the legacy Spanish values are still understood).
+    if (g === 'connected' || g === 'conectado') toast({ title: t('settings.googleConnected'), description: t('settings.googleSyncing'), tone: 'success' })
+    else if (g === 'canceled' || g === 'cancelled' || g === 'cancelado') toast({ title: t('settings.googleCanceled') })
+    else toast({ title: t('settings.googleFailed'), description: t('settings.tryAgain'), tone: 'danger' })
     params.delete('google')
     setParams(params, { replace: true })
     requestAnimationFrame(() => document.getElementById('google')?.scrollIntoView({ block: 'start' }))
@@ -95,11 +97,11 @@ export default function Ajustes() {
 
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-6 md:px-8 md:py-9">
-      <PageHeader title="Ajustes" />
+      <PageHeader title={t('nav.settings')} />
       <div className="mt-7 grid items-start gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
-        <nav className="sticky top-6 hidden lg:block" aria-label="Secciones de ajustes">
+        <nav className="sticky top-6 hidden lg:block" aria-label={t('settings.sections')}>
           <ul className="grid gap-0.5">
-            {SECTIONS.map((sec) => (
+            {sections().map((sec) => (
               <li key={sec.id}>
                 <a
                   href={`#${sec.id}`}
@@ -133,7 +135,7 @@ export default function Ajustes() {
               <LocationSection s={s} />
             </>
           )}
-          <Section id="lugares" title="Lugares" description="Para recordatorios al llegar o salir de un sitio.">
+          <Section id="places" title={t('settings.sec.places')} description={t('settings.placesHint')}>
             <PlacesManager />
           </Section>
           <NotificationsSection s={s} ntfy={settings.data?.ntfyAvailable ?? false} />
@@ -174,10 +176,11 @@ function Row({ label, description, children, htmlFor }: { label: string; descrip
   )
 }
 
-/* ---------------------------------------------------------------- Perfil */
+/* ---------------------------------------------------------------- Profile */
 
 function ProfileSection() {
   const { user, setUser } = useAuth()
+  const { pref, setPref } = useI18n()
   const [name, setName] = useState(user?.displayName ?? '')
   const [tz, setTz] = useState(user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
   const zones = useMemo(() => {
@@ -191,13 +194,13 @@ function ProfileSection() {
     mutationFn: () => api.patch<{ user: User }>('/me', { displayName: name.trim(), timezone: tz }),
     onSuccess: (r) => {
       setUser(r.user)
-      toast({ title: 'Perfil guardado', tone: 'success' })
+      toast({ title: t('settings.profileSaved'), tone: 'success' })
     },
-    onError: (e) => toastError(e, 'No se pudo guardar el perfil'),
+    onError: (e) => toastError(e, t('settings.err.profile')),
   })
   const dirty = name.trim() !== (user?.displayName ?? '') || tz !== user?.timezone
   return (
-    <Section id="perfil" title="Perfil" description="Así te saluda Kairo y así calcula tus horarios.">
+    <Section id="profile" title={t('settings.sec.profile')} description={t('settings.profileHint')}>
       <form
         className="grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
@@ -205,8 +208,8 @@ function ProfileSection() {
           if (name.trim()) save.mutate()
         }}
       >
-        <Field label="Nombre">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" />}</Field>
-        <Field label="Zona horaria" hint={`Navegador: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>
+        <Field label={t('common.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" />}</Field>
+        <Field label={t('settings.timezone')} hint={t('settings.browserTz', { tz: Intl.DateTimeFormat().resolvedOptions().timeZone })}>
           {(id, d) => (
             <Select id={id} value={tz} onChange={(e) => setTz(e.target.value)} aria-describedby={d}>
               {zones.includes(tz) ? null : <option value={tz}>{tz}</option>}
@@ -220,15 +223,24 @@ function ProfileSection() {
         </Field>
         <div className="sm:col-span-2">
           <Button type="submit" variant={dirty ? 'primary' : 'secondary'} disabled={!dirty || !name.trim()} loading={save.isPending}>
-            Guardar perfil
+            {t('settings.saveProfile')}
           </Button>
         </div>
       </form>
+      <div className="mt-5 border-t border-line pt-4">
+        <Row label={t('settings.uiLanguage')} description={t('settings.uiLanguageHint')} htmlFor="ui-lang">
+          <Select id="ui-lang" value={pref} onChange={(e) => setPref(e.target.value as LangPref)} className="sm:w-48">
+            <option value="system">{t('settings.langSystem')}</option>
+            <option value="en">{t('settings.langEnglish')}</option>
+            <option value="es">{t('settings.langSpanish')}</option>
+          </Select>
+        </Row>
+      </div>
     </Section>
   )
 }
 
-/* ---------------------------------------------------------------- Asistente */
+/* ---------------------------------------------------------------- Assistant */
 
 function ModelSelect({ id, value, models, onChange }: { id: string; value: string; models: string[]; onChange: (v: string) => void }) {
   const list = models.includes(value) ? models : [value, ...models]
@@ -251,27 +263,39 @@ function AssistantSection({ s }: { s: UserSettings }) {
   const list = (models.data ?? []).filter((m) => !NOT_CHAT.test(m))
   return (
     <Section
-      id="asistente"
-      title="Asistente"
-      description={models.isError || (models.isSuccess && list.length === 0) ? 'No pude leer la lista de modelos del servidor; se muestran los actuales.' : 'Los modelos que usa Kairo para conversar y entender imágenes.'}
+      id="assistant"
+      title={t('settings.sec.assistant')}
+      description={models.isError || (models.isSuccess && list.length === 0) ? t('settings.modelsError') : t('settings.modelsHint')}
     >
-      <Row label="Modelo de chat" description="El que responde y usa las herramientas." htmlFor="m-chat">
+      <Row label={t('settings.chatModel')} description={t('settings.chatModelHint')} htmlFor="m-chat">
         {models.isLoading ? <Skeleton className="h-10 w-64 rounded-control" /> : <ModelSelect id="m-chat" value={s.chatModel} models={list} onChange={(v) => patch.mutate({ chatModel: v })} />}
       </Row>
-      <Row label="Modelo de respaldo" description="Si el principal falla antes de responder." htmlFor="m-fb">
+      <Row label={t('settings.fallbackModel')} description={t('settings.fallbackModelHint')} htmlFor="m-fb">
         {models.isLoading ? <Skeleton className="h-10 w-64 rounded-control" /> : <ModelSelect id="m-fb" value={s.fallbackModel} models={list} onChange={(v) => patch.mutate({ fallbackModel: v })} />}
       </Row>
-      <Row label="Modelo de visión" description="Para fotos, facturas y capturas que compartes." htmlFor="m-vis">
+      <Row label={t('settings.visionModel')} description={t('settings.visionModelHint')} htmlFor="m-vis">
         {models.isLoading ? <Skeleton className="h-10 w-64 rounded-control" /> : <ModelSelect id="m-vis" value={s.visionModel} models={list} onChange={(v) => patch.mutate({ visionModel: v })} />}
       </Row>
-      <Row label="Modo rápido" description="Respuestas más ágiles con menos razonamiento. Recomendado para el día a día.">
-        <Switch checked={s.fastMode} onChange={(v) => patch.mutate({ fastMode: v })} label="Modo rápido" />
+      <Row label={t('settings.fastMode')} description={t('settings.fastModeHint')}>
+        <Switch checked={s.fastMode} onChange={(v) => patch.mutate({ fastMode: v })} label={t('settings.fastMode')} />
+      </Row>
+      <Row label={t('settings.assistantLanguage')} description={t('settings.assistantLanguageHint')} htmlFor="assistant-lang">
+        <Select
+          id="assistant-lang"
+          value={s.language === 'en' || s.language === 'es' ? s.language : 'auto'}
+          onChange={(e) => patch.mutate({ language: e.target.value })}
+          className="sm:w-56"
+        >
+          <option value="en">{t('settings.assistantEnglish')}</option>
+          <option value="es">{t('settings.assistantSpanish')}</option>
+          <option value="auto">{t('settings.assistantAuto')}</option>
+        </Select>
       </Row>
     </Section>
   )
 }
 
-/* ---------------------------------------------------------------- Voz */
+/* ---------------------------------------------------------------- Voice */
 
 function VoiceSection({ s }: { s: UserSettings }) {
   const voices = useVoices()
@@ -284,18 +308,18 @@ function VoiceSection({ s }: { s: UserSettings }) {
     unlockAudio()
     setTesting(true)
     try {
-      const sp = await speak('Hola, soy Kairo. Así sueno con esta voz y esta velocidad.', { voice: s.voice, speed })
+      const sp = await speak(t('settings.voiceTest'), { voice: s.voice, speed })
       await sp.done
     } catch (e) {
-      toastError(e, 'No se pudo reproducir la voz')
+      toastError(e, t('settings.err.voiceTest'))
     } finally {
       setTesting(false)
     }
   }
 
   return (
-    <Section id="voz" title="Voz" description="Cómo suena Kairo cuando te responde en voz alta.">
-      <Row label="Voz" htmlFor="voice">
+    <Section id="voice" title={t('settings.sec.voice')} description={t('settings.voiceHint')}>
+      <Row label={t('settings.voice')} htmlFor="voice">
         {voices.isLoading ? (
           <Skeleton className="h-10 w-48 rounded-control" />
         ) : (
@@ -308,10 +332,10 @@ function VoiceSection({ s }: { s: UserSettings }) {
           </Select>
         )}
         <Button onClick={() => void test()} loading={testing} icon={<Play className="size-4" weight="fill" />}>
-          Probar voz
+          {t('settings.testVoice')}
         </Button>
       </Row>
-      <Row label="Velocidad" htmlFor="speed" description="1,0 es la velocidad normal.">
+      <Row label={t('settings.speed')} htmlFor="speed" description={t('settings.speedHint')}>
         <input
           id="speed"
           type="range"
@@ -324,31 +348,31 @@ function VoiceSection({ s }: { s: UserSettings }) {
           onKeyUp={() => speed !== s.voiceSpeed && patch.mutate({ voiceSpeed: speed })}
           className="w-48 accent-[var(--accent)] max-sm:flex-1"
         />
-        <span className="w-12 text-right font-mono text-base tnum">{speed.toFixed(2).replace('.', ',')}×</span>
+        <span className="w-12 text-right font-mono text-base tnum">{new Intl.NumberFormat(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(speed)}×</span>
       </Row>
     </Section>
   )
 }
 
-/* ---------------------------------------------------------------- Resumen */
+/* ---------------------------------------------------------------- Briefing */
 
 function BriefingSection({ s }: { s: UserSettings }) {
   const patch = usePatchSettings()
-  const [t, setT] = useState(s.briefingTime)
-  useEffect(() => setT(s.briefingTime), [s.briefingTime])
+  const [at, setAt] = useState(s.briefingTime)
+  useEffect(() => setAt(s.briefingTime), [s.briefingTime])
   return (
-    <Section id="resumen" title="Resumen diario" description="Cada mañana Kairo prepara un resumen de tu día y te avisa cuando está listo.">
-      <Row label="Enviar resumen cada día">
-        <Switch checked={s.briefingEnabled} onChange={(v) => patch.mutate({ briefingEnabled: v })} label="Resumen diario" />
+    <Section id="briefing" title={t('settings.sec.briefing')} description={t('settings.briefingHint')}>
+      <Row label={t('settings.briefingSend')}>
+        <Switch checked={s.briefingEnabled} onChange={(v) => patch.mutate({ briefingEnabled: v })} label={t('settings.sec.briefing')} />
       </Row>
-      <Row label="Hora" htmlFor="brief-time">
+      <Row label={t('settings.briefingTime')} htmlFor="brief-time">
         <Input
           id="brief-time"
           type="time"
-          value={t}
+          value={at}
           disabled={!s.briefingEnabled}
-          onChange={(e) => setT(e.target.value)}
-          onBlur={() => t && t !== s.briefingTime && patch.mutate({ briefingTime: t })}
+          onChange={(e) => setAt(e.target.value)}
+          onBlur={() => at && at !== s.briefingTime && patch.mutate({ briefingTime: at })}
           className="w-32 font-mono"
         />
       </Row>
@@ -356,21 +380,21 @@ function BriefingSection({ s }: { s: UserSettings }) {
   )
 }
 
-/* ---------------------------------------------------------------- Ubicación */
+/* ---------------------------------------------------------------- Location */
 
 function LocationSection({ s }: { s: UserSettings }) {
   const patch = usePatchSettings()
   const [q, setQ] = useState('')
   const search = useMutation({
     mutationFn: (query: string) => api.get<GeoPlace[]>(`/geocode${qs({ q: query })}`),
-    onError: (e) => toastError(e, 'No se pudo buscar la ciudad'),
+    onError: (e) => toastError(e, t('settings.err.search')),
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (q.trim().length > 1) search.mutate(q.trim())
   }
   return (
-    <Section id="ubicacion" title="Ubicación" description="Tu ciudad para el clima de Hoy y para entender lo que dices de tu zona.">
+    <Section id="location" title={t('settings.sec.location')} description={t('settings.locationHint')}>
       <div className="flex items-center gap-3 rounded-control border border-line bg-bg px-3 py-2.5">
         <MapPin className="size-[18px] shrink-0 text-faint" />
         {s.homeCity ? (
@@ -383,27 +407,27 @@ function LocationSection({ s }: { s: UserSettings }) {
             )}
           </div>
         ) : (
-          <p className="flex-1 text-base text-muted">Sin ciudad configurada</p>
+          <p className="flex-1 text-base text-muted">{t('settings.noCity')}</p>
         )}
         {s.homeCity && (
           <Button size="sm" variant="ghost" onClick={() => patch.mutate({ homeCity: null, homeLatitude: null, homeLongitude: null })}>
-            Quitar
+            {t('settings.remove')}
           </Button>
         )}
       </div>
       <form onSubmit={submit} className="mt-3 flex gap-2">
         <label className="relative min-w-0 flex-1">
-          <span className="sr-only">Buscar ciudad</span>
+          <span className="sr-only">{t('settings.searchCity')}</span>
           <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar ciudad, por ejemplo Bogotá" className="pl-9" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('settings.searchCityPlaceholder')} className="pl-9" />
         </label>
         <Button type="submit" loading={search.isPending} disabled={q.trim().length < 2}>
-          Buscar
+          {t('settings.search')}
         </Button>
       </form>
       {search.data && (
         <ul className="mt-2 divide-y divide-line rounded-control border border-line">
-          {search.data.length === 0 && <li className="px-3 py-3 text-base text-muted">No encontré esa ciudad.</li>}
+          {search.data.length === 0 && <li className="px-3 py-3 text-base text-muted">{t('settings.cityNotFound')}</li>}
           {search.data.slice(0, 6).map((p) => (
             <li key={`${p.latitude},${p.longitude}`}>
               <button
@@ -419,7 +443,7 @@ function LocationSection({ s }: { s: UserSettings }) {
                   <span className="text-base text-fg">{p.name}</span>
                   <span className="ml-2 text-sm text-muted">{[p.admin, p.country].filter(Boolean).join(', ')}</span>
                 </span>
-                <span className="text-sm text-accent-strong">Usar</span>
+                <span className="text-sm text-accent-strong">{t('settings.use')}</span>
               </button>
             </li>
           ))}
@@ -429,7 +453,7 @@ function LocationSection({ s }: { s: UserSettings }) {
   )
 }
 
-/* ---------------------------------------------------------------- Notificaciones */
+/* ---------------------------------------------------------------- Notifications */
 
 function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) {
   const patch = usePatchSettings()
@@ -441,57 +465,54 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
   const ask = async () => setPerm(await requestNotifications())
   const testNotif = () => {
     try {
-      new Notification('Kairo', { body: 'Así te avisaré de tus recordatorios.', icon: '/favicon.svg' })
+      new Notification('Kairo', { body: t('settings.testNotifBody'), icon: '/favicon.svg' })
     } catch {
-      toast({ title: 'Este navegador no muestra notificaciones de prueba' })
+      toast({ title: t('settings.testNotifFailed') })
     }
   }
 
   return (
-    <Section id="notificaciones" title="Notificaciones" description="Kairo te avisa en este navegador cuando suena un recordatorio o llega un aviso de tu familia, aunque estés en otra pestaña.">
+    <Section id="notifications" title={t('settings.sec.notifications')} description={t('settings.notifHint')}>
       <Row
-        label="Avisos del navegador"
+        label={t('settings.browserAlerts')}
         description={
           perm === 'granted'
-            ? 'Activados en este navegador.'
+            ? t('settings.permGranted')
             : perm === 'denied'
-              ? 'Bloqueados. Cámbialo en los permisos del sitio de tu navegador.'
+              ? t('settings.permDenied')
               : perm === 'unsupported'
-                ? 'Este navegador no admite notificaciones.'
-                : 'Aún no has dado permiso.'
+                ? t('settings.permUnsupported')
+                : t('settings.permDefault')
         }
       >
         {perm === 'granted' ? (
           <>
-            <Tag tone="success">Activos</Tag>
+            <Tag tone="success">{t('settings.on')}</Tag>
             <Button size="sm" onClick={testNotif}>
-              Probar
+              {t('settings.test')}
             </Button>
           </>
         ) : perm === 'default' ? (
           <Button size="sm" variant="primary" onClick={() => void ask()}>
-            Activar
+            {t('settings.turnOn')}
           </Button>
         ) : null}
       </Row>
-      <Row
-        label="Avisos en el teléfono"
-        description="Kairo envía sus propios avisos cifrados a la app del teléfono con UnifiedPush, por ejemplo a través de un ntfy autoalojado. No pasa por Firebase ni por los servidores de Google."
-      >
+      <Row label={t('settings.phoneAlerts')} description={t('settings.phoneAlertsHint')}>
         {push.isLoading ? (
           <Skeleton className="h-5 w-36" />
         ) : push.isError ? (
-          <span className="text-sm text-muted">No pude consultarlo</span>
+          <span className="text-sm text-muted">{t('settings.cantCheck')}</span>
         ) : (
           <span className="text-sm whitespace-nowrap text-muted">
-            Teléfonos con push: <span className="font-mono text-fg tnum">{push.data?.registeredDevices ?? 0}</span>
+            {t('settings.pushPhones')} <span className="font-mono text-fg tnum">{push.data?.registeredDevices ?? 0}</span>
           </span>
         )}
       </Row>
       <Row
-        label="Tema de ntfy"
+        label={t('settings.ntfyTopic')}
         htmlFor="ntfy"
-        description={ntfy ? 'Recibe los avisos también en la app ntfy con este tema.' : 'El servidor no tiene ntfy configurado.'}
+        description={ntfy ? t('settings.ntfyOn') : t('settings.ntfyOff')}
       >
         <Input
           id="ntfy"
@@ -499,7 +520,7 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
           disabled={!ntfy || !s}
           onChange={(e) => setTopic(e.target.value)}
           onBlur={() => s && topic.trim() !== (s.ntfyTopic ?? '') && patch.mutate({ ntfyTopic: topic.trim() || null })}
-          placeholder="kairo-david"
+          placeholder={t('settings.ntfyPlaceholder')}
           className="font-mono sm:w-56"
         />
       </Row>
@@ -519,72 +540,72 @@ function GoogleSection() {
     onSuccess: (r) => {
       window.location.href = r.url
     },
-    onError: (e) => toastError(e, 'No se pudo iniciar la conexión'),
+    onError: (e) => toastError(e, t('settings.err.googleStart')),
   })
   const sync = useMutation({
     mutationFn: () => api.post<{ pushed: number; pulled: number; deleted: number }>('/integrations/google/sync'),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: keys.google })
       void qc.invalidateQueries({ queryKey: ['events'] })
-      toast({ title: 'Calendario sincronizado', description: `${r.pulled} traídos, ${r.pushed} enviados, ${r.deleted} eliminados.`, tone: 'success' })
+      toast({ title: t('settings.googleSynced'), description: t('settings.googleSyncBody', { pulled: r.pulled, pushed: r.pushed, deleted: r.deleted }), tone: 'success' })
     },
-    onError: (e) => toastError(e, 'No se pudo sincronizar'),
+    onError: (e) => toastError(e, t('settings.err.sync')),
   })
   const pick = useMutation({
     mutationFn: (calendarId: string) => api.post('/integrations/google/calendar', { calendarId }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.google })
-      toast({ title: 'Calendario elegido' })
+      toast({ title: t('settings.calendarPicked') })
     },
-    onError: (e) => toastError(e, 'No se pudo cambiar el calendario'),
+    onError: (e) => toastError(e, t('settings.err.calendar')),
   })
   const pickFamily = useMutation({
     mutationFn: (calendarId: string | null) => api.post('/integrations/google/family-calendar', { calendarId }),
     onSuccess: (_r, calendarId) => {
       void qc.invalidateQueries({ queryKey: keys.google })
-      toast({ title: calendarId ? 'Calendario familiar elegido' : 'Los eventos familiares van a tu calendario de siempre' })
+      toast({ title: calendarId ? t('settings.familyCalendarPicked') : t('settings.familyCalendarDefault') })
     },
-    onError: (e) => toastError(e, 'No se pudo cambiar el calendario familiar'),
+    onError: (e) => toastError(e, t('settings.err.familyCalendar')),
   })
   const disconnect = useMutation({
     mutationFn: () => api.del('/integrations/google'),
     onSuccess: () => {
       setConfirm(false)
       void qc.invalidateQueries({ queryKey: keys.google })
-      toast({ title: 'Google Calendar desconectado' })
+      toast({ title: t('settings.googleDisconnected') })
     },
-    onError: (e) => toastError(e, 'No se pudo desconectar'),
+    onError: (e) => toastError(e, t('settings.err.disconnect')),
   })
 
   const st = g.data
   return (
-    <Section id="google" title="Google Calendar" description="Sincroniza tus eventos en ambos sentidos. Los que vienen de Google se marcan con su logo.">
+    <Section id="google" title={t('settings.sec.google')} description={t('settings.googleHint')}>
       {g.isLoading ? (
         <SkeletonRows rows={2} />
       ) : !st ? (
-        <FormError>{(g.error as Error)?.message ?? 'No se pudo leer el estado.'}</FormError>
+        <FormError>{(g.error as Error)?.message ?? t('settings.err.status')}</FormError>
       ) : !st.available ? (
         <div className="grid gap-3">
           <div className="flex items-center gap-2">
             <GoogleLogo className="size-5 text-muted" />
-            <Tag>No configurado en el servidor</Tag>
+            <Tag>{t('settings.notConfigured')}</Tag>
           </div>
           <p className="max-w-[65ch] text-base text-muted">
-            Para activarlo, crea credenciales OAuth en Google Cloud Console, define <code className="font-mono text-sm text-fg">GOOGLE_CLIENT_ID</code> y{' '}
-            <code className="font-mono text-sm text-fg">GOOGLE_CLIENT_SECRET</code> en el servidor y registra esta URL de redirección autorizada:
+            {t('settings.googleSetup1')} <code className="font-mono text-sm text-fg">GOOGLE_CLIENT_ID</code> {t('settings.googleSetup2')}{' '}
+            <code className="font-mono text-sm text-fg">GOOGLE_CLIENT_SECRET</code> {t('settings.googleSetup3')}
           </p>
           <CopyField value={st.redirectUri} />
         </div>
       ) : !st.connected ? (
         <div className="grid gap-3">
-          <p className="text-base text-muted">Aún no está conectado.</p>
+          <p className="text-base text-muted">{t('settings.notConnected')}</p>
           <div>
             <Button variant="primary" icon={<GoogleLogo className="size-4" />} onClick={() => connect.mutate()} loading={connect.isPending}>
-              Conectar
+              {t('settings.connect')}
             </Button>
           </div>
           <details className="text-sm text-muted">
-            <summary className="cursor-pointer text-fg">URL de redirección</summary>
+            <summary className="cursor-pointer text-fg">{t('settings.redirectUrl')}</summary>
             <div className="mt-2">
               <CopyField value={st.redirectUri} />
             </div>
@@ -592,11 +613,11 @@ function GoogleSection() {
         </div>
       ) : (
         <div className="grid gap-1">
-          <Row label="Estado" description={st.lastSyncAt ? `Última sincronización ${relative(st.lastSyncAt)}` : 'Aún no se ha sincronizado.'}>
-            <Tag tone={st.lastError ? 'danger' : 'success'}>{st.lastError ? 'Con errores' : 'Conectado'}</Tag>
+          <Row label={t('settings.status')} description={st.lastSyncAt ? t('settings.lastSync', { when: relative(st.lastSyncAt) }) : t('settings.neverSynced')}>
+            <Tag tone={st.lastError ? 'danger' : 'success'}>{st.lastError ? t('settings.withErrors') : t('settings.connected')}</Tag>
           </Row>
           {st.lastError && <FormError>{st.lastError}</FormError>}
-          <Row label="Calendario" htmlFor="gcal">
+          <Row label={t('nav.calendar')} htmlFor="gcal">
             {calendars.isLoading ? (
               <Skeleton className="h-10 w-56 rounded-control" />
             ) : (
@@ -605,16 +626,16 @@ function GoogleSection() {
                 {(calendars.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.summary}
-                    {c.primary ? ' (principal)' : ''}
+                    {c.primary ? ` ${t('settings.primarySuffix')}` : ''}
                   </option>
                 ))}
               </Select>
             )}
           </Row>
           <Row
-            label="Calendario para eventos familiares"
+            label={t('settings.familyCalendar')}
             htmlFor="gcal-family"
-            description="Elige un calendario de Google que compartas con tu familia. Ahí se guardan los eventos familiares que creas."
+            description={t('settings.familyCalendarHint')}
           >
             {calendars.isLoading ? (
               <Skeleton className="h-10 w-56 rounded-control" />
@@ -626,14 +647,14 @@ function GoogleSection() {
                 disabled={pickFamily.isPending}
                 className="sm:w-64"
               >
-                <option value="">El mismo de siempre</option>
+                <option value="">{t('settings.usualCalendar')}</option>
                 {st.familyCalendarId && !(calendars.data ?? []).some((c) => c.id === st.familyCalendarId) && (
                   <option value={st.familyCalendarId}>{st.familyCalendarId}</option>
                 )}
                 {(calendars.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.summary}
-                    {c.primary ? ' (principal)' : ''}
+                    {c.primary ? ` ${t('settings.primarySuffix')}` : ''}
                   </option>
                 ))}
               </Select>
@@ -641,10 +662,10 @@ function GoogleSection() {
           </Row>
           <div className="flex flex-wrap gap-2 pt-3">
             <Button icon={<ArrowsClockwise className="size-4" />} onClick={() => sync.mutate()} loading={sync.isPending}>
-              Sincronizar ahora
+              {t('settings.syncNow')}
             </Button>
             <Button variant="danger" onClick={() => setConfirm(true)}>
-              Desconectar
+              {t('settings.disconnect')}
             </Button>
           </div>
         </div>
@@ -654,9 +675,9 @@ function GoogleSection() {
         onClose={() => setConfirm(false)}
         onConfirm={() => disconnect.mutate()}
         loading={disconnect.isPending}
-        title="¿Desconectar Google Calendar?"
-        description="Los eventos que ya están en Kairo se conservan. Dejarán de sincronizarse."
-        confirmLabel="Desconectar"
+        title={t('settings.disconnectTitle')}
+        description={t('settings.disconnectBody')}
+        confirmLabel={t('settings.disconnect')}
       />
     </Section>
   )
@@ -675,33 +696,33 @@ function McpSection() {
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.patch<McpServer>(`/mcp-servers/${id}`, { enabled }),
     onSuccess: refresh,
-    onError: (e) => toastError(e, 'No se pudo cambiar'),
+    onError: (e) => toastError(e, t('common.couldNotChange')),
   })
   const test = useMutation({
     mutationFn: (id: string) => api.post<{ tools: string[] }>(`/mcp-servers/${id}/test`).then((r) => ({ id, tools: r.tools })),
-    onSuccess: ({ id, tools: t }) => setTools((x) => ({ ...x, [id]: t })),
-    onError: (e, id) => setTools((x) => ({ ...x, [id]: e instanceof Error ? e.message : 'Falló la prueba' })),
+    onSuccess: ({ id, tools: names }) => setTools((x) => ({ ...x, [id]: names })),
+    onError: (e, id) => setTools((x) => ({ ...x, [id]: e instanceof Error ? e.message : t('settings.testFailed') })),
   })
   const remove = useMutation({
     mutationFn: (s: McpServer) => api.del(`/mcp-servers/${s.id}`),
     onSuccess: () => {
       setDeleting(null)
       refresh()
-      toast({ title: 'Conexión eliminada' })
+      toast({ title: t('settings.mcpDeleted') })
     },
-    onError: (e) => toastError(e, 'No se pudo eliminar'),
+    onError: (e) => toastError(e, t('common.couldNotDelete')),
   })
 
   return (
-    <Section id="mcp" title="Conexiones MCP" description="Servidores MCP (HTTP) que le dan a Kairo herramientas extra, como tu CRM o tu domótica.">
+    <Section id="mcp" title={t('settings.sec.mcp')} description={t('settings.mcpHint')}>
       {servers.isLoading ? (
         <SkeletonRows rows={2} />
       ) : (servers.data ?? []).length === 0 && !adding ? (
-        <p className="text-base text-muted">No hay conexiones.</p>
+        <p className="text-base text-muted">{t('settings.noConnections')}</p>
       ) : (
         <ul className="divide-y divide-line">
           {(servers.data ?? []).map((sv) => {
-            const t = tools[sv.id]
+            const result = tools[sv.id]
             return (
               <li key={sv.id} className="py-3 first:pt-0">
                 <div className="flex flex-wrap items-center gap-3">
@@ -711,19 +732,19 @@ function McpSection() {
                     <p className="truncate font-mono text-xs text-faint">{sv.url}</p>
                   </div>
                   <Button size="sm" onClick={() => test.mutate(sv.id)} loading={test.isPending && test.variables === sv.id}>
-                    Probar
+                    {t('settings.test')}
                   </Button>
-                  <Switch checked={sv.enabled} onChange={(v) => toggle.mutate({ id: sv.id, enabled: v })} label={`Activar ${sv.name}`} />
-                  <IconButton label={`Eliminar ${sv.name}`} size="sm" tone="danger" onClick={() => setDeleting(sv)}>
+                  <Switch checked={sv.enabled} onChange={(v) => toggle.mutate({ id: sv.id, enabled: v })} label={t('settings.turnOnNamed', { name: sv.name })} />
+                  <IconButton label={t('common.deleteNamed', { name: sv.name })} size="sm" tone="danger" onClick={() => setDeleting(sv)}>
                     <Trash className="size-4" />
                   </IconButton>
                 </div>
-                {t !== undefined &&
-                  (typeof t === 'string' ? (
-                    <p className="mt-2 text-sm text-danger">{t}</p>
+                {result !== undefined &&
+                  (typeof result === 'string' ? (
+                    <p className="mt-2 text-sm text-danger">{result}</p>
                   ) : (
                     <div className="mt-2 flex flex-wrap gap-1.5 pl-8">
-                      {t.length === 0 ? <span className="text-sm text-muted">Conectó, pero no ofrece herramientas.</span> : t.map((x) => <Tag key={x}>{x}</Tag>)}
+                      {result.length === 0 ? <span className="text-sm text-muted">{t('settings.noTools')}</span> : result.map((x) => <Tag key={x}>{x}</Tag>)}
                     </div>
                   ))}
               </li>
@@ -735,7 +756,7 @@ function McpSection() {
         <McpForm onDone={() => setAdding(false)} />
       ) : (
         <Button size="sm" className="mt-3" icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>
-          Agregar conexión
+          {t('settings.addConnection')}
         </Button>
       )}
       <ConfirmDialog
@@ -743,8 +764,8 @@ function McpSection() {
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && remove.mutate(deleting)}
         loading={remove.isPending}
-        title={`¿Eliminar ${deleting?.name ?? 'la conexión'}?`}
-        description="Kairo dejará de usar sus herramientas."
+        title={t('settings.deleteConnTitle', { name: deleting?.name ?? t('settings.theConnection') })}
+        description={t('settings.deleteConnBody')}
       />
     </Section>
   )
@@ -767,27 +788,27 @@ function McpForm({ onDone }: { onDone: () => void }) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.mcp })
-      toast({ title: 'Conexión agregada', tone: 'success' })
+      toast({ title: t('settings.connectionAdded'), tone: 'success' })
       onDone()
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo guardar'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('places.err.save')),
   })
   return (
     <form
       className="mt-3 grid gap-3 rounded-control border border-line bg-bg p-3"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!name.trim()) return setError('Ponle un nombre.')
-        if (!/^https?:\/\//.test(url.trim())) return setError('La URL debe empezar por http:// o https://')
+        if (!name.trim()) return setError(t('settings.err.needName'))
+        if (!/^https?:\/\//.test(url.trim())) return setError(t('settings.err.badUrl'))
         setError(null)
         save.mutate()
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Nombre">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Domótica" autoFocus />}</Field>
-        <Field label="URL">{(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.midominio.co/mcp" className="font-mono text-sm" />}</Field>
+        <Field label={t('common.name')}>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.mcpNamePlaceholder')} autoFocus />}</Field>
+        <Field label={t('settings.url')}>{(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t('settings.mcpUrlPlaceholder')} className="font-mono text-sm" />}</Field>
       </div>
-      <Field label="Cabeceras" optional hint="Una por línea, como Authorization: Bearer token">
+      <Field label={t('settings.headers')} optional hint={t('settings.headersHint')}>
         {(id, d) => <Textarea id={id} value={headers} onChange={(e) => setHeaders(e.target.value)} rows={2} className="min-h-0 font-mono text-sm" aria-describedby={d} />}
       </Field>
       {error && (
@@ -797,17 +818,17 @@ function McpForm({ onDone }: { onDone: () => void }) {
       )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onDone}>
-          Cancelar
+          {t('common.cancel')}
         </Button>
         <Button type="submit" variant="primary" loading={save.isPending}>
-          Guardar
+          {t('common.save')}
         </Button>
       </div>
     </form>
   )
 }
 
-/* ---------------------------------------------------------------- Dispositivos */
+/* ---------------------------------------------------------------- Devices */
 
 function DevicesSection() {
   const qc = useQueryClient()
@@ -819,14 +840,14 @@ function DevicesSection() {
     onSuccess: () => {
       setRevoking(null)
       void qc.invalidateQueries({ queryKey: keys.devices })
-      toast({ title: 'Acceso revocado' })
+      toast({ title: t('settings.accessRevoked') })
     },
-    onError: (e) => toastError(e, 'No se pudo revocar'),
+    onError: (e) => toastError(e, t('family.err.revoke')),
   })
   const icon = (p: string) => (p === 'android' ? <DeviceMobile className="size-5" /> : p === 'wear' ? <Watch className="size-5" /> : <Browser className="size-5" />)
   const target = devices.data?.find((d) => d.id === revoking)
   return (
-    <Section id="dispositivos" title="Dispositivos" description="Dónde tienes la sesión abierta. Revoca los que ya no uses.">
+    <Section id="devices" title={t('settings.sec.devices')} description={t('settings.devicesHint')}>
       {devices.isLoading ? (
         <SkeletonRows rows={3} />
       ) : (
@@ -839,16 +860,16 @@ function DevicesSection() {
               <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-surface-2 text-muted">{icon(d.platform)}</span>
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 text-base text-fg">
-                  <span className="truncate">{d.name || 'Dispositivo'}</span>
-                  {d.current && <Tag tone="accent">Este dispositivo</Tag>}
+                  <span className="truncate">{d.name || t('settings.device')}</span>
+                  {d.current && <Tag tone="accent">{t('settings.thisDevice')}</Tag>}
                 </p>
                 <p className="text-sm text-muted">
-                  Activo {relative(d.lastSeenAt)}, desde el {shortDate(d.createdAt)}
+                  {t('settings.deviceActive', { when: relative(d.lastSeenAt), date: shortDate(d.createdAt) })}
                 </p>
               </div>
               {!d.current && (
                 <Button size="sm" variant="ghost" className="text-danger hover:text-danger" onClick={() => setRevoking(d.id)}>
-                  Revocar
+                  {t('family.revoke')}
                 </Button>
               )}
             </li>
@@ -857,7 +878,7 @@ function DevicesSection() {
       )}
       {!showAll && (devices.data?.length ?? 0) > 6 && (
         <Button size="sm" variant="ghost" className="mt-2" onClick={() => setShowAll(true)}>
-          Ver los {devices.data!.length} dispositivos
+          {t('settings.seeAllDevices', { count: devices.data!.length })}
         </Button>
       )}
       <ConfirmDialog
@@ -865,15 +886,15 @@ function DevicesSection() {
         onClose={() => setRevoking(null)}
         onConfirm={() => revoking && revoke.mutate(revoking)}
         loading={revoke.isPending}
-        title={`¿Revocar ${target?.name ?? 'este dispositivo'}?`}
-        description="Tendrá que volver a iniciar sesión."
-        confirmLabel="Revocar"
+        title={t('settings.revokeTitle', { name: target?.name ?? t('settings.thisDeviceLower') })}
+        description={t('settings.revokeBody')}
+        confirmLabel={t('family.revoke')}
       />
     </Section>
   )
 }
 
-/* ---------------------------------------------------------------- Seguridad */
+/* ---------------------------------------------------------------- Security */
 
 function SecuritySection() {
   const { logout } = useAuth()
@@ -887,29 +908,29 @@ function SecuritySection() {
       setCurrent('')
       setNext('')
       setConfirm('')
-      toast({ title: 'Contraseña cambiada', tone: 'success' })
+      toast({ title: t('settings.passwordChanged'), tone: 'success' })
     },
-    onError: (e) => setErrors({ form: e instanceof Error ? e.message : 'No se pudo cambiar' }),
+    onError: (e) => setErrors({ form: e instanceof Error ? e.message : t('settings.err.password') }),
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const errs: typeof errors = {}
-    if (!current) errs.current = 'Escribe tu contraseña actual.'
-    if (next.length < 10) errs.next = 'Usa al menos 10 caracteres.'
-    if (confirm !== next) errs.confirm = 'No coincide con la nueva contraseña.'
+    if (!current) errs.current = t('settings.err.needCurrent')
+    if (next.length < 10) errs.next = t('join.minChars', { min: 10 })
+    if (confirm !== next) errs.confirm = t('settings.err.noMatch')
     setErrors(errs)
     if (Object.keys(errs).length === 0) change.mutate()
   }
   return (
-    <Section id="seguridad" title="Seguridad">
+    <Section id="security" title={t('settings.sec.security')}>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-3" noValidate>
-        <Field label="Contraseña actual" error={errors.current}>
+        <Field label={t('settings.currentPassword')} error={errors.current}>
           {(id, d) => <Input id={id} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} aria-invalid={!!errors.current} aria-describedby={d} />}
         </Field>
-        <Field label="Nueva contraseña" error={errors.next} hint="Mínimo 10 caracteres.">
+        <Field label={t('settings.newPassword')} error={errors.next} hint={t('join.passwordHint', { min: 10 })}>
           {(id, d) => <Input id={id} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} aria-invalid={!!errors.next} aria-describedby={d} />}
         </Field>
-        <Field label="Repite la nueva" error={errors.confirm}>
+        <Field label={t('settings.repeatNew')} error={errors.confirm}>
           {(id, d) => <Input id={id} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-invalid={!!errors.confirm} aria-describedby={d} />}
         </Field>
         {errors.form && (
@@ -919,10 +940,10 @@ function SecuritySection() {
         )}
         <div className="flex flex-wrap gap-2 sm:col-span-3">
           <Button type="submit" variant="primary" loading={change.isPending}>
-            Cambiar contraseña
+            {t('settings.changePassword')}
           </Button>
           <Button variant="ghost" className={cn('text-danger hover:text-danger', 'ml-auto')} icon={<SignOut className="size-4" />} onClick={() => void logout()}>
-            Cerrar sesión
+            {t('app.signOut')}
           </Button>
         </div>
       </form>
@@ -930,7 +951,7 @@ function SecuritySection() {
   )
 }
 
-/* ---------------------------------------------------------------- Datos */
+/* ---------------------------------------------------------------- Data */
 
 function DataSection() {
   const exp = useMutation({
@@ -944,14 +965,14 @@ function DataSection() {
       a.click()
       a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 2000)
-      toast({ title: 'Exportación lista', description: 'Se descargó el archivo JSON.', tone: 'success' })
+      toast({ title: t('settings.exportReady'), description: t('settings.exportReadyBody'), tone: 'success' })
     },
-    onError: (e) => toastError(e, 'No se pudo exportar'),
+    onError: (e) => toastError(e, t('settings.err.export')),
   })
   return (
-    <Section id="datos" title="Datos" description="Descarga todo lo que Kairo guarda: notas, tareas, recordatorios, eventos, listas, memoria y grabaciones.">
+    <Section id="data" title={t('settings.sec.data')} description={t('settings.dataHint')}>
       <Button icon={<DownloadSimple className="size-4" />} onClick={() => exp.mutate()} loading={exp.isPending}>
-        Exportar JSON
+        {t('settings.exportJson')}
       </Button>
     </Section>
   )

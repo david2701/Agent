@@ -2,6 +2,7 @@ import { House } from '@phosphor-icons/react'
 import { Tag } from '@/components/ui/misc'
 import { cn } from '@/lib/cn'
 import { initials } from '@/lib/family'
+import { t } from '@/lib/i18n'
 
 const AVATAR_SIZES = {
   xs: 'size-5 text-[10px]',
@@ -10,7 +11,7 @@ const AVATAR_SIZES = {
   lg: 'size-10 text-base',
 }
 
-/** Avatar neutro con iniciales (sin colores: el ámbar queda para la acción principal). */
+/** Neutral avatar with initials (no colors: amber is kept for the primary action). */
 export function Avatar({
   name,
   size = 'md',
@@ -39,17 +40,17 @@ export function Avatar({
   )
 }
 
-/** Marca pequeña de "familiar" (casa) para filas, tarjetas y eventos. */
-export function FamilyIcon({ className, label = 'Familiar' }: { className?: string; label?: string }) {
+/** Small "family" mark (a house) for rows, cards and events. */
+export function FamilyIcon({ className, label = t('family.tag') }: { className?: string; label?: string }) {
   return <House role="img" aria-label={label} className={cn('size-3.5 shrink-0 text-faint', className)} />
 }
 
-/** Etiqueta "Familiar", con quién lo compartió si no fui yo. */
+/** "Family" tag, with who shared it if it was not me. */
 export function FamilyTag({ by, className }: { by?: string | null; className?: string }) {
   return (
     <Tag className={className}>
       <House className="size-3" aria-hidden />
-      {by ? `Familiar, de ${by}` : 'Familiar'}
+      {by ? t('family.tagFrom', { name: by }) : t('family.tag')}
     </Tag>
   )
 }

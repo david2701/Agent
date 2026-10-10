@@ -60,7 +60,7 @@ export function Chip({
   )
 }
 
-/** Etiqueta estática pequeña (no interactiva). */
+/** Small static tag (not interactive). */
 export function Tag({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'danger' | 'success' | 'accent'; className?: string }) {
   return (
     <span

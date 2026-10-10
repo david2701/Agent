@@ -9,6 +9,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 
 export const controlClass =
   'w-full rounded-control border border-line bg-surface px-3 text-base text-fg ' +
@@ -54,7 +55,7 @@ interface FieldProps {
   optional?: boolean
 }
 
-/** Etiqueta arriba, ayuda y error debajo (Taste §4.6). */
+/** Label above, hint and error below (Taste §4.6). */
 export function Field({ label, children, hint, error, className, optional }: FieldProps) {
   const id = useId()
   const hintId = hint ? `${id}-hint` : undefined
@@ -64,7 +65,7 @@ export function Field({ label, children, hint, error, className, optional }: Fie
     <div className={cn('grid content-start gap-1.5', className)}>
       <label htmlFor={id} className="text-sm font-medium text-fg">
         {label}
-        {optional && <span className="ml-1 font-normal text-faint">(opcional)</span>}
+        {optional && <span className="ml-1 font-normal text-faint">{t('common.optional')}</span>}
       </label>
       {children(id, describedBy)}
       {hint && !error && (
@@ -151,7 +152,7 @@ export function Checkbox({
         checked ? 'border-success bg-success text-bg' : 'border-[color-mix(in_srgb,var(--text-faint)_70%,var(--border))] bg-surface hover:border-muted',
       )}
     >
-      {/* Área táctil ampliada */}
+      {/* Enlarged touch target */}
       <span className="absolute -inset-2" aria-hidden />
       {checked && (
         <motion.span
