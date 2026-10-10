@@ -19,7 +19,7 @@ wd() {
   "$@" & local pid=$!
   ( sleep "$t"; kill -9 "$pid" 2>/dev/null && echo "  [tiempo agotado: $*]" ) & local w=$!
   wait "$pid"; local rc=$?
-  kill "$w" 2>/dev/null
+  kill "$w" 2>/dev/null; wait "$w" 2>/dev/null
   return $rc
 }
 log() { echo "[$(date +%T)] $*"; }

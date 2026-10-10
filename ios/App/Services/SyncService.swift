@@ -41,7 +41,7 @@ final class GeofenceService {
 
     private func ensureMonitor() async -> CLMonitor {
         if let monitor { return monitor }
-        let m = await CLMonitor("kairo.lugares")
+        let m = await CLMonitor("KairoLugares")
         monitor = m
         listening = Task { [weak self] in
             do {
