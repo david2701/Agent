@@ -1,6 +1,8 @@
 package app.kairo.nan
 
+import app.kairo.util.SafeUrl
 import app.kairo.util.proxyFromEnv
+import app.kairo.util.safeGet
 import app.kairo.util.KairoJson
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -343,13 +345,18 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         engine { proxyFromEnv()?.let { proxy = it } }
         install(HttpTimeout) { requestTimeoutMillis = 60_000 }
         expectSuccess = false
+        followRedirects = false // safeGet valida cada salto
     }
 
+    /** Descarga la imagen que devolvió Nan: sólo https a hosts públicos, como mucho 20 MB y sólo imágenes. */
     suspend fun download(url: String): Pair<ByteArray, String> {
         require(url.startsWith("https://")) { "Solo se permiten descargas https" }
-        val resp = plainHttp.get(url)
-        if (!resp.status.isSuccess()) throw NanException(resp.status.value, "No se pudo descargar la imagen")
-        return resp.readRawBytes() to (resp.headers[HttpHeaders.ContentType] ?: "image/png")
+        val r = plainHttp.safeGet(url, SafeUrl.Policy(), maxBytes = MAX_IMAGE_BYTES)
+        if (r.status !in 200..299) throw NanException(r.status, "No se pudo descargar la imagen")
+        if (r.truncated) throw NanException(502, "La imagen es demasiado grande")
+        val type = r.contentType?.substringBefore(';')?.trim()?.lowercase() ?: "image/png"
+        if (!type.startsWith("image/")) throw NanException(502, "La respuesta no es una imagen")
+        return r.body to type
     }
 
     suspend fun models(): List<String> {
@@ -363,5 +370,7 @@ class NanClient(private val baseUrl: String, private val apiKey: String) {
         plainHttp.close()
     }
 }
+
+private const val MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 data class Transcription(val text: String, val language: String?, val durationSeconds: Double?)

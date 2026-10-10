@@ -22,6 +22,7 @@ import app.kairo.nan.ToolCallFunction
 import app.kairo.nan.ToolSpec
 import app.kairo.util.KairoJson
 import app.kairo.util.UUIDSerializer
+import app.kairo.util.logSafe
 import app.kairo.util.zoneOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -269,7 +270,7 @@ class Agent(
             throw e
         } catch (e: Exception) {
             if (emitted || fallback == opts.model) throw e
-            log.warn("Modelo {} falló ({}), usando {}", opts.model, e.message, fallback)
+            log.warn("Modelo {} falló ({}), usando {}", opts.model, logSafe(e.message), fallback)
             attempt(opts.copy(model = fallback))
         }
     }
@@ -297,7 +298,7 @@ class Agent(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("No pude revisar {} antes de ejecutarla: {}", tool.name, e.message)
+            log.warn("No pude revisar {} antes de ejecutarla: {}", tool.name, logSafe(e.message))
             null
         }
         // Si no se pudo revisar, lo seguro es pedir confirmación.
@@ -328,10 +329,16 @@ class Agent(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IllegalArgumentException) {
-            ToolResult.error(e.message ?: "Datos inválidos")
+            ToolResult.error(e.message?.take(160) ?: "Datos inválidos")
+        } catch (e: IllegalStateException) {
+            // error("...") y check() de las herramientas: mensajes escritos para la persona
+            ToolResult.error(e.message?.take(160) ?: "No se pudo hacer")
+        } catch (e: NanException) {
+            ToolResult.error(e.message?.take(160) ?: "El modelo no respondió")
         } catch (e: Exception) {
+            // Errores internos (base de datos, red): el detalle queda en el log, no se le pasa al modelo
             log.error("Fallo en herramienta {}", call.function.name, e)
-            ToolResult.error("La acción falló: ${e.message?.take(160)}")
+            ToolResult.error("La acción falló por un error interno")
         }
     }
 
@@ -340,7 +347,7 @@ class Agent(
         e is NanException && e.status == 429 -> "Nan está limitando las peticiones. Intenta en unos segundos."
         e is NanException -> "El modelo no respondió correctamente (${e.status}). Intenta de nuevo."
         e.message?.contains("timeout", true) == true -> "El modelo tardó demasiado. Intenta de nuevo."
-        else -> "Algo salió mal: ${e.message?.take(140)}"
+        else -> "Algo salió mal. Intenta de nuevo."
     }
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

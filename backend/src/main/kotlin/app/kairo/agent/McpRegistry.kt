@@ -7,6 +7,7 @@ import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.domain.McpServer
 import app.kairo.integrations.McpClient
+import app.kairo.util.logSafe
 import app.kairo.util.Crypto
 import app.kairo.util.KairoJson
 import kotlinx.serialization.builtins.MapSerializer
@@ -65,7 +66,7 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
         val out = ArrayList<Tool>()
         for (row in rows(userId).filter { it.server.enabled }) {
             val remote = runCatching { client.listTools(row.server.url, row.headers) }
-                .onFailure { log.warn("MCP {} no disponible: {}", row.server.name, it.message) }
+                .onFailure { log.warn("MCP {} no disponible: {}", logSafe(row.server.name, 60), logSafe(it.message)) }
                 .getOrNull() ?: continue
             val prefix = "mcp_" + slug(row.server.name) + "_"
             remote.forEach { t ->
