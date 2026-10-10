@@ -162,7 +162,8 @@ El contrato completo de la API está en [`docs/API.md`](docs/API.md).
 
 ## Diseño
 
-La interfaz sigue la skill [Taste](https://www.tasteskill.dev/) (incluida en `.claude/skills/`): un solo
+La interfaz sigue la skill [Taste](https://www.tasteskill.dev/), instalada en `.claude/skills/` con
+`npx skills add Leonxlnx/taste-skill` (detalles en [`.claude/skills/README.md`](.claude/skills/README.md)): un solo
 acento ámbar `#F0A23B` sobre grises neutros, tipografía Geist, sin degradados ni emojis, estados
 completos (cargando, vacío, error) y animaciones que respetan "reducir movimiento". Tokens en
 [`design/DESIGN.md`](design/DESIGN.md). En Android se traduce a Material 3 Expressive.
