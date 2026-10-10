@@ -1,0 +1,294 @@
+# Proyecto de Xcode de Kairo para iPhone, iPad (y iPhone Duo) y Apple Watch.
+# Kairo.xcodeproj se genera desde este archivo con XcodeGen y ya viene incluido en el repo:
+#   brew install xcodegen && cd ios && xcodegen        (sólo si cambias este archivo)
+#
+# Antes de compilar en tu Mac, pon tu equipo y tus identificadores en Config/Signing.xcconfig.
+
+name: Kairo
+options:
+  deploymentTarget:
+    iOS: "27.0"
+    watchOS: "27.0"
+  developmentLanguage: es
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "27.0"
+  defaultConfig: Debug
+
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    DEAD_CODE_STRIPPING: YES
+
+packages:
+  KairoKit:
+    path: KairoKit
+
+targets:
+
+  # ---------------------------------------------------------------- iPhone y iPad
+  Kairo:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    dependencies:
+      - package: KairoKit
+        product: KairoCore
+      - package: KairoKit
+        product: KairoUI
+      - target: KairoWidgets
+      - target: KairoShare
+      - target: KairoWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(KAIRO_BUNDLE_ID)
+        PRODUCT_NAME: Kairo
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+    entitlements:
+      path: App/Kairo.entitlements
+      properties:
+        aps-environment: development
+        com.apple.security.application-groups:
+          - $(KAIRO_APP_GROUP)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+        com.apple.developer.usernotifications.time-sensitive: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Kairo
+        CFBundleDevelopmentRegion: es
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        ITSAppUsesNonExemptEncryption: false
+        KairoAppGroup: $(KAIRO_APP_GROUP)
+        KairoKeychainGroup: $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+        KairoDefaultServer: $(KAIRO_DEFAULT_SERVER)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortraitUpsideDown
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - audio
+          - fetch
+          - processing
+          - remote-notification
+          - location
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(KAIRO_BUNDLE_ID).sync
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        NSMicrophoneUsageDescription: Kairo te escucha cuando le hablas y graba las reuniones que le pides.
+        NSSpeechRecognitionUsageDescription: Para reconocer "Oye Kairo" dentro del teléfono, sin enviar audio hasta que lo dices.
+        NSLocationWhenInUseUsageDescription: Para guardar lugares y darte el clima de donde estás.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Para avisarte al llegar o salir de los lugares de tus recordatorios.
+        NSAlarmKitUsageDescription: Kairo pone las alarmas y los temporizadores que le pides.
+        NSUserActivityTypes:
+          - $(KAIRO_BUNDLE_ID).talk
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: $(KAIRO_BUNDLE_ID)
+            CFBundleURLSchemes: [kairo]
+
+  # ---------------------------------------------------------------- Widgets, Live Activities y controles
+  KairoWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: Shared
+        excludes:
+          - "Watch/**"
+    dependencies:
+      - package: KairoKit
+        product: KairoCore
+      - package: KairoKit
+        product: KairoUI
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(KAIRO_BUNDLE_ID).widgets
+        PRODUCT_NAME: KairoWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Widgets/KairoWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(KAIRO_APP_GROUP)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Kairo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        KairoAppGroup: $(KAIRO_APP_GROUP)
+        KairoKeychainGroup: $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+        NSSupportsLiveActivities: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+  # ---------------------------------------------------------------- Compartir con Kairo
+  KairoShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+      - path: Shared/AppConfig.swift
+    dependencies:
+      - package: KairoKit
+        product: KairoCore
+      - package: KairoKit
+        product: KairoUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(KAIRO_BUNDLE_ID).share
+        PRODUCT_NAME: KairoShare
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Share/KairoShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(KAIRO_APP_GROUP)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: Guardar en Kairo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        KairoAppGroup: $(KAIRO_APP_GROUP)
+        KairoKeychainGroup: $(AppIdentifierPrefix)$(KAIRO_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 1
+
+  # ---------------------------------------------------------------- Apple Watch
+  KairoWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Watch
+      - path: Shared/AppConfig.swift
+      - path: Shared/Watch
+    dependencies:
+      - package: KairoKit
+        product: KairoCore
+      - package: KairoKit
+        product: KairoUI
+      - target: KairoWatchWidgets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(KAIRO_BUNDLE_ID).watchkitapp
+        PRODUCT_NAME: KairoWatch
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Watch/KairoWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(KAIRO_WATCH_APP_GROUP)
+    info:
+      path: Watch/Info.plist
+      properties:
+        CFBundleDisplayName: Kairo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: $(KAIRO_BUNDLE_ID)
+        WKRunsIndependentlyOfCompanionApp: true
+        KairoAppGroup: $(KAIRO_WATCH_APP_GROUP)
+        KairoDefaultServer: $(KAIRO_DEFAULT_SERVER)
+        NSMicrophoneUsageDescription: Kairo te escucha cuando le hablas desde el reloj.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+
+  KairoWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: WatchWidgets
+      - path: Shared/AppConfig.swift
+    dependencies:
+      - package: KairoKit
+        product: KairoCore
+      - package: KairoKit
+        product: KairoUI
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(KAIRO_BUNDLE_ID).watchkitapp.widgets
+        PRODUCT_NAME: KairoWatchWidgets
+        SKIP_INSTALL: YES
+    entitlements:
+      path: WatchWidgets/KairoWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(KAIRO_WATCH_APP_GROUP)
+    info:
+      path: WatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Kairo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        KairoAppGroup: $(KAIRO_WATCH_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+schemes:
+  Kairo:
+    build:
+      targets:
+        Kairo: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  KairoWatch:
+    build:
+      targets:
+        KairoWatch: all
+    run:
+      config: Debug

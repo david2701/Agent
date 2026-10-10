@@ -1,0 +1,73 @@
+name: iOS
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Lógica compartida (modelos, API, fechas, voz): también corre en Linux.
+  kairokit:
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pruebas de KairoCore
+        working-directory: ios/KairoKit
+        run: swift test
+
+  # App de iPhone/iPad, widgets, Live Activities, compartir y Apple Watch (Xcode 27, SDK de iOS 27).
+  xcode:
+    runs-on: xcode-27
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versión de Xcode
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -Ei "ios|watch" || true
+          defaults write com.apple.dt.Xcode IDEBuildingContinueBuildingAfterErrors -bool YES
+      - name: Apple Watch (simulador)
+        id: watch
+        continue-on-error: true
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build -quiet -project Kairo.xcodeproj -scheme KairoWatch \
+            -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-watch.log
+      - name: iPhone y iPad (simulador)
+        id: ios
+        continue-on-error: true
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build -quiet -project Kairo.xcodeproj -scheme Kairo \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-ios.log
+      - name: Resumen de errores
+        if: always()
+        working-directory: ios
+        run: |
+          for f in build-watch.log build-ios.log; do
+            [ -f "$f" ] || continue
+            echo "=== $f"
+            grep -E "error:|fatal:" "$f" | sed -E 's#^.*/ios/##' | sort -u | head -150 || true
+          done
+          if [ "${{ steps.watch.outcome }}" != "success" ] || [ "${{ steps.ios.outcome }}" != "success" ]; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcode-logs
+          path: ios/build-*.log
+          if-no-files-found: ignore
