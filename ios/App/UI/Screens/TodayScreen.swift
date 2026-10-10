@@ -40,7 +40,16 @@ struct TodayScreen: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
-                            Greeting(today: b.today, name: model.user?.firstName ?? "")
+                            HStack(alignment: .top) {
+                                Greeting(today: b.today, name: model.user?.firstName ?? "")
+                                Button { model.perform("briefing") } label: {
+                                    Image(systemName: "play.fill").font(.system(size: 14, weight: .semibold)).frame(width: 40, height: 40)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(.regular.interactive(), in: .circle)
+                                .padding(.top, 14)
+                                .accessibilityLabel("Escuchar resumen del día")
+                            }
                             VoiceCard(orbSize: 132)
                             dayContent(b, includeFamily: true)
                         }
