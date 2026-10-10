@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # Avisos sin Firebase
 
 Sí: Kairo tiene su propio sistema de avisos y no depende de Firebase ni de Google Play Services.
@@ -36,7 +38,7 @@ Kairo (tu servidor) --Web Push cifrado--> ntfy (tu servidor) --conexión del tel
    ```bash
    docker compose --profile push up -d
    ```
-2. Agrega a tu Caddyfile el bloque `ntfy.tudominio.com` de [`deploy/Caddyfile.example`](../deploy/Caddyfile.example) y ejecuta `caddy reload`.
+2. Agrega a tu Caddyfile el bloque `ntfy.tudominio.com` de [`deploy/Caddyfile.example`](../../deploy/Caddyfile.example) y ejecuta `caddy reload`.
 3. En cada teléfono de la familia:
    - Instala **ntfy** (F-Droid o Play Store).
    - En ntfy: *Ajustes > Servidor predeterminado* = `https://ntfy.tudominio.com`.

@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # Familia en Kairo
 
 Un mismo servidor para toda la familia. Cada persona entra con su cuenta y tiene lo suyo (notas, tareas,

@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # Conectar Google Calendar
 
 Kairo tiene su propio calendario desde el primer día. Cuando conectes Google Calendar,

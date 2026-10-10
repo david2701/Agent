@@ -1,7 +1,9 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # Kairo para iPhone, iPad y Apple Watch
 
 App nativa en SwiftUI (Swift 6, iOS 27 y watchOS 27) que se conecta a tu servidor de Kairo, igual que la
-app de Android. Todo el código está en [`ios/`](../ios), y el proyecto de Xcode ya viene generado.
+app de Android. Todo el código está en [`ios/`](../../ios), y el proyecto de Xcode ya viene generado.
 
 ## Qué incluye
 
@@ -39,8 +41,8 @@ app de Android. Todo el código está en [`ios/`](../ios), y el proyecto de Xcod
 
 | Hoy | Tareas | Calendario | Notas |
 |---|---|---|---|
-| ![Hoy](screenshots/ios/iphone-today-light.png) | ![Tareas](screenshots/ios/iphone-tasks-light.png) | ![Calendario](screenshots/ios/iphone-calendar-dark.png) | ![Notas](screenshots/ios/iphone-notes-light.png) |
-| ![Hoy en oscuro](screenshots/ios/iphone-today-dark.png) | ![Familia](screenshots/ios/iphone-family-dark.png) | ![Chat](screenshots/ios/iphone-chat-light.png) | ![Ajustes](screenshots/ios/iphone-settings-dark.png) |
+| ![Hoy](../screenshots/ios/iphone-today-light.png) | ![Tareas](../screenshots/ios/iphone-tasks-light.png) | ![Calendario](../screenshots/ios/iphone-calendar-dark.png) | ![Notas](../screenshots/ios/iphone-notes-light.png) |
+| ![Hoy en oscuro](../screenshots/ios/iphone-today-dark.png) | ![Familia](../screenshots/ios/iphone-family-dark.png) | ![Chat](../screenshots/ios/iphone-chat-light.png) | ![Ajustes](../screenshots/ios/iphone-settings-dark.png) |
 
 Capturas tomadas en el simulador de iOS 27 (iPhone 17 Pro) con datos de prueba (`ios/ci`).
 
@@ -119,9 +121,9 @@ registra su token en `POST /api/push/apns/register` y en Ajustes > Avisos ves si
 
 - `cd ios/KairoKit && swift test`: pruebas de los modelos (con respuestas reales anonimizadas del servidor),
   fechas, voz, SSE y avisos. Corren en macOS y en Linux.
-- El workflow [`ios.yml`](../.github/workflows/ios.yml) compila la app, los widgets, la extensión y el reloj
+- El workflow [`ios.yml`](../../.github/workflows/ios.yml) compila la app, los widgets, la extensión y el reloj
   con Xcode 27 en cada cambio (unos 3 minutos).
-- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml), que se lanza a mano (*Actions > iOS capturas >
+- [`ios-capturas.yml`](../../.github/workflows/ios-capturas.yml), que se lanza a mano (*Actions > iOS capturas >
   Run workflow*), toma capturas en el simulador de iPhone (y de iPad si lo marcas) contra un servidor de prueba
   (`ios/ci/mock_server.py`) y las deja en el artefacto *capturas-ios*.
 

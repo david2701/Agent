@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # App Android de Kairo
 
 Nativa en Kotlin 2.4 con Jetpack Compose y **Material 3 Expressive**. Funciona en teléfonos

@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # API de Kairo
 
 Base: `https://<tu-dominio>/api`. JSON UTF-8. Fechas-hora en ISO 8601 UTC (`2026-10-11T14:00:00Z`),

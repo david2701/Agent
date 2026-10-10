@@ -1,3 +1,5 @@
+Spanish version of the docs. The English docs in `../` are the source of truth and may be newer.
+
 # Poner Kairo en marcha
 
 Guía para el primer despliegue en tu servidor y para probar todo en los dispositivos de la familia.
@@ -42,7 +44,7 @@ docker compose logs backup       # debe decir "copia creada" y "próxima copia"
 
 ## 3. HTTPS con Caddy
 
-Agrega a tu Caddyfile el bloque de [`deploy/Caddyfile.example`](../deploy/Caddyfile.example), cambia el dominio
+Agrega a tu Caddyfile el bloque de [`deploy/Caddyfile.example`](../../deploy/Caddyfile.example), cambia el dominio
 y ejecuta `caddy reload`. El bloque ya trae HSTS, las cabeceras de seguridad y el tope de 50 MB por petición.
 Kairo toma la IP del cliente del último `X-Forwarded-For` (el que agrega Caddy), así que no pongas otro proxy
 delante sin ajustar eso. Comprueba:
