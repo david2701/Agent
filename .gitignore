@@ -38,3 +38,6 @@ android/app/build/
 android/core/build/
 android/wear/build/
 android/build/
+
+# Copias de trabajo temporales de herramientas
+.claude/worktrees/
