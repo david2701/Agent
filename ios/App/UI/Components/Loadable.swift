@@ -2,7 +2,7 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Estado de una carga: la primera vez muestra esqueleto; luego recarga sin parpadeo.
+/// State of a load: the first time it shows a skeleton; afterwards it reloads without flicker.
 enum Loadable<T> {
     case loading
     case failed(String)
@@ -14,7 +14,7 @@ enum Loadable<T> {
 
 extension Loadable: Equatable where T: Equatable {}
 
-/// Carga [load] la primera vez y cada vez que cambia [version] (cambios en vivo del servidor).
+/// Runs [load] the first time and every time [version] changes (live changes from the server).
 struct LoadableView<T, Content: View>: View {
     @Binding var state: Loadable<T>
     var version: Int
@@ -47,24 +47,24 @@ struct LoadableView<T, Content: View>: View {
     }
 }
 
-/// Muestra el error de una acción como aviso breve.
+/// Shows the error of an action as a brief notice.
 @MainActor
-func attempt(_ model: AppModel, _ success: String? = nil, _ action: () async throws -> Void) async {
+func attempt(_ model: AppModel, _ success: LocalizedStringResource? = nil, _ action: () async throws -> Void) async {
     do {
         try await action()
-        if let success { model.show(Toast(title: success)) }
+        if let success { model.show(Toast(title: String(localized: success))) }
     } catch {
-        model.show(Toast(title: "No se pudo completar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+        model.show(Toast(title: String(localized: "Couldn't complete that"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
     }
 }
 
 extension View {
-    /// Fondo de pantalla de Kairo.
+    /// Kairo's screen background.
     func kairoBackground() -> some View {
         background(KairoColor.bg.ignoresSafeArea())
     }
 
-    /// Ancho de lectura cómodo en iPad y en la pantalla interior del iPhone Duo.
+    /// Comfortable reading width on iPad and on the inner screen of a foldable.
     func readableWidth(_ max: CGFloat = 760) -> some View {
         frame(maxWidth: max).frame(maxWidth: .infinity)
     }

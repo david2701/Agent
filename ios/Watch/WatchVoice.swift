@@ -4,7 +4,7 @@ import WatchKit
 import KairoCore
 import KairoUI
 
-/// Voz en el reloj: graba hasta que te callas, envía a tu servidor y lee la respuesta.
+/// Voice on the watch: records until you stop talking, sends to your server and reads the answer.
 @MainActor @Observable
 final class WatchVoice {
     enum Phase: Equatable { case idle, listening, thinking, speaking }
@@ -33,10 +33,10 @@ final class WatchVoice {
 
     var status: String {
         switch phase {
-        case .listening: "Te escucho"
-        case .thinking: turn.working ?? "Pensando"
+        case .listening: String(localized: "I'm listening")
+        case .thinking: turn.working ?? String(localized: "Thinking")
         case .speaking: "Kairo"
-        case .idle: error ?? (turn.finished ? "Toca para seguir" : "Toca para hablar")
+        case .idle: error ?? (turn.finished ? String(localized: "Tap to continue") : String(localized: "Tap to talk"))
         }
     }
 
@@ -57,13 +57,13 @@ final class WatchVoice {
         level = 0
     }
 
-    private var fileURL: URL { FileManager.default.temporaryDirectory.appendingPathComponent("kairo-voz.m4a") }
+    private var fileURL: URL { FileManager.default.temporaryDirectory.appendingPathComponent("kairo-voice.m4a") }
     private var stopRequested = false
 
     private func listen() async {
         error = nil
         guard await AVAudioApplication.requestRecordPermission() else {
-            error = "Permite el micrófono en el reloj"
+            error = String(localized: "Allow the microphone on the watch")
             return
         }
         do {
@@ -81,7 +81,7 @@ final class WatchVoice {
             WKInterfaceDevice.current().play(.start)
             phase = .listening
             turn = AgentTurn()
-            // Fin de la frase: silencio de 1,2 s después de hablar, o 20 s como máximo
+            // End of the sentence: 1.2 s of silence after speaking, or 20 s at most
             var spoke = false
             var quiet = 0.0
             let started = Date.now
@@ -100,12 +100,12 @@ final class WatchVoice {
             guard !Task.isCancelled else { return }
             guard spoke, let audio = try? Data(contentsOf: fileURL) else {
                 phase = .idle
-                error = "No te escuché"
+                error = String(localized: "I didn't hear you")
                 return
             }
             WKInterfaceDevice.current().play(.stop)
             phase = .thinking
-            for try await ev in api.voiceTurn(audio: audio, filename: "voz.m4a", mime: "audio/mp4", conversationId: conversationId, channel: "wear") {
+            for try await ev in api.voiceTurn(audio: audio, filename: "voice.m4a", mime: "audio/mp4", conversationId: conversationId, channel: "wear") {
                 withAnimation(KairoMotion.base) { turn.apply(ev) }
             }
             conversationId = turn.conversationId
@@ -142,7 +142,7 @@ final class WatchVoice {
 }
 
 extension WatchModel {
-    /// Tras una respuesta que cambió algo, refresca el día.
+    /// After an answer that changed something, refreshes the day.
     func voiceFinished(_ turn: AgentTurn) {
         if turn.actions.contains(where: { $0.entity != nil }) { Task { await refresh() } }
     }

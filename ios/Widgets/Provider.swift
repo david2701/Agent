@@ -8,13 +8,13 @@ nonisolated struct SnapshotEntry: TimelineEntry {
     var signedIn: Bool
 }
 
-/// El completion de WidgetKit no es Sendable; se llama una sola vez desde la tarea.
+/// WidgetKit's completion is not Sendable; it is called only once from the task.
 nonisolated struct Once<T>: @unchecked Sendable {
     let f: (T) -> Void
     func callAsFunction(_ v: T) { f(v) }
 }
 
-/// Lee el resumen que deja la app. Si es viejo, lo renueva con la sesión propia de las extensiones.
+/// Reads the summary the app leaves. If it is old, it refreshes it with the extensions' own session.
 nonisolated struct SnapshotProvider: TimelineProvider {
     func placeholder(in context: Context) -> SnapshotEntry { SnapshotEntry(date: .now, snapshot: .preview, signedIn: true) }
 
@@ -45,7 +45,7 @@ nonisolated struct SnapshotProvider: TimelineProvider {
         return s
     }
 
-    /// Una entrada ahora y otra al empezar o terminar cada evento, para que "Siguiente" no quede viejo.
+    /// One entry now and another when each event starts or ends, so "Next" does not go stale.
     static func timeline(_ snap: SharedSnapshot?) -> Timeline<SnapshotEntry> {
         guard let snap else { return Timeline(entries: [SnapshotEntry(date: .now, snapshot: SharedSnapshot(), signedIn: false)], policy: .after(.now.addingTimeInterval(3600))) }
         var dates: [Date] = [.now]
@@ -55,7 +55,7 @@ nonisolated struct SnapshotProvider: TimelineProvider {
     }
 }
 
-/// Proveedor del widget de lista (configurable).
+/// Provider of the list widget (configurable).
 nonisolated struct ListProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ListEntry { ListEntry(date: .now, list: SharedSnapshot.preview.lists.first, signedIn: true) }
 
@@ -86,20 +86,21 @@ extension SharedSnapshot {
     nonisolated static var preview: SharedSnapshot {
         let now = Date.now
         return SharedSnapshot(
-            userName: "Ana", greeting: "Buenos días", dateLabel: "Sábado 10 de octubre",
+            userName: "Alex", greeting: String(localized: "Good morning"), dateLabel: KairoDate.longDay(now),
             events: [
-                .init(id: "e1", title: "Pediatra de Sofía", subtitle: "10:30 · Clínica del Country", date: now.addingTimeInterval(5400), shared: true),
-                .init(id: "e2", title: "Almuerzo con Marta", subtitle: "13:00", date: now.addingTimeInterval(4 * 3600)),
+                .init(id: "e1", title: String(localized: "Mia's pediatrician"), subtitle: String(localized: "10:30 AM · Riverside Clinic"), date: now.addingTimeInterval(5400), shared: true),
+                .init(id: "e2", title: String(localized: "Lunch with Sam"), subtitle: String(localized: "1:00 PM"), date: now.addingTimeInterval(4 * 3600)),
             ],
             tasks: [
-                .init(id: "t1", title: "Pagar la luz", subtitle: "Hoy"),
-                .init(id: "t2", title: "Comprar regalo de Juan", subtitle: "Hoy · de Valentina", shared: true),
-                .init(id: "t3", title: "Enviar el informe", subtitle: "En curso"),
+                .init(id: "t1", title: String(localized: "Pay the electricity bill"), subtitle: String(localized: "Today")),
+                .init(id: "t2", title: String(localized: "Buy a gift for Sam"), subtitle: String(localized: "Today · Alex's"), shared: true),
+                .init(id: "t3", title: String(localized: "Send the report"), subtitle: String(localized: "In progress")),
             ],
-            reminders: [.init(id: "r1", title: "Sacar la basura", subtitle: "20:00", date: now.addingTimeInterval(8 * 3600))],
-            lists: [.init(id: "l1", name: "Súper", shared: true, items: [
-                .init(id: "i1", title: "Leche"), .init(id: "i2", title: "Pan"), .init(id: "i3", title: "Huevos", done: true), .init(id: "i4", title: "Café"),
+            reminders: [.init(id: "r1", title: String(localized: "Take out the trash"), subtitle: String(localized: "8:00 PM"), date: now.addingTimeInterval(8 * 3600))],
+            lists: [.init(id: "l1", name: String(localized: "Groceries"), shared: true, items: [
+                .init(id: "i1", title: String(localized: "Milk")), .init(id: "i2", title: String(localized: "Bread")),
+                .init(id: "i3", title: String(localized: "Eggs"), done: true), .init(id: "i4", title: String(localized: "Coffee")),
             ])],
-            weather: "19° · Parcialmente nublado", unreadNotices: 2)
+            weather: String(localized: "19° · Partly cloudy"), unreadNotices: 2)
     }
 }

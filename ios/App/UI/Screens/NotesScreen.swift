@@ -2,8 +2,8 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Notas: búsqueda por significado, filtros de familia y editor en markdown.
-/// En pantallas anchas (iPad, iPhone Duo abierto) la lista y la nota van lado a lado.
+/// Notes: search by meaning, family filters and a markdown editor.
+/// On wide screens (iPad, unfolded iPhone Duo) the list and the note go side by side.
 struct NotesScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<[Note]> = .loading
@@ -28,7 +28,7 @@ struct NotesScreen: View {
                             if let id = selection, let n = all.first(where: { $0.id == id }) {
                                 NoteDetail(note: n, pushed: false, onDeleted: { selection = nil }).id(n.id)
                             } else {
-                                EmptyStateView(symbol: "note.text", title: "Elige una nota", message: "O crea una nueva.", actionTitle: "Nueva nota") { creating = true }
+                                EmptyStateView(symbol: "note.text", title: "Pick a note", message: "Or create a new one.", actionTitle: "New note") { creating = true }
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
@@ -42,12 +42,12 @@ struct NotesScreen: View {
                 }
             }
         }
-        .navigationTitle("Notas")
-        .searchable(text: $query, prompt: "Buscar notas")
+        .navigationTitle("Notes")
+        .searchable(text: $query, prompt: "Search notes")
         .task(id: query) { await search() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { creating = true } label: { Label("Nueva nota", systemImage: "square.and.pencil") }
+                Button { creating = true } label: { Label("New note", systemImage: "square.and.pencil") }
                     .keyboardShortcut("n", modifiers: .command)
             }
         }
@@ -77,7 +77,7 @@ struct NotesScreen: View {
     @ViewBuilder private func listColumn(_ notes: [Note], all: [Note], wide: Bool) -> some View {
         List(selection: wide ? $selection : .constant(nil)) {
             if model.hasFamily {
-                OwnershipFilter<Filter>(options: [(.all, "Todas", nil), (.mine, "Mías", nil), (.family, "Familiares", all.filter(\.shared).count)], selection: $filter)
+                OwnershipFilter<Filter>(options: [(.all, "All", nil), (.mine, "Mine", nil), (.family, "Shared", all.filter(\.shared).count)], selection: $filter)
                     .listRowInsets(EdgeInsets(top: 4, leading: -4, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -85,11 +85,11 @@ struct NotesScreen: View {
             if notes.isEmpty {
                 Group {
                     if results != nil {
-                        EmptyStateView(symbol: "magnifyingglass", title: "Sin resultados", message: "Prueba con otras palabras; la búsqueda entiende el significado.")
+                        EmptyStateView(symbol: "magnifyingglass", title: "No results", message: "Try different words; search understands meaning.")
                     } else if filter == .family {
-                        EmptyStateView(symbol: "house", title: "Nada compartido aún", message: "Abre una nota y activa Compartir con la familia para que la vean todos.")
+                        EmptyStateView(symbol: "house", title: "Nothing shared yet", message: "Open a note and turn on Share with family so everyone can see it.")
                     } else {
-                        EmptyStateView(symbol: "note.text", title: "Aún no hay notas", message: "Dile a Kairo \"anota que la clave del wifi es…\" o crea una.")
+                        EmptyStateView(symbol: "note.text", title: "No notes yet", message: "Tell Kairo \"note that the wifi password is…\" or create one.")
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -105,11 +105,11 @@ struct NotesScreen: View {
                 }
                 .listRowBackground(wide && selection == n.id ? KairoColor.accent.opacity(0.12) : KairoColor.surface)
                 .swipeActions(edge: .leading) {
-                    Button { Task { await togglePin(n) } } label: { Label(n.pinned ? "Desfijar" : "Fijar", systemImage: n.pinned ? "pin.slash" : "pin") }
+                    Button { Task { await togglePin(n) } } label: { Label(n.pinned ? "Unpin" : "Pin", systemImage: n.pinned ? "pin.slash" : "pin") }
                         .tint(KairoColor.accent)
                 }
                 .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { Task { await delete(n) } } label: { Label("Eliminar", systemImage: "trash") }
+                    Button(role: .destructive) { Task { await delete(n) } } label: { Label("Delete", systemImage: "trash") }
                 }
             }
         }
@@ -125,7 +125,7 @@ struct NotesScreen: View {
     }
 
     private func delete(_ n: Note) async {
-        await attempt(model, "Nota eliminada. Puedes deshacerlo en Actividad.") { try await model.api.deleteNote(n.id) }
+        await attempt(model, "Note deleted. You can undo it in Activity.") { try await model.api.deleteNote(n.id) }
         if selection == n.id { selection = nil }
         model.bump("note")
     }
@@ -139,7 +139,7 @@ private struct NoteRow: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 if note.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(KairoColor.accent) }
-                Text(note.title.isEmpty ? "Sin título" : note.title).font(.kHeadline).foregroundStyle(KairoColor.text).lineLimit(1)
+                Text(note.title.isEmpty ? String(localized: "Untitled") : note.title).font(.kHeadline).foregroundStyle(KairoColor.text).lineLimit(1)
                 Spacer(minLength: 0)
                 if let d = KairoDate.parse(note.updatedAt) { Text(KairoDate.relative(d)).font(.kMonoSmall).foregroundStyle(KairoColor.faint) }
             }
@@ -160,7 +160,7 @@ private struct NoteRow: View {
     }
 }
 
-/// Una nota: lectura en markdown y edición en el mismo lugar.
+/// A note: markdown reading and editing in the same place.
 struct NoteDetail: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -176,9 +176,9 @@ struct NoteDetail: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(note.title.isEmpty ? "Sin título" : note.title).font(.kTitle).foregroundStyle(KairoColor.text).selectableText()
+                        Text(note.title.isEmpty ? String(localized: "Untitled") : note.title).font(.kTitle).foregroundStyle(KairoColor.text).selectableText()
                         HStack(spacing: 8) {
-                            if let d = KairoDate.parse(note.updatedAt) { Text("Editada \(KairoDate.relative(d))").font(.kFootnote).foregroundStyle(KairoColor.muted) }
+                            if let d = KairoDate.parse(note.updatedAt) { Text("Edited \(KairoDate.relative(d))").font(.kFootnote).foregroundStyle(KairoColor.muted) }
                             if note.shared {
                                 SharedBadge(owner: model.ownerName(note.ownerId))
                             }
@@ -199,18 +199,18 @@ struct NoteDetail: View {
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .primaryAction) {
-                        Button { editing = true } label: { Label("Editar", systemImage: "pencil") }
+                        Button { editing = true } label: { Label("Edit", systemImage: "pencil") }
                         Menu {
-                            Button { Task { await pin() } } label: { Label(note.pinned ? "Desfijar" : "Fijar", systemImage: note.pinned ? "pin.slash" : "pin") }
+                            Button { Task { await pin() } } label: { Label(note.pinned ? "Unpin" : "Pin", systemImage: note.pinned ? "pin.slash" : "pin") }
                             if model.hasFamily, note.ownerId == nil || note.ownerId == model.user?.id {
                                 Button { Task { await share() } } label: {
-                                    Label(note.shared ? "Dejar de compartir" : "Compartir con la familia", systemImage: "house")
+                                    Label(note.shared ? "Stop sharing" : "Share with family", systemImage: "house")
                                 }
                             }
-                            ShareLink(item: "\(note.title)\n\n\(note.content)") { Label("Enviar…", systemImage: "square.and.arrow.up") }
+                            ShareLink(item: "\(note.title)\n\n\(note.content)") { Label("Share…", systemImage: "square.and.arrow.up") }
                             Divider()
-                            Button(role: .destructive) { Task { await delete() } } label: { Label("Eliminar", systemImage: "trash") }
-                        } label: { Label("Más", systemImage: "ellipsis") }
+                            Button(role: .destructive) { Task { await delete() } } label: { Label("Delete", systemImage: "trash") }
+                        } label: { Label("More", systemImage: "ellipsis") }
                     }
                 }
             }
@@ -221,26 +221,26 @@ struct NoteDetail: View {
     }
 
     private func pin() async {
-        await attempt(model, note.pinned ? nil : "Fijada") { _ = try await model.api.updateNote(note.id, ["pinned": .bool(!note.pinned)]) }
+        await attempt(model, note.pinned ? nil : "Pinned") { _ = try await model.api.updateNote(note.id, ["pinned": .bool(!note.pinned)]) }
         model.bump("note")
     }
 
     private func share() async {
-        await attempt(model, note.shared ? "La nota vuelve a ser solo tuya" : "Nota compartida con la familia") {
+        await attempt(model, note.shared ? "The note is yours alone again" : "Note shared with the family") {
             _ = try await model.api.updateNote(note.id, ["shared": .bool(!note.shared)])
         }
         model.bump("note")
     }
 
     private func delete() async {
-        await attempt(model, "Nota eliminada. Puedes deshacerlo en Actividad.") { try await model.api.deleteNote(note.id) }
+        await attempt(model, "Note deleted. You can undo it in Activity.") { try await model.api.deleteNote(note.id) }
         model.bump("note")
         onDeleted()
         if pushed { dismiss() }
     }
 }
 
-/// Crear o editar una nota.
+/// Create or edit a note.
 struct NoteEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -255,7 +255,7 @@ struct NoteEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TextField("Título", text: $title)
+            TextField("Title", text: $title)
                 .font(.kTitle2)
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -266,14 +266,14 @@ struct NoteEditor: View {
                 .padding(.horizontal, 15)
                 .overlay(alignment: .topLeading) {
                     if content.isEmpty {
-                        Text("Escribe aquí. Admite markdown: # títulos, - listas, **negritas**")
+                        Text("Write here. Markdown works: # headings, - lists, **bold**")
                             .font(.kBody).foregroundStyle(KairoColor.faint).padding(.horizontal, 20).padding(.top, 8).allowsHitTesting(false)
                     }
                 }
             if model.hasFamily, note == nil || note?.ownerId == model.user?.id || note?.ownerId == nil {
                 Toggle(isOn: $shared) {
-                    Label("Compartir con la familia", systemImage: "house")
-                    Text(shared ? "La verán y podrán editarla en \(model.family?.household.name ?? "tu familia")." : "Solo tú la ves.")
+                    Label("Share with family", systemImage: "house")
+                    Text(shared ? "They'll be able to see and edit it in \(model.family?.household.name ?? String(localized: "your family"))." : "Only you can see it.")
                 }
                 .tint(KairoColor.accent)
                 .padding(16)
@@ -284,14 +284,14 @@ struct NoteEditor: View {
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
         .kairoBackground()
-        .navigationTitle(note == nil ? "Nueva nota" : "Editar")
+        .navigationTitle(note == nil ? "New note" : "Edit")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancelar") { if let onCancel { onCancel() } else { dismiss() } }
+                Button("Cancel") { if let onCancel { onCancel() } else { dismiss() } }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Guardar") { Task { await save() } }
+                Button("Save") { Task { await save() } }
                     .disabled(busy || (title.trimmingCharacters(in: .whitespaces).isEmpty && content.trimmingCharacters(in: .whitespaces).isEmpty))
             }
         }
@@ -311,17 +311,17 @@ struct NoteEditor: View {
                 saved = try await model.api.updateNote(note.id, patch)
             } else {
                 saved = try await model.api.createNote(title: title, content: content, shared: shared)
-                model.show(Toast(title: shared ? "Nota compartida con la familia" : "Nota guardada", symbol: "note.text", destination: .notes))
+                model.show(Toast(title: shared ? String(localized: "Note shared with the family") : String(localized: "Note saved"), symbol: "note.text", destination: .notes))
                 dismiss()
             }
             onSaved(saved)
         } catch {
-            model.show(Toast(title: "No se pudo guardar la nota", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't save the note"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 }
 
-/// Adjunto de una nota o del chat (las URLs vienen firmadas desde el servidor).
+/// Attachment of a note or of the chat (the URLs come signed from the server).
 struct AttachmentView: View {
     @Environment(AppModel.self) private var model
     var file: FileRef
@@ -336,20 +336,20 @@ struct AttachmentView: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let img): img.resizable().scaledToFit()
-                case .failure: Label("No se pudo cargar la imagen", systemImage: "photo").foregroundStyle(KairoColor.muted)
+                case .failure: Label("Couldn't load the image", systemImage: "photo").foregroundStyle(KairoColor.muted)
                 default: RoundedRectangle(cornerRadius: 12).fill(KairoColor.surface2).frame(height: 180)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .frame(maxWidth: 480)
         } else if let url {
-            Link(destination: url) { Label("Adjunto", systemImage: "paperclip") }.font(.kCallout)
+            Link(destination: url) { Label("Attachment", systemImage: "paperclip") }.font(.kCallout)
         }
     }
 }
 
 extension String {
-    /// Texto de una nota sin marcas de markdown, en una línea, para las vistas previas.
+    /// Text of a note without markdown marks, on one line, for previews.
     var plainPreview: String {
         components(separatedBy: "\n").map { line -> String in
             var l = line.trimmingCharacters(in: .whitespaces)

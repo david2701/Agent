@@ -2,7 +2,7 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Ajustes: voz, "Oye Kairo", resumen de la mañana, avisos, reloj, dispositivos y cuenta.
+/// Settings: voice, "Hey Kairo", morning briefing, notifications, watch, devices and account.
 struct SettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
@@ -31,24 +31,24 @@ struct SettingsScreen: View {
             watchSection
             devicesSection
             Section {
-                Button("Cerrar sesión", role: .destructive) { Task { await model.signOut() } }
+                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
             } footer: {
-                Text("Kairo \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · \(model.serverURL)")
+                Text(verbatim: "Kairo \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · \(model.serverURL)")
                     .font(.kMonoSmall)
             }
         }
         .scrollContentBackground(.hidden)
         .kairoBackground()
-        .navigationTitle("Ajustes")
+        .navigationTitle("Settings")
         .task { await load() }
         .onAppear { wakeEnabled = model.wake.isEnabled }
         .sheet(isPresented: $changingPassword) { PasswordSheet() }
-        .alert("Tu nombre", isPresented: $editingName) {
-            TextField("Nombre", text: $name)
-            Button("Cancelar", role: .cancel) {}
-            Button("Guardar") {
+        .alert("Your name", isPresented: $editingName) {
+            TextField("Name", text: $name)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
                 Task {
-                    await attempt(model, "Nombre guardado") { model.user = try await model.api.updateProfile(displayName: name) }
+                    await attempt(model, "Name saved") { model.user = try await model.api.updateProfile(displayName: name) }
                 }
             }
         }
@@ -78,12 +78,12 @@ struct SettingsScreen: View {
                 model.settings = r.settings
                 model.wake.phrase = r.settings.wakeWord
             } catch {
-                model.show(Toast(title: "No se pudo guardar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+                model.show(Toast(title: String(localized: "Couldn't save"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
             }
         }
     }
 
-    // MARK: Secciones
+    // MARK: Sections
 
     private var account: some View {
         Section {
@@ -101,8 +101,8 @@ struct SettingsScreen: View {
                 }
                 .buttonStyle(.plain)
             }
-            Button { changingPassword = true } label: { Label("Cambiar contraseña", systemImage: "key") }
-        } header: { Text("Cuenta") }
+            Button { changingPassword = true } label: { Label("Change password", systemImage: "key") }
+        } header: { Text("Account") }
     }
 
     private var voiceSection: some View {
@@ -113,10 +113,10 @@ struct SettingsScreen: View {
                 } else {
                     ForEach(voices) { v in Text(v.name).tag(v.id) }
                 }
-            } label: { Label("Voz de Kairo", systemImage: "waveform") }
+            } label: { Label("Kairo's voice", systemImage: "waveform") }
             VStack(alignment: .leading) {
                 HStack {
-                    Label("Velocidad", systemImage: "speedometer")
+                    Label("Speed", systemImage: "speedometer")
                     Spacer()
                     Text(String(format: "%.1f×", settings.voiceSpeed)).font(.kMono).foregroundStyle(KairoColor.muted)
                 }
@@ -125,13 +125,13 @@ struct SettingsScreen: View {
                 }
                 .tint(KairoColor.accent)
             }
-            Button { Task { await model.voice.say("Hola, soy Kairo. Así sueno.") } } label: { Label("Probar", systemImage: "play.circle") }
+            Button { Task { await model.voice.say(String(localized: "Hi, I'm Kairo. This is how I sound.")) } } label: { Label("Try it", systemImage: "play.circle") }
             Toggle(isOn: Binding(get: { settings.fastMode }, set: { settings.fastMode = $0; save(["fastMode": .bool($0)]) })) {
-                Label("Respuestas rápidas", systemImage: "hare")
-                Text("Desactiva el razonamiento extendido del modelo para responder antes.")
+                Label("Fast replies", systemImage: "hare")
+                Text("Turns off the model's extended reasoning to answer sooner.")
             }
-        } header: { Text("Voz") } footer: {
-            Text("Modelo: \(settings.chatModel) (respaldo \(settings.fallbackModel))")
+        } header: { Text("Voice") } footer: {
+            Text("Model: \(settings.chatModel) (fallback \(settings.fallbackModel))")
         }
         .tint(KairoColor.accent)
     }
@@ -142,28 +142,28 @@ struct SettingsScreen: View {
                 wakeEnabled = on
                 model.wake.isEnabled = on
             })) {
-                Label("Oye Kairo", systemImage: "ear")
-                Text(model.wake.lastError ?? "Escucha \"\(settings.wakeWord)\" dentro del iPhone, sin enviar audio hasta que lo dices. Funciona con Kairo abierto o mientras habla.")
+                Label("Hey Kairo", systemImage: "ear")
+                Text(verbatim: model.wake.lastError ?? String(localized: "Listens for \"\(KairoLanguage.wakePhraseDisplay)\" on the iPhone, without sending audio until you say it. Works with Kairo open or while it is speaking."))
             }
             Toggle(isOn: Binding(get: { followUp }, set: { followUp = $0; model.voice.followUp = $0 })) {
-                Label("Seguir la conversación", systemImage: "arrow.uturn.left.circle")
-                Text("Si Kairo te pregunta algo, escucha la respuesta sin repetir \"Oye Kairo\".")
+                Label("Keep the conversation going", systemImage: "arrow.uturn.left.circle")
+                Text("If Kairo asks you something, it listens for the answer without you repeating \"\(KairoLanguage.wakePhraseDisplay)\".")
             }
             NavigationLink {
                 AssistantHelp()
-            } label: { Label("Siri, botón de Acción y Centro de control", systemImage: "sparkles") }
-        } header: { Text("Escucha") }
+            } label: { Label("Siri, Action button and Control Center", systemImage: "sparkles") }
+        } header: { Text("Listening") }
         .tint(KairoColor.accent)
     }
 
     private var briefing: some View {
         Section {
             Toggle(isOn: Binding(get: { settings.briefingEnabled }, set: { settings.briefingEnabled = $0; save(["briefingEnabled": .bool($0)]) })) {
-                Label("Resumen de la mañana", systemImage: "sun.horizon")
-                Text("A las \(settings.briefingTime), Kairo te resume el día: agenda, pendientes y clima.")
+                Label("Morning briefing", systemImage: "sun.horizon")
+                Text("At \(KairoDate.time(briefingTime)), Kairo summarizes your day: schedule, to-dos and weather.")
             }
             if settings.briefingEnabled {
-                DatePicker("Hora", selection: $briefingTime, displayedComponents: .hourAndMinute)
+                DatePicker("Time", selection: $briefingTime, displayedComponents: .hourAndMinute)
                     .onChange(of: briefingTime) { _, t in
                         let c = Calendar.current.dateComponents([.hour, .minute], from: t)
                         let s = String(format: "%02d:%02d", c.hour ?? 7, c.minute ?? 0)
@@ -171,29 +171,29 @@ struct SettingsScreen: View {
                     }
             }
             HStack {
-                Label("Ciudad para el clima", systemImage: "cloud.sun")
-                TextField("Tu ciudad", text: $city)
+                Label("City for the weather", systemImage: "cloud.sun")
+                TextField("Your city", text: $city)
                     .multilineTextAlignment(.trailing)
                     .submitLabel(.done)
                     .onSubmit { save(["homeCity": .string(city)]) }
             }
-        } header: { Text("Tu día") }
+        } header: { Text("Your day") }
         .tint(KairoColor.accent)
     }
 
     private var notifications: some View {
         Section {
-            Button { Task { await testPush() } } label: { Label("Enviar prueba", systemImage: "bell.badge") }
-            Button { Task { await NotificationService.requestAuthorization() } } label: { Label("Permitir notificaciones", systemImage: "bell") }
+            Button { Task { await testPush() } } label: { Label("Send test", systemImage: "bell.badge") }
+            Button { Task { await NotificationService.requestAuthorization() } } label: { Label("Allow notifications", systemImage: "bell") }
             Button {
                 LocationService.shared.requestAlways()
-            } label: { Label("Ubicación para recordatorios por lugar", systemImage: "location") }
-            Button { if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) } } label: { Label("Abrir ajustes del iPhone", systemImage: "gear") }
-        } header: { Text("Avisos") } footer: {
+            } label: { Label("Location for place reminders", systemImage: "location") }
+            Button { if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) } } label: { Label("Open iPhone settings", systemImage: "gear") }
+        } header: { Text("Notifications") } footer: {
             if let a = apns, a.available {
-                Text("Push de Apple activo en tu servidor (\(a.registeredDevices) dispositivos). Los avisos llegan aunque Kairo esté cerrado.")
+                Text("Apple push is active on your server (\(a.registeredDevices) devices). Notices arrive even when Kairo is closed.")
             } else {
-                Text("Los recordatorios y eventos se programan en el iPhone y suenan aunque no haya internet. Los avisos de la familia llegan con Kairo abierto o al sincronizar; con el push de Apple configurado en el servidor (docs/IOS.md) llegan al instante.")
+                Text("Reminders and events are scheduled on the iPhone and ring even without internet. Family notices arrive with Kairo open or when syncing; with Apple push set up on the server (docs/IOS.md) they arrive instantly.")
             }
         }
     }
@@ -204,8 +204,8 @@ struct SettingsScreen: View {
                 LabeledContent {
                     Text(model.family?.household.name ?? "").foregroundStyle(KairoColor.muted)
                 } label: {
-                    Label("Familia", systemImage: "house")
-                    Text(model.hasFamily ? "Miembros, invitaciones y avisos de tu hogar." : "Solo estás tú. Invita a tu familia para compartir listas, eventos y tareas.")
+                    Label("Family", systemImage: "house")
+                    Text(model.hasFamily ? "Members, invitations and notices of your household." : "It's just you. Invite your family to share lists, events and tasks.")
                 }
             }
             .buttonStyle(.plain)
@@ -217,19 +217,19 @@ struct SettingsScreen: View {
             if let pairCode {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(pairCode).font(.kairoMono(30, .medium)).kerning(4).selectableText()
-                    Text("Abre Kairo en tu reloj y escribe este código. Vence en 5 minutos.").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                    Text("Open Kairo on your watch and enter this code. It expires in 5 minutes.").font(.kFootnote).foregroundStyle(KairoColor.muted)
                 }
                 .padding(.vertical, 4)
             }
             Button {
                 Task {
                     do { pairCode = try await model.api.pairCode() } catch {
-                        model.show(Toast(title: "No se pudo generar el código", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+                        model.show(Toast(title: String(localized: "Couldn't generate the code"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
                     }
                 }
-            } label: { Label(pairCode == nil ? "Vincular reloj" : "Nuevo código", systemImage: "applewatch") }
+            } label: { Label(pairCode == nil ? "Pair watch" : "New code", systemImage: "applewatch") }
         } header: { Text("Apple Watch") } footer: {
-            Text("Con el iPhone cerca, el reloj se vincula solo al abrir Kairo. El código sirve para relojes con datos móviles o Wear OS.")
+            Text("With the iPhone nearby, the watch pairs itself when you open Kairo. The code is for watches with cellular or Wear OS.")
         }
     }
 
@@ -241,7 +241,7 @@ struct SettingsScreen: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(d.name).font(.kBody)
                         if let seen = KairoDate.parse(d.lastSeenAt) {
-                            Text(d.current == true ? "Este dispositivo" : "Activo \(KairoDate.relative(seen))").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                            Text(d.current == true ? "This device" : "Active \(KairoDate.relative(seen))").font(.kFootnote).foregroundStyle(KairoColor.muted)
                         }
                     }
                 }
@@ -249,14 +249,14 @@ struct SettingsScreen: View {
                     if d.current != true {
                         Button(role: .destructive) {
                             Task {
-                                await attempt(model, "Sesión cerrada en \(d.name)") { try await model.api.revokeDevice(d.id) }
+                                await attempt(model, "Signed out of \(d.name)") { try await model.api.revokeDevice(d.id) }
                                 devices = (try? await model.api.devices()) ?? devices
                             }
-                        } label: { Label("Cerrar sesión", systemImage: "xmark.circle") }
+                        } label: { Label("Sign out", systemImage: "xmark.circle") }
                     }
                 }
             }
-        } header: { Text("Dispositivos con sesión") }
+        } header: { Text("Signed-in devices") }
     }
 
     private func deviceSymbol(_ p: String) -> String {
@@ -272,31 +272,31 @@ struct SettingsScreen: View {
     private func testPush() async {
         do {
             let n = try await model.api.testPush()
-            model.show(Toast(title: n == 1 ? "Prueba enviada: la aceptó 1 dispositivo" : "Prueba enviada: la aceptaron \(n) dispositivos", symbol: "bell.badge"))
+            model.show(Toast(title: n == 1 ? String(localized: "Test sent: 1 device accepted it") : String(localized: "Test sent: \(n) devices accepted it"), symbol: "bell.badge"))
         } catch {
-            model.show(Toast(title: "No se pudo enviar la prueba", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't send the test"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 }
 
-/// Cómo usar Kairo con Siri, el botón de Acción, el Centro de control y la pantalla bloqueada.
+/// How to use Kairo with Siri, the Action button, Control Center and the lock screen.
 private struct AssistantHelp: View {
     var body: some View {
         List {
             Section {
-                row("mic.circle", "Siri", "Di \"Oye Siri, habla con Kairo\" o \"Oye Siri, abre Kairo en Tareas\".")
-                row("button.horizontal.top.press", "Botón de Acción", "Ajustes del iPhone > Botón de Acción > Atajo > Hablar con Kairo.")
-                row("switch.2", "Centro de control", "Agrega el control \"Hablar con Kairo\" desde el Centro de control o la pantalla bloqueada.")
-                row("rectangle.3.group", "Widgets", "Hoy, Siguiente evento, una lista para marcar y el botón para hablar, también en la pantalla bloqueada.")
-                row("platter.2.filled.iphone", "Isla Dinámica", "Mientras Kairo te escucha, graba una reunión o corre un temporizador.")
+                row("mic.circle", "Siri", "Say \"Hey Siri, talk to Kairo\" or \"Hey Siri, open Kairo on Tasks\".")
+                row("button.horizontal.top.press", "Action button", "iPhone Settings > Action Button > Shortcut > Talk to Kairo.")
+                row("switch.2", "Control Center", "Add the \"Talk to Kairo\" control from Control Center or the lock screen.")
+                row("rectangle.3.group", "Widgets", "Today, Next event, a list to check off and the talk button, also on the lock screen.")
+                row("platter.2.filled.iphone", "Dynamic Island", "While Kairo listens, records a meeting or runs a timer.")
             }
         }
         .scrollContentBackground(.hidden)
         .kairoBackground()
-        .navigationTitle("Asistente")
+        .navigationTitle("Assistant")
     }
 
-    private func row(_ symbol: String, _ title: String, _ detail: String) -> some View {
+    private func row(_ symbol: String, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(KairoColor.accent).frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
@@ -319,27 +319,27 @@ private struct PasswordSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                SecureField("Contraseña actual", text: $current).textContentType(.password)
-                SecureField("Nueva (mínimo 10 caracteres)", text: $new).textContentType(.newPassword)
-                SecureField("Confirmar", text: $confirm).textContentType(.newPassword)
+                SecureField("Current password", text: $current).textContentType(.password)
+                SecureField("New (at least 10 characters)", text: $new).textContentType(.newPassword)
+                SecureField("Confirm", text: $confirm).textContentType(.newPassword)
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle("Cambiar contraseña")
+            .navigationTitle("Change password")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
+                    Button("Save") {
                         Task {
                             busy = true
                             defer { busy = false }
                             do {
                                 try await model.api.changePassword(current: current, new: new)
-                                model.show(Toast(title: "Contraseña cambiada", symbol: "key"))
+                                model.show(Toast(title: String(localized: "Password changed"), symbol: "key"))
                                 dismiss()
                             } catch {
-                                model.show(Toast(title: "No se pudo cambiar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+                                model.show(Toast(title: String(localized: "Couldn't change it"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
                             }
                         }
                     }

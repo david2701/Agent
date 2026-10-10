@@ -2,7 +2,7 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Inicio de sesión con tu servidor, o unirse a la familia con un código.
+/// Sign in to your server, or join the family with a code.
 struct LoginScreen: View {
     @Environment(AppModel.self) private var model
     @State private var server = ""
@@ -21,23 +21,23 @@ struct LoginScreen: View {
                 VStack(spacing: 14) {
                     KairoOrb(state: busy ? .thinking : .idle).frame(width: 84)
                     Text("Kairo").font(.kLargeTitle)
-                    Text("Tu asistente, en tu propio servidor.").font(.kCallout).foregroundStyle(KairoColor.muted)
+                    Text("Your assistant, on your own server.").font(.kCallout).foregroundStyle(KairoColor.muted)
                 }
                 .padding(.top, 40)
 
                 VStack(spacing: 14) {
-                    LabeledField("Servidor") {
-                        TextField("https://kairo.tudominio.com", text: $server)
+                    LabeledField("Server") {
+                        TextField("https://kairo.example.com", text: $server)
                             .textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                             .focused($focus, equals: .server).submitLabel(.next).onSubmit { focus = .email }
                     }
-                    LabeledField("Correo") {
-                        TextField("tu@correo.com", text: $email)
+                    LabeledField("Email") {
+                        TextField("you@example.com", text: $email)
                             .textContentType(.username).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                             .focused($focus, equals: .email).submitLabel(.next).onSubmit { focus = .password }
                     }
-                    LabeledField("Contraseña") {
-                        SecureField("Tu contraseña", text: $password)
+                    LabeledField("Password") {
+                        SecureField("Your password", text: $password)
                             .textContentType(.password)
                             .focused($focus, equals: .password).submitLabel(.go).onSubmit { Task { await login() } }
                     }
@@ -50,13 +50,13 @@ struct LoginScreen: View {
                     Button {
                         Task { await login() }
                     } label: {
-                        HStack { if busy { ProgressView().tint(KairoColor.onAccent) }; Text("Entrar") }
+                        HStack { if busy { ProgressView().tint(KairoColor.onAccent) }; Text("Sign in") }
                     }
                     .buttonStyle(KairoButtonStyle(kind: .primary, fullWidth: true))
                     .disabled(busy || email.isEmpty || password.isEmpty)
                 }
 
-                Button("Tengo un código de invitación") { showJoin = true }
+                Button("I have an invite code") { showJoin = true }
                     .font(.kairo(15, .medium))
                     .foregroundStyle(KairoColor.accentStrong)
             }
@@ -90,7 +90,7 @@ struct LoginScreen: View {
     }
 }
 
-/// Unirse a la familia (invitación) o definir una contraseña nueva (código de acceso).
+/// Join the family (invitation) or set a new password (access code).
 struct JoinScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -115,31 +115,31 @@ struct JoinScreen: View {
                 if let p = preview {
                     Section {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(p.kind == "reset" ? "Nueva contraseña" : "Te invitaron a \(p.householdName)").font(.kTitle3)
-                            Text(p.kind == "reset" ? "Define una contraseña nueva para \(p.email ?? "tu cuenta"). Se cerrarán tus otras sesiones."
-                                 : "Crea tu cuenta. Verás lo que la familia comparte y tendrás tu propio espacio personal.")
+                            Text(p.kind == "reset" ? "New password" : "You're invited to \(p.householdName)").font(.kTitle3)
+                            Text(p.kind == "reset" ? "Set a new password for \(p.email ?? String(localized: "your account")). Your other sessions will be signed out."
+                                 : "Create your account. You'll see what the family shares and have your own personal space.")
                                 .font(.kSubheadline).foregroundStyle(KairoColor.muted)
                         }
                         .padding(.vertical, 4)
                     }
                     if p.kind != "reset" {
-                        Section("Tus datos") {
-                            TextField("Nombre", text: $name).textContentType(.name)
-                            TextField("Correo", text: $email).textContentType(.username).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Section("Your details") {
+                            TextField("Name", text: $name).textContentType(.name)
+                            TextField("Email", text: $email).textContentType(.username).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                         }
                     }
                     Section {
-                        SecureField("Contraseña (mínimo 10 caracteres)", text: $password).textContentType(.newPassword)
-                        SecureField("Confirmar contraseña", text: $confirm).textContentType(.newPassword)
+                        SecureField("Password (at least 10 characters)", text: $password).textContentType(.newPassword)
+                        SecureField("Confirm password", text: $confirm).textContentType(.newPassword)
                     }
                 } else {
                     Section {
-                        TextField("Servidor", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        TextField("Código XXXX-XXXX", text: $code)
+                        TextField("Server", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Code XXXX-XXXX", text: $code)
                             .font(.kairoMono(18, .medium))
                             .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     } footer: {
-                        Text("Quien administra tu familia lo genera en Kairo, en Familia > Invitar a alguien.")
+                        Text("Whoever manages your family creates it in Kairo, under Family > Invite someone.")
                     }
                 }
                 if let error {
@@ -148,12 +148,12 @@ struct JoinScreen: View {
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle(preview == nil ? "Unirse con un código" : "")
+            .navigationTitle(preview == nil ? "Join with a code" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(preview == nil ? "Continuar" : (preview?.kind == "reset" ? "Guardar" : "Unirme")) {
+                    Button(preview == nil ? "Continue" : (preview?.kind == "reset" ? "Save" : "Join")) {
                         Task { preview == nil ? await check() : await join() }
                     }
                     .disabled(busy || (preview == nil ? code.filter(\.isLetter).isEmpty : password.count < 10 || password != confirm))
@@ -167,12 +167,17 @@ struct JoinScreen: View {
         busy = true
         error = nil
         defer { busy = false }
+        // Accept a pasted invite link (canonical /join?code= or legacy /unirse?codigo=) as well as a bare code
+        if let invite = InviteLink.parse(code) {
+            code = invite.code
+            if let s = invite.server { server = s }
+        }
         do {
             let p = try await model.api.invitePreview(server: server, code: code)
             withAnimation(KairoMotion.base) { preview = p }
             if name.isEmpty { name = p.name ?? "" }
         } catch {
-            self.error = (error as? APIError)?.status == 404 ? "El código no es válido o ya venció" : error.localizedDescription
+            self.error = (error as? APIError)?.status == 404 ? String(localized: "That code isn't valid or has expired") : error.localizedDescription
         }
     }
 
@@ -192,12 +197,12 @@ struct JoinScreen: View {
     }
 }
 
-/// Campo con etiqueta, al estilo de Kairo.
+/// Labeled field, in Kairo's style.
 struct LabeledField<Content: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     @ViewBuilder var content: Content
 
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.label = label
         self.content = content()
     }

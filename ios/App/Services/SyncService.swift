@@ -5,7 +5,7 @@ import UIKit
 import UserNotifications
 import KairoCore
 
-/// Sincronización del teléfono: notificaciones locales, geovallas y avisos de la familia que no llegaron por push.
+/// Phone sync: local notifications, geofences and family notices that did not arrive by push.
 @MainActor
 final class SyncService {
     static let shared = SyncService()
@@ -21,7 +21,7 @@ final class SyncService {
         model.showMissed(s.notices)
     }
 
-    /// iOS decide cuándo; pedimos cada 15 minutos como mínimo.
+    /// iOS decides when; we ask for every 15 minutes at the earliest.
     nonisolated static func scheduleBackgroundRefresh() {
         Task {
             let req = BGAppRefreshTaskRequest(identifier: AppConfig.syncTaskId)
@@ -31,7 +31,7 @@ final class SyncService {
     }
 }
 
-/// Recordatorios por lugar ("cuando llegue a casa") con CLMonitor. iOS admite 20 condiciones por app.
+/// Place reminders ("when I get home") with CLMonitor. iOS allows 20 conditions per app.
 @MainActor
 final class GeofenceService {
     static let shared = GeofenceService()
@@ -41,6 +41,7 @@ final class GeofenceService {
 
     private func ensureMonitor() async -> CLMonitor {
         if let monitor { return monitor }
+        // The monitor name is kept as is so existing installs keep their registered conditions.
         let m = await CLMonitor("KairoLugares")
         monitor = m
         listening = Task { [weak self] in
@@ -53,7 +54,7 @@ final class GeofenceService {
         return m
     }
 
-    /// Se llama al iniciar la app (también cuando iOS la despierta por una geovalla).
+    /// Called when the app starts (also when iOS wakes it for a geofence).
     func start() {
         Task { _ = await ensureMonitor() }
     }
@@ -84,15 +85,15 @@ final class GeofenceService {
     private func fired(_ identifier: String, satisfied: Bool) {
         guard let parsed = Self.parse(identifier), parsed.1 == satisfied else { return }
         let (reminderId, arrive) = parsed
-        let text = texts[identifier] ?? "Recordatorio"
+        let text = texts[identifier] ?? String(localized: "Reminder")
         NotificationService.showNow(
             id: "geo:\(reminderId):\(Int(Date().timeIntervalSince1970 / 600))", title: text,
-            body: arrive ? "Llegaste" : "Saliste", entityId: reminderId,
+            body: arrive ? String(localized: "You arrived") : String(localized: "You left"), entityId: reminderId,
             category: NotificationService.categoryReminder, destination: "reminders"
         )
     }
 
-    /// CoreLocation sólo admite letras y números en los nombres: "R" + id sin guiones + "A" (llegar) o "L" (salir).
+    /// CoreLocation only allows letters and numbers in names: "R" + id without dashes + "A" (arrive) or "L" (leave).
     static func conditionId(reminder: String, arrive: Bool) -> String {
         "R" + reminder.filter { $0.isLetter || $0.isNumber } + (arrive ? "A" : "L")
     }
@@ -105,7 +106,7 @@ final class GeofenceService {
     }
 }
 
-/// Ubicación aproximada para "guarda este lugar", el clima local y los recordatorios por lugar.
+/// Approximate location for "save this place", the local weather and place reminders.
 @MainActor
 final class LocationService: NSObject, CLLocationManagerDelegate {
     static let shared = LocationService()
@@ -128,7 +129,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         else if manager.authorizationStatus == .authorizedWhenInUse { manager.requestAlwaysAuthorization() }
     }
 
-    /// Última ubicación conocida (sin encender el GPS).
+    /// Last known location (without turning the GPS on).
     nonisolated func lastLocation() async -> (Double, Double)? {
         await MainActor.run {
             guard authorized, let l = manager.location, l.timestamp.timeIntervalSinceNow > -1800 else { return nil }
@@ -136,7 +137,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// Ubicación actual, pidiendo una lectura nueva.
+    /// Current location, asking for a fresh reading.
     func current() async -> CLLocation? {
         if !authorized { requestWhenInUse() }
         do {
@@ -150,14 +151,14 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {}
 }
 
-/// Push de Apple (APNs): sólo si el servidor lo tiene configurado. Sin él, Kairo usa las otras vías.
+/// Apple push (APNs): only if the server has it configured. Without it, Kairo uses the other channels.
 enum PushRegistration {
     static func register() {
         UIApplication.shared.registerForRemoteNotifications()
     }
 }
 
-/// Sesión propia para los widgets interactivos, los controles y la extensión de compartir.
+/// Own session for the interactive widgets, the controls and the share extension.
 enum ExtensionSessionService {
     static func ensure(api: KairoAPI) async {
         guard await !ExtensionAPI.isReady(), let server = await api.serverURL() else { return }

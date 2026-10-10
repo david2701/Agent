@@ -3,8 +3,8 @@ import Foundation
 import KairoCore
 import WidgetKit
 
-/// Lo que la app debe hacer al abrirse desde un widget, un control, Siri o el botón de Acción.
-/// Se deja en el contenedor compartido porque el intent puede correr en el proceso de los widgets.
+/// What the app must do when it is opened from a widget, a control, Siri or the Action button.
+/// It is left in the shared container because the intent may run in the widgets' process.
 nonisolated enum PendingAction {
     private static let key = "kairo.pendingAction"
 
@@ -13,7 +13,7 @@ nonisolated enum PendingAction {
         AppConfig.sharedDefaults.set(Date().timeIntervalSince1970, forKey: key + ".at")
     }
 
-    /// La acción pendiente si es reciente (menos de un minuto), y la borra.
+    /// The pending action if it is recent (less than a minute old), and deletes it.
     static func take() -> String? {
         let d = AppConfig.sharedDefaults
         guard let a = d.string(forKey: key), Date().timeIntervalSince1970 - d.double(forKey: key + ".at") < 60 else { return nil }
@@ -22,16 +22,16 @@ nonisolated enum PendingAction {
     }
 }
 
-/// Avisa a la app (si el intent corre en su proceso) de una acción recién pedida.
+/// Tells the app (if the intent runs in its process) about a just-requested action.
 nonisolated extension Notification.Name {
     static let kairoPendingAction = Notification.Name("kairo.pendingAction")
 }
 
-// MARK: - Hablar
+// MARK: - Talk
 
 struct TalkToKairoIntent: AppIntent {
-    static let title: LocalizedStringResource = "Hablar con Kairo"
-    static let description = IntentDescription("Abre Kairo y empieza a escucharte.")
+    static let title: LocalizedStringResource = "Talk to Kairo"
+    static let description = IntentDescription("Opens Kairo and starts listening.")
     static let openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
@@ -41,23 +41,23 @@ struct TalkToKairoIntent: AppIntent {
     }
 }
 
-// MARK: - Abrir una sección
+// MARK: - Open a section
 
 nonisolated enum KairoSection: String, AppEnum {
     case today, chat, tasks, calendar, notes, lists, reminders, family
 
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Sección de Kairo"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Kairo section"
     static let caseDisplayRepresentations: [KairoSection: DisplayRepresentation] = [
-        .today: "Hoy", .chat: "Conversación", .tasks: "Tareas", .calendar: "Calendario",
-        .notes: "Notas", .lists: "Listas", .reminders: "Recordatorios", .family: "Familia",
+        .today: "Today", .chat: "Chat", .tasks: "Tasks", .calendar: "Calendar",
+        .notes: "Notes", .lists: "Lists", .reminders: "Reminders", .family: "Family",
     ]
 }
 
 struct OpenKairoIntent: AppIntent {
-    static let title: LocalizedStringResource = "Abrir en Kairo"
+    static let title: LocalizedStringResource = "Open in Kairo"
     static let openAppWhenRun = true
 
-    @Parameter(title: "Sección", default: .today)
+    @Parameter(title: "Section", default: .today)
     var section: KairoSection
 
     init() {}
@@ -70,15 +70,15 @@ struct OpenKairoIntent: AppIntent {
     }
 }
 
-// MARK: - Widgets interactivos
+// MARK: - Interactive widgets
 
 struct ToggleListItemIntent: AppIntent {
-    static let title: LocalizedStringResource = "Marcar en la lista"
+    static let title: LocalizedStringResource = "Check off in list"
     static let isDiscoverable = false
 
-    @Parameter(title: "Lista") var listId: String
-    @Parameter(title: "Elemento") var itemId: String
-    @Parameter(title: "Marcado") var checked: Bool
+    @Parameter(title: "List") var listId: String
+    @Parameter(title: "Item") var itemId: String
+    @Parameter(title: "Checked") var checked: Bool
 
     init() {}
     init(listId: String, itemId: String, checked: Bool) {
@@ -88,7 +88,7 @@ struct ToggleListItemIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        // Respuesta inmediata en el widget; luego se confirma con el servidor
+        // Immediate response in the widget; then it is confirmed with the server
         WidgetData.update { snap in
             guard let li = snap.lists.firstIndex(where: { $0.id == listId }),
                   let ii = snap.lists[li].items.firstIndex(where: { $0.id == itemId }) else { return }
@@ -103,10 +103,10 @@ struct ToggleListItemIntent: AppIntent {
 }
 
 struct CompleteTaskIntent: AppIntent {
-    static let title: LocalizedStringResource = "Completar tarea"
+    static let title: LocalizedStringResource = "Complete task"
     static let isDiscoverable = false
 
-    @Parameter(title: "Tarea") var taskId: String
+    @Parameter(title: "Task") var taskId: String
 
     init() {}
     init(taskId: String) { self.taskId = taskId }
@@ -123,10 +123,10 @@ struct CompleteTaskIntent: AppIntent {
     }
 }
 
-// MARK: - Configuración del widget de lista
+// MARK: - List widget configuration
 
 nonisolated struct KairoListEntity: AppEntity {
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Lista"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "List"
     static let defaultQuery = KairoListQuery()
 
     var id: String
@@ -134,7 +134,7 @@ nonisolated struct KairoListEntity: AppEntity {
     var shared: Bool
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(name)", subtitle: shared ? "Familiar" : nil)
+        DisplayRepresentation(title: "\(name)", subtitle: shared ? "Family" : nil)
     }
 }
 
@@ -151,16 +151,16 @@ nonisolated struct KairoListQuery: EntityQuery {
 }
 
 struct SelectListIntent: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "Lista"
-    static let description = IntentDescription("Elige qué lista mostrar.")
+    static let title: LocalizedStringResource = "List"
+    static let description = IntentDescription("Choose which list to show.")
 
-    @Parameter(title: "Lista")
+    @Parameter(title: "List")
     var list: KairoListEntity?
 
     init() {}
 }
 
-// MARK: - Datos para widgets
+// MARK: - Widget data
 
 nonisolated enum WidgetKinds {
     static let today = "KairoToday"
@@ -170,7 +170,7 @@ nonisolated enum WidgetKinds {
 }
 
 nonisolated enum WidgetData {
-    /// Modifica el resumen compartido (cambios optimistas desde un widget).
+    /// Modifies the shared summary (optimistic changes from a widget).
     static func update(_ change: (inout SharedSnapshot) -> Void) {
         let store = AppConfig.snapshots
         guard var s = store.load() else { return }

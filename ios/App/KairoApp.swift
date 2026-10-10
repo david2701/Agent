@@ -38,7 +38,7 @@ struct KairoApp: App {
     }
 }
 
-/// Notificaciones (locales y push de Apple), acciones "Hecho" y "Posponer", y registro de APNs.
+/// Notifications (local and Apple push), "Done" and "Snooze" actions, and APNs registration.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {}
 
-    /// Push silencioso o con contenido: trae el mismo `{type, data}` que el WebSocket.
+    /// Silent or content push: it carries the same `{type, data}` as the WebSocket.
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         guard let ev = Self.serverEvent(userInfo) else { return .noData }
         AppModel.shared.handle(RealtimeEvent(ev), fromPush: true)
@@ -68,8 +68,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return try? JSONDecoder().decode(ServerEvent.self, from: data)
     }
 
-    // UserNotifications llama a su delegado desde una cola propia: los métodos no se aíslan al hilo principal.
-    // En primer plano también se muestran (salvo los que la app ya mostró por WebSocket)
+    // UserNotifications calls its delegate from its own queue: the methods are not isolated to the main thread.
+    // They are also shown in the foreground (except those the app already showed through the WebSocket)
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
     }

@@ -2,14 +2,14 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Lo que carga "Hoy": el día y los avisos de la familia sin leer.
+/// What "Today" loads: the day and the unread family notices.
 struct TodayBundle: Equatable {
     var today: TodayData
     var notices: [Notice]
 }
 
-/// Hoy: saludo, voz, lo que sonó, la familia, la agenda y los pendientes.
-/// En iPad y en la pantalla interior del iPhone Duo se divide en dos columnas.
+/// Today: greeting, voice, what rang, the family, the schedule and the to-dos.
+/// On iPad and on the inner screen of the iPhone Duo it splits into two columns.
 struct TodayScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -48,7 +48,7 @@ struct TodayScreen: View {
                                 .buttonStyle(.plain)
                                 .glassEffect(.regular.interactive(), in: .circle)
                                 .padding(.top, 14)
-                                .accessibilityLabel("Escuchar resumen del día")
+                                .accessibilityLabel("Listen to today's briefing")
                             }
                             VoiceCard(orbSize: 132)
                             dayContent(b, includeFamily: true)
@@ -61,11 +61,11 @@ struct TodayScreen: View {
             }
             .refreshable { await reload() }
         }
-        .navigationTitle("Hoy")
+        .navigationTitle("Today")
         .toolbar(hSize == .regular ? .visible : .hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { model.perform("briefing") } label: { Label("Escuchar resumen", systemImage: "play.circle") }
+                Button { model.perform("briefing") } label: { Label("Listen to briefing", systemImage: "play.circle") }
             }
         }
         .kairoBackground()
@@ -81,19 +81,19 @@ struct TodayScreen: View {
         if let b = try? await load() { withAnimation(KairoMotion.base) { state = .loaded(b) } }
     }
 
-    // MARK: Contenido del día
+    // MARK: Day content
 
     @ViewBuilder private func dayContent(_ b: TodayBundle, includeFamily: Bool) -> some View {
         let d = b.today
         VStack(alignment: .leading, spacing: 18) {
             if !d.firedReminders.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    BlockHeader(title: "Sonaron", count: d.firedReminders.count)
+                    BlockHeader(title: "Went off", count: d.firedReminders.count)
                     KairoCard {
                         ForEach(d.firedReminders) { r in
                             ReminderRow(reminder: r, highlight: true,
-                                        onDone: { act("Hecho") { _ = try await model.api.reminderDone(r.id) } },
-                                        onSnooze: { act("Te aviso en 10 minutos") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } })
+                                        onDone: { act("Done") { _ = try await model.api.reminderDone(r.id) } },
+                                        onSnooze: { act("I'll remind you in 10 minutes") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } })
                             if r.id != d.firedReminders.last?.id { Divider().overlay(KairoColor.border) }
                         }
                     }
@@ -104,9 +104,9 @@ struct TodayScreen: View {
             if includeFamily { FamilyCard(notices: b.notices) }
 
             VStack(alignment: .leading, spacing: 4) {
-                BlockHeader(title: "Agenda", count: d.events.count, action: "Calendario") { model.perform("section:calendar") }
+                BlockHeader(title: "Schedule", count: d.events.count, action: "Calendar") { model.perform("section:calendar") }
                 if d.events.isEmpty {
-                    QuietLine("Sin eventos hoy")
+                    QuietLine("No events today")
                 } else {
                     KairoCard {
                         ForEach(d.events, id: \.occurrenceId) { e in
@@ -119,9 +119,9 @@ struct TodayScreen: View {
 
             let tasks = pendingTasks(d)
             VStack(alignment: .leading, spacing: 4) {
-                BlockHeader(title: "Pendientes", count: tasks.count, action: "Tareas") { model.perform("section:tasks") }
+                BlockHeader(title: "Pending", count: tasks.count, action: "Tasks") { model.perform("section:tasks") }
                 if tasks.isEmpty {
-                    QuietLine("Nada pendiente para hoy")
+                    QuietLine("Nothing to do today")
                 } else {
                     KairoCard {
                         ForEach(tasks) { t in
@@ -137,7 +137,7 @@ struct TodayScreen: View {
 
             if !d.reminders.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    BlockHeader(title: "Recordatorios de hoy", count: d.reminders.count, action: "Ver todos") { model.perform("section:reminders") }
+                    BlockHeader(title: "Today's reminders", count: d.reminders.count, action: "See all") { model.perform("section:reminders") }
                     KairoCard {
                         ForEach(d.reminders) { r in
                             ReminderRow(reminder: r)
@@ -150,7 +150,7 @@ struct TodayScreen: View {
             let lists = d.lists.filter { !$0.pending.isEmpty }
             if !lists.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    BlockHeader(title: "Listas", action: "Abrir") { model.perform("section:lists") }
+                    BlockHeader(title: "Lists", action: "Open") { model.perform("section:lists") }
                     ScrollView(.horizontal) {
                         HStack(spacing: 10) {
                             ForEach(lists) { l in ListChipCard(list: l) }
@@ -164,14 +164,14 @@ struct TodayScreen: View {
 
             if !d.recentNotes.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    BlockHeader(title: "Notas recientes", action: "Notas") { model.perform("section:notes") }
+                    BlockHeader(title: "Recent notes", action: "Notes") { model.perform("section:notes") }
                     KairoCard {
                         ForEach(d.recentNotes.prefix(4)) { n in
                             Button { model.perform("section:notes") } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: n.pinned ? "pin.fill" : "note.text").foregroundStyle(KairoColor.muted).frame(width: 24)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(n.title.isEmpty ? "Sin título" : n.title).font(.kBody).foregroundStyle(KairoColor.text).lineLimit(1)
+                                        Text(n.title.isEmpty ? String(localized: "Untitled") : n.title).font(.kBody).foregroundStyle(KairoColor.text).lineLimit(1)
                                         Text(n.content.plainPreview).font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
                                     }
                                     Spacer(minLength: 0)
@@ -203,7 +203,7 @@ struct TodayScreen: View {
         }
     }
 
-    private func act(_ success: String, _ f: @escaping () async throws -> Void) {
+    private func act(_ success: LocalizedStringResource, _ f: @escaping () async throws -> Void) {
         Task {
             await attempt(model, success, f)
             await reload()
@@ -212,7 +212,7 @@ struct TodayScreen: View {
 }
 
 extension KTask {
-    /// La misma tarea marcada como hecha (para la animación antes de recargar).
+    /// The same task marked as done (for the animation before reloading).
     var completed: KTask {
         var t = self
         t.status = "done"
@@ -220,11 +220,11 @@ extension KTask {
     }
 }
 
-// MARK: - Piezas
+// MARK: - Pieces
 
 private struct QuietLine: View {
-    var text: String
-    init(_ text: String) { self.text = text }
+    var text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text).font(.kSubheadline).foregroundStyle(KairoColor.muted).padding(.vertical, 6)
     }
@@ -234,18 +234,23 @@ private struct Greeting: View {
     var today: TodayData
     var name: String
 
+    private var greeting: String {
+        let hello = today.greeting.isEmpty ? String(localized: "Hello") : today.greeting
+        return name.isEmpty ? hello : "\(hello), \(name)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(today.dateLabel.isEmpty ? KairoDate.longDay(.now) : today.dateLabel)
                 .font(.kairo(14, .medium))
                 .foregroundStyle(KairoColor.muted)
-            Text(name.isEmpty ? (today.greeting.isEmpty ? "Hola" : today.greeting) : "\(today.greeting.isEmpty ? "Hola" : today.greeting), \(name)")
+            Text(verbatim: greeting)
                 .font(.kLargeTitle)
                 .foregroundStyle(KairoColor.text)
             if let w = today.weather {
                 HStack(spacing: 6) {
                     Image(systemName: WeatherSymbol.symbol(for: w.description)).symbolRenderingMode(.multicolor)
-                    Text("\(w.place) · \(Int(w.temperature.rounded()))° \(w.description)")
+                    Text(verbatim: "\(w.place) · \(Int(w.temperature.rounded()))° \(w.description)")
                 }
                 .font(.kairo(13, .medium))
                 .foregroundStyle(KairoColor.muted)
@@ -264,17 +269,19 @@ private struct Greeting: View {
 enum WeatherSymbol {
     static func symbol(for description: String) -> String {
         let d = description.lowercased()
-        if d.contains("torment") { return "cloud.bolt.rain.fill" }
-        if d.contains("lluv") || d.contains("llovizna") || d.contains("chubasc") { return "cloud.rain.fill" }
-        if d.contains("niev") { return "cloud.snow.fill" }
-        if d.contains("niebla") { return "cloud.fog.fill" }
-        if d.contains("nubl") || d.contains("cubierto") { return "cloud.fill" }
+        // The server describes the weather in its configured language (English or Spanish): match both.
+        if d.contains("thunder") || d.contains("storm") || d.contains("torment") { return "cloud.bolt.rain.fill" }
+        if d.contains("rain") || d.contains("drizzle") || d.contains("shower") || d.contains("lluv") || d.contains("llovizna") || d.contains("chubasc") { return "cloud.rain.fill" }
+        if d.contains("snow") || d.contains("niev") { return "cloud.snow.fill" }
+        if d.contains("fog") || d.contains("mist") || d.contains("niebla") { return "cloud.fog.fill" }
+        if d.contains("partly") || d.contains("mostly sunny") { return "cloud.sun.fill" }
+        if d.contains("cloud") || d.contains("overcast") || d.contains("nubl") || d.contains("cubierto") { return "cloud.fill" }
         if d.contains("nub") || d.contains("parcial") { return "cloud.sun.fill" }
         return "sun.max.fill"
     }
 }
 
-/// El orbe en línea: toca para hablar; la respuesta aparece debajo.
+/// The inline orb: tap to talk; the answer appears below.
 private struct VoiceCard: View {
     @Environment(AppModel.self) private var model
     var orbSize: CGFloat
@@ -289,8 +296,8 @@ private struct VoiceCard: View {
                 KairoOrb(state: voice.orbState, level: voice.level).frame(width: orbSize, height: orbSize)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Hablar con Kairo")
-            Text(voice.statusText)
+            .accessibilityLabel("Talk to Kairo")
+            Text(verbatim: voice.statusText)
                 .font(.kairo(15, .medium))
                 .foregroundStyle(KairoColor.muted)
                 .contentTransition(.opacity)
@@ -300,14 +307,14 @@ private struct VoiceCard: View {
                     MarkdownText(voice.turn.text, font: .kCallout).lineLimit(6)
                     HStack {
                         Spacer()
-                        Button("Seguir hablando") { model.showTalk = true }
+                        Button("Keep talking") { model.showTalk = true }
                             .font(.kairo(14, .medium)).foregroundStyle(KairoColor.accentStrong)
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
             HStack(spacing: 8) {
-                TextField("Escribe a Kairo", text: $text)
+                TextField("Type to Kairo", text: $text)
                     .font(.kCallout)
                     .focused($focused)
                     .submitLabel(.send)
@@ -324,7 +331,7 @@ private struct VoiceCard: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(KairoColor.onAccent)
                 .background(KairoColor.accent, in: Circle())
-                .accessibilityLabel(text.isEmpty ? "Hablar" : "Enviar")
+                .accessibilityLabel(text.isEmpty ? "Talk" : "Send")
             }
             SuggestionChips { model.startTalking(initialText: $0) }
         }
@@ -344,16 +351,18 @@ private struct VoiceCard: View {
     }
 }
 
-/// Atajos para empezar ("¿Qué tengo hoy?").
+/// Shortcuts to get started ("What's on today?").
 struct SuggestionChips: View {
     var onPick: (String) -> Void
-    private let items = ["¿Qué tengo hoy?", "Recuérdame algo", "Añade a la lista", "Cita compartida"]
+    // Each suggestion is also sent to the assistant, so it follows the app language.
+    private let items = [String(localized: "What's on today?"), String(localized: "Remind me about something"),
+                         String(localized: "Add to the list"), String(localized: "Shared event")]
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(items, id: \.self) { s in
-                    Button(s) { onPick(s == "Cita compartida" ? "Crea una cita familiar" : s) }
+                    Button(s) { onPick(s == String(localized: "Shared event") ? String(localized: "Create a family event") : s) }
                         .font(.kairo(13, .medium))
                         .foregroundStyle(KairoColor.text)
                         .padding(.horizontal, 12)
@@ -367,7 +376,7 @@ struct SuggestionChips: View {
     }
 }
 
-/// Familia en Hoy: quiénes son y los últimos avisos sin leer.
+/// Family on Today: who they are and the latest unread notices.
 private struct FamilyCard: View {
     @Environment(AppModel.self) private var model
     var notices: [Notice]
@@ -388,7 +397,7 @@ private struct FamilyCard: View {
                         }
                     }
                     if notices.isEmpty {
-                        Text(f.members.count > 1 ? "Todo al día en la familia" : "Invita a tu familia para compartir citas, listas y tareas")
+                        Text(f.members.count > 1 ? "All caught up with the family" : "Invite your family to share events, lists and tasks")
                             .font(.kSubheadline).foregroundStyle(KairoColor.muted)
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
@@ -414,12 +423,12 @@ private struct FamilyCard: View {
                 .overlay(RoundedRectangle(cornerRadius: KairoRadius.card, style: .continuous).strokeBorder(notices.isEmpty ? KairoColor.border : KairoColor.accent.opacity(0.45)))
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Abre Familia")
+            .accessibilityHint("Opens Family")
         }
     }
 }
 
-/// Tarjeta de lista en Hoy (los primeros pendientes).
+/// List card on Today (the first pending items).
 private struct ListChipCard: View {
     @Environment(AppModel.self) private var model
     var list: ShoppingList
@@ -431,7 +440,7 @@ private struct ListChipCard: View {
                     Text(list.name).font(.kHeadline).foregroundStyle(KairoColor.text).lineLimit(1)
                     if list.shared { SharedBadge(compact: true) }
                     Spacer(minLength: 0)
-                    Text("\(list.pending.count)").font(.kMonoSmall).foregroundStyle(KairoColor.faint)
+                    Text(verbatim: "\(list.pending.count)").font(.kMonoSmall).foregroundStyle(KairoColor.faint)
                 }
                 ForEach(list.pending.prefix(3)) { i in
                     HStack(spacing: 8) {

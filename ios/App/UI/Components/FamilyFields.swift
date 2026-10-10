@@ -2,7 +2,7 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Interruptor "Familiar" de los formularios. Sólo quien lo creó puede dejar de compartirlo.
+/// "Family" switch of the forms. Only whoever created it can stop sharing it.
 struct FamilyShareToggle: View {
     @Environment(AppModel.self) private var model
     @Binding var shared: Bool
@@ -18,15 +18,15 @@ struct FamilyShareToggle: View {
             } else {
                 Toggle(isOn: $shared) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Label("Familiar", systemImage: "house")
-                        Text(shared ? "La ven y editan todos en \(f.household.name)." : "Sólo tú la ves.")
+                        Label("Family sharing", systemImage: "house")
+                        Text(shared ? "Everyone in \(f.household.name) can see and edit it." : "Only you can see it.")
                             .font(.kFootnote).foregroundStyle(KairoColor.muted)
                     }
                 }
                 .disabled(!isMine && shared)
                 .tint(KairoColor.accent)
                 if !isMine, let owner = model.ownerName(ownerId) {
-                    Text("La compartió \(owner). Sólo \(owner) puede dejar de compartirla.")
+                    Text("\(owner) shared it. Only \(owner) can stop sharing it.")
                         .font(.kFootnote).foregroundStyle(KairoColor.muted)
                 }
             }
@@ -34,11 +34,11 @@ struct FamilyShareToggle: View {
     }
 }
 
-/// Elegir un miembro de la familia (responsable de una tarea, a quién avisar…).
+/// Pick a family member (assignee of a task, who to notify…).
 struct MemberPicker: View {
     @Environment(AppModel.self) private var model
-    var title: String
-    var noneLabel: String = "Nadie"
+    var title: LocalizedStringKey
+    var noneLabel: LocalizedStringKey = "Nobody"
     @Binding var memberId: String?
 
     var body: some View {
@@ -46,18 +46,22 @@ struct MemberPicker: View {
             Picker(selection: $memberId) {
                 Text(noneLabel).tag(String?.none)
                 ForEach(f.members) { m in
-                    Text(m.id == f.me ? "\(m.displayName) (tú)" : m.displayName).tag(Optional(m.id))
+                    memberLabel(m, me: f.me).tag(Optional(m.id))
                 }
             } label: {
                 Label(title, systemImage: "person")
             }
         }
     }
+
+    private func memberLabel(_ m: Member, me: String) -> Text {
+        m.id == me ? Text("\(m.displayName) (you)") : Text(verbatim: m.displayName)
+    }
 }
 
-/// Chips de filtro "Todas · Mías · Familiares" encima de las listas.
+/// Filter chips "All · Mine · Family" above the lists.
 struct OwnershipFilter<T: Hashable>: View {
-    var options: [(T, String, Int?)]
+    var options: [(T, LocalizedStringKey, Int?)]
     @Binding var selection: T
 
     var body: some View {

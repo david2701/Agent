@@ -6,9 +6,9 @@ import AppIntents
 import KairoCore
 import KairoUI
 
-// MARK: - Voz
+// MARK: - Voice
 
-/// Mientras hablas con Kairo: lo que oyó, lo que hace y su respuesta, en la Isla Dinámica y la pantalla bloqueada.
+/// While you talk to Kairo: what it heard, what it is doing and its answer, in the Dynamic Island and on the lock screen.
 struct VoiceLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: VoiceActivityAttributes.self) { context in
@@ -68,22 +68,22 @@ struct VoiceLiveActivity: Widget {
 
     private func status(_ s: VoiceActivityAttributes.ContentState) -> String {
         switch s.phase {
-        case "listening": "Te escucho"
-        case "thinking": s.working ?? "Pensando"
+        case "listening": String(localized: "I'm listening")
+        case "thinking": s.working ?? String(localized: "Thinking")
         case "speaking": "Kairo"
-        case "error": "No se pudo"
-        default: "Listo"
+        case "error": String(localized: "Couldn't do it")
+        default: String(localized: "All set")
         }
     }
 
     private func main(_ s: VoiceActivityAttributes.ContentState) -> String {
         if !s.reply.isEmpty { return s.reply }
         if !s.transcript.isEmpty { return "“\(s.transcript)”" }
-        return s.phase == "listening" ? "Habla cuando quieras" : "…"
+        return s.phase == "listening" ? String(localized: "Speak whenever you like") : "…"
     }
 }
 
-// MARK: - Grabación
+// MARK: - Recording
 
 struct RecordingLiveActivity: Widget {
     var body: some WidgetConfiguration {
@@ -94,8 +94,8 @@ struct RecordingLiveActivity: Widget {
                     .foregroundStyle(context.state.processing ? KairoColor.accent : KairoColor.danger)
                     .symbolEffect(.pulse, isActive: !context.state.processing)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(context.attributes.title.isEmpty ? "Grabación" : context.attributes.title).font(.kairo(15, .semibold)).foregroundStyle(KairoColor.text)
-                    Text(context.state.processing ? "Kairo está resumiendo" : "\(context.state.segments) partes subidas").font(.kairo(12)).foregroundStyle(KairoColor.muted)
+                    Text(context.attributes.title.isEmpty ? String(localized: "Recording") : context.attributes.title).font(.kairo(15, .semibold)).foregroundStyle(KairoColor.text)
+                    Text(context.state.processing ? "Kairo is summarizing" : "\(context.state.segments) parts uploaded").font(.kairo(12)).foregroundStyle(KairoColor.muted)
                 }
                 Spacer()
                 if !context.state.processing {
@@ -110,13 +110,13 @@ struct RecordingLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("Grabando", systemImage: "record.circle").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.danger)
+                    Label("Recording now", systemImage: "record.circle").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.danger)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text(timerInterval: context.state.startedAt...Date.distantFuture, countsDown: false).font(.kairoMono(15, .medium)).monospacedDigit()
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.attributes.title.isEmpty ? "Reunión" : context.attributes.title).font(.kairo(13)).foregroundStyle(.secondary)
+                    Text(context.attributes.title.isEmpty ? String(localized: "Meeting") : context.attributes.title).font(.kairo(13)).foregroundStyle(.secondary)
                 }
             } compactLeading: {
                 Image(systemName: "record.circle").foregroundStyle(KairoColor.danger).symbolEffect(.pulse)
@@ -130,14 +130,14 @@ struct RecordingLiveActivity: Widget {
     }
 }
 
-// MARK: - Próximo evento
+// MARK: - Next event
 
 struct EventLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: EventActivityAttributes.self) { context in
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Label(context.attributes.shared ? "Familiar" : "Próximo evento", systemImage: context.attributes.shared ? "house" : "calendar")
+                    Label(context.attributes.shared ? "Family event" : "Next event", systemImage: context.attributes.shared ? "house" : "calendar")
                         .font(.kairo(12, .semibold)).foregroundStyle(KairoColor.accentStrong)
                     Text(context.attributes.title).font(.kairo(16, .semibold)).foregroundStyle(KairoColor.text).lineLimit(2)
                     if !context.state.location.isEmpty {
@@ -146,7 +146,7 @@ struct EventLiveActivity: Widget {
                 }
                 Spacer()
                 if context.state.cancelled {
-                    Text("Cancelado").font(.kairo(14, .semibold)).foregroundStyle(KairoColor.danger)
+                    Text("Cancelled").font(.kairo(14, .semibold)).foregroundStyle(KairoColor.danger)
                 } else {
                     Text(timerInterval: Date.now...max(Date.now, context.state.startAt), countsDown: true)
                         .font(.kairoMono(24, .medium)).monospacedDigit().foregroundStyle(KairoColor.text)
@@ -182,9 +182,9 @@ struct EventLiveActivity: Widget {
     }
 }
 
-// MARK: - Temporizadores y alarmas (AlarmKit)
+// MARK: - Timers and alarms (AlarmKit)
 
-/// Cuenta regresiva de los temporizadores que pide el agente, con pausar y detener.
+/// Countdown of the timers the agent asks for, with pause and stop.
 struct AlarmLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: AlarmAttributes<KairoAlarmMetadata>.self) { context in
@@ -203,7 +203,7 @@ struct AlarmLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.metadata?.label ?? "Temporizador", systemImage: "timer").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.accent).lineLimit(1)
+                    Label(context.attributes.metadata?.label ?? String(localized: "Timer"), systemImage: "timer").font(.kairo(13, .semibold)).foregroundStyle(KairoColor.accent).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     AlarmCountdown(state: context.state, font: .kairoMono(20, .medium))
@@ -232,9 +232,9 @@ private struct AlarmCountdown: View {
         case .countdown(let c):
             Text(timerInterval: Date.now...max(Date.now, c.fireDate), countsDown: true).font(font).monospacedDigit().foregroundStyle(KairoColor.text)
         case .paused:
-            Text("En pausa").font(font).foregroundStyle(KairoColor.muted)
+            Text("Paused").font(font).foregroundStyle(KairoColor.muted)
         case .alert:
-            Text("¡Ya!").font(font).foregroundStyle(KairoColor.accent)
+            Text("Time's up!").font(font).foregroundStyle(KairoColor.accent)
         @unknown default:
             EmptyView()
         }

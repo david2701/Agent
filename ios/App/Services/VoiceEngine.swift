@@ -5,7 +5,7 @@ import AudioToolbox
 import KairoCore
 import KairoUI
 
-/// Micrófono a 16 kHz mono (PCM 16 bits) con detección de fin de frase. Corre fuera del hilo principal.
+/// Microphone at 16 kHz mono (16-bit PCM) with end-of-speech detection. Runs off the main thread.
 nonisolated final class Microphone: @unchecked Sendable {
     struct NoSpeech: Error {}
 
@@ -21,7 +21,7 @@ nonisolated final class Microphone: @unchecked Sendable {
         await AVAudioApplication.requestRecordPermission()
     }
 
-    /// Graba hasta que la persona termina de hablar. [onLevel] recibe el nivel 0...1 para el orbe.
+    /// Records until the person finishes speaking. [onLevel] receives the 0...1 level for the orb.
     func record(onLevel: @escaping @Sendable (Double) -> Void) async throws -> [Int16] {
         try Self.configureSession(forRecording: true)
         return try await withTaskCancellationHandler {
@@ -119,7 +119,7 @@ nonisolated final class Microphone: @unchecked Sendable {
     }
 }
 
-/// Conversación por voz: escucha, envía a tu servidor (Whisper + agente en Nan) y responde con la voz de Kokoro.
+/// Voice conversation: listens, sends to your server (Whisper + agent on Nan) and answers with Kokoro's voice.
 @MainActor @Observable
 final class VoiceEngine {
     enum Phase: Equatable { case idle, listening, thinking, speaking }
@@ -129,7 +129,7 @@ final class VoiceEngine {
     var turn = AgentTurn()
     var errorMessage: String?
     var conversationId: String?
-    /// Si Kairo termina con una pregunta, sigue escuchando sin repetir "Oye Kairo".
+    /// If Kairo ends with a question, it keeps listening without repeating the wake phrase.
     var followUp = true
     weak var model: AppModel?
 
@@ -152,10 +152,10 @@ final class VoiceEngine {
 
     var statusText: String {
         switch phase {
-        case .listening: "Te escucho"
-        case .thinking: turn.working ?? "Pensando"
+        case .listening: String(localized: "I'm listening")
+        case .thinking: turn.working ?? String(localized: "Thinking")
         case .speaking: "Kairo"
-        case .idle: errorMessage ?? (turn.finished ? "Listo" : "Toca para hablar")
+        case .idle: errorMessage ?? (turn.finished ? String(localized: "All set") : String(localized: "Tap to talk"))
         }
     }
 
@@ -166,7 +166,7 @@ final class VoiceEngine {
             return
         }
         guard await Microphone.requestPermission() else {
-            errorMessage = "Kairo necesita el micrófono. Actívalo en Ajustes del iPhone."
+            errorMessage = String(localized: "Kairo needs the microphone. Turn it on in iPhone Settings.")
             return
         }
         task = Task { await listenAndSend() }
@@ -200,7 +200,7 @@ final class VoiceEngine {
             await finishTurn()
         } catch is Microphone.NoSpeech {
             phase = .idle
-            errorMessage = "No te escuché"
+            errorMessage = String(localized: "I didn't hear you")
             activity.end()
             model?.wake.resume()
         } catch is CancellationError {
@@ -265,7 +265,7 @@ final class VoiceEngine {
         }
     }
 
-    /// Lee un texto con la voz configurada (Kokoro en Nan).
+    /// Reads a text with the configured voice (Kokoro on Nan).
     func say(_ text: String) async {
         let s = model?.settings
         guard let data = try? await api.speak(text, voice: s?.voice, speed: s?.voiceSpeed) else { return }
@@ -293,7 +293,7 @@ final class VoiceEngine {
         turn = AgentTurn()
         guard let text = try? await api.briefing() else {
             phase = .idle
-            errorMessage = "No se pudo preparar el resumen"
+            errorMessage = String(localized: "Couldn't prepare the briefing")
             return
         }
         turn.final = text
@@ -302,7 +302,7 @@ final class VoiceEngine {
         phase = .idle
     }
 
-    /// Nueva conversación (la siguiente frase no arrastra el contexto anterior).
+    /// New conversation (the next sentence does not carry the previous context).
     func reset() {
         cancel()
         conversationId = nil
@@ -311,7 +311,7 @@ final class VoiceEngine {
     }
 }
 
-/// Live Activity de la conversación por voz (Isla Dinámica y pantalla bloqueada).
+/// Live Activity of the voice conversation (Dynamic Island and lock screen).
 @MainActor
 final class VoiceActivityController {
     private var activity: ActivityKit.Activity<VoiceActivityAttributes>?
@@ -326,7 +326,7 @@ final class VoiceActivityController {
     func update(phase: String, transcript: String, reply: String, working: String?) {
         guard let activity else { return }
         let state = VoiceActivityAttributes.ContentState(phase: phase, transcript: String(transcript.prefix(160)), reply: String(reply.prefix(240)), working: working)
-        // Activity no es Sendable en el SDK; sus métodos son seguros desde cualquier hilo.
+        // Activity is not Sendable in the SDK; its methods are safe from any thread.
         nonisolated(unsafe) let live = activity
         Task { await live.update(.init(state: state, staleDate: nil)) }
     }

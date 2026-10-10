@@ -3,13 +3,13 @@ import AVFoundation
 import Speech
 import KairoCore
 
-/// "Oye Kairo": reconocimiento en el propio iPhone (sin enviar audio) hasta escuchar la frase.
-/// Funciona con la app abierta y, gracias al modo de audio en segundo plano, con la pantalla bloqueada.
-/// iOS muestra el indicador naranja del micrófono mientras está atento.
+/// "Hey Kairo" / "Oye Kairo": recognition on the iPhone itself (no audio is sent) until the phrase is heard.
+/// Works with the app open and, thanks to the background audio mode, with the screen locked.
+/// iOS shows the orange microphone indicator while it is listening.
 @MainActor @Observable
 final class WakeWordService {
     private(set) var isRunning = false
-    var phrase = "oye kairo"
+    var phrase = "hey kairo"
     var lastError: String?
     var onWake: ((String) -> Void)?
 
@@ -31,10 +31,11 @@ final class WakeWordService {
     func start() async {
         guard isEnabled, !isRunning else { return }
         let status = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
-        guard status == .authorized else { lastError = "Activa el reconocimiento de voz en Ajustes del iPhone"; return }
-        guard await Microphone.requestPermission() else { lastError = "Kairo necesita el micrófono"; return }
-        let r = SFSpeechRecognizer(locale: Locale(identifier: "es-ES")) ?? SFSpeechRecognizer()
-        guard let r, r.isAvailable else { lastError = "El reconocimiento de voz no está disponible ahora"; return }
+        guard status == .authorized else { lastError = String(localized: "Turn on speech recognition in iPhone Settings"); return }
+        guard await Microphone.requestPermission() else { lastError = String(localized: "Kairo needs the microphone"); return }
+        // The recognizer follows the app language ("en-US" or "es-ES")
+        let r = SFSpeechRecognizer(locale: Locale(identifier: KairoLanguage.speechLocaleIdentifier)) ?? SFSpeechRecognizer()
+        guard let r, r.isAvailable else { lastError = String(localized: "Speech recognition isn't available right now"); return }
         recognizer = r
         paused = false
         do {
@@ -42,7 +43,7 @@ final class WakeWordService {
             isRunning = true
             lastError = nil
         } catch {
-            lastError = "No se pudo activar el micrófono"
+            lastError = String(localized: "Couldn't turn on the microphone")
         }
     }
 
@@ -52,7 +53,7 @@ final class WakeWordService {
         isRunning = false
     }
 
-    /// Mientras Kairo escucha tu frase o habla, el detector se apaga y luego vuelve.
+    /// While Kairo listens to your sentence or speaks, the detector turns off and then comes back.
     func pause() {
         guard isRunning else { return }
         paused = true
@@ -73,7 +74,8 @@ final class WakeWordService {
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
         req.taskHint = .search
-        req.contextualStrings = ["Oye Kairo", "Kairo", phrase]
+        // Hints follow the UI language; both "Hey Kairo" and "Oye Kairo" are accepted when matching (see WakePhrase)
+        req.contextualStrings = [KairoLanguage.wakePhraseDisplay, "Kairo", phrase]
         if recognizer?.supportsOnDeviceRecognition == true { req.requiresOnDeviceRecognition = true }
         request = req
         let input = engine.inputNode
@@ -83,7 +85,7 @@ final class WakeWordService {
         try engine.start()
         task = recognizer?.recognitionTask(with: req, resultHandler: Self.results(phrase: phrase))
 
-        // El reconocedor corta sesiones largas: se reinicia cada 50 s
+        // The recognizer cuts long sessions: it restarts every 50 s
         restartTask?.cancel()
         restartTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(50))
@@ -92,7 +94,7 @@ final class WakeWordService {
         }
     }
 
-    // El audio y el reconocedor llaman desde sus propias colas: estos cierres no se aíslan al hilo principal.
+    // Audio and the recognizer call from their own queues: these closures are not isolated to the main thread.
     nonisolated private static func tap(_ req: SFSpeechAudioBufferRecognitionRequest) -> AVAudioNodeTapBlock {
         { buffer, _ in req.append(buffer) }
     }

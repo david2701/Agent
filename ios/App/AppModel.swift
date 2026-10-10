@@ -4,26 +4,26 @@ import KairoCore
 import KairoUI
 import WidgetKit
 
-/// Secciones de la app (pestañas en iPhone, barra lateral en iPad y en la pantalla interior del iPhone Duo).
+/// App sections (tabs on iPhone, sidebar on iPad and on the inner screen of a foldable).
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case today, chat, tasks, calendar, notes, reminders, lists, memory, recordings, activity, family, settings
 
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
-        case .today: "Hoy"
-        case .chat: "Conversación"
-        case .tasks: "Tareas"
-        case .calendar: "Calendario"
-        case .notes: "Notas"
-        case .reminders: "Recordatorios"
-        case .lists: "Listas"
-        case .memory: "Memoria"
-        case .recordings: "Grabaciones"
-        case .activity: "Actividad"
-        case .family: "Familia"
-        case .settings: "Ajustes"
+        case .today: "Today"
+        case .chat: "Chat"
+        case .tasks: "Tasks"
+        case .calendar: "Calendar"
+        case .notes: "Notes"
+        case .reminders: "Reminders"
+        case .lists: "Lists"
+        case .memory: "Memory"
+        case .recordings: "Recordings"
+        case .activity: "Activity"
+        case .family: "Family"
+        case .settings: "Settings"
         }
     }
 
@@ -44,7 +44,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Las cuatro principales van en la barra de pestañas del iPhone; el resto en "Más".
+    /// The four main ones go in the iPhone tab bar; the rest under "More".
     static let primary: [AppSection] = [.today, .chat, .tasks, .calendar]
     static let secondary: [AppSection] = [.notes, .reminders, .lists, .memory, .recordings, .activity, .family, .settings]
 }
@@ -57,7 +57,7 @@ struct Toast: Identifiable, Equatable {
     var destination: AppSection?
 }
 
-/// Estado global de la app: sesión, familia, avisos, conexión en vivo y navegación.
+/// Global app state: session, family, notices, live connection and navigation.
 @MainActor @Observable
 final class AppModel {
     static let shared = AppModel()
@@ -79,7 +79,7 @@ final class AppModel {
     var showTalk = false
     var toast: Toast?
     var apnsAvailable = false
-    /// Contador por colección: las pantallas recargan cuando cambia (`.task(id:)`).
+    /// Counter per collection: screens reload when it changes (`.task(id:)`).
     private(set) var versions: [String: Int] = [:]
 
     private var realtimeTask: Task<Void, Never>?
@@ -99,7 +99,7 @@ final class AppModel {
         Task { await bootstrap() }
     }
 
-    // MARK: Sesión
+    // MARK: Session
 
     func bootstrap() async {
         await api.setOnSessionExpired { Task { @MainActor in AppModel.shared.signedOut() } }
@@ -117,12 +117,12 @@ final class AppModel {
         }
     }
 
-    /// Capturas automáticas en el simulador (CI): sin diálogos del sistema.
+    /// Automated screenshots in the simulator (CI): no system dialogs.
     static let screenshotMode = ProcessInfo.processInfo.environment["KAIRO_SCREENSHOT"] != nil
 
     #if DEBUG
-    /// Sólo en compilaciones de depuración: inicia sesión y abre una sección desde variables de entorno
-    /// (KAIRO_AUTOLOGIN="servidor|correo|contraseña", KAIRO_SECTION=tasks). Lo usa el flujo de capturas de CI.
+    /// Debug builds only: signs in and opens a section from environment variables
+    /// (KAIRO_AUTOLOGIN="server|email|password", KAIRO_SECTION=tasks). Used by the CI screenshot flow.
     private func debugAutologin() async {
         let env = ProcessInfo.processInfo.environment
         if let s = env["KAIRO_SECTION"], let sec = AppSection(rawValue: s) { selection = sec }
@@ -175,7 +175,7 @@ final class AppModel {
         withAnimation(KairoMotion.base) { phase = .signedOut }
     }
 
-    // MARK: Ciclo de vida
+    // MARK: Lifecycle
 
     func becameActive() {
         guard phase == .ready else { return }
@@ -189,7 +189,7 @@ final class AppModel {
     }
 
     func enteredBackground() {
-        // Con "Oye Kairo" activo o una grabación, la conexión sigue viva en segundo plano
+        // With the wake phrase active or a recording, the connection stays alive in the background
         if !wake.isRunning && !recorder.isRecording && voice.phase == .idle { stopRealtime() }
         SyncService.scheduleBackgroundRefresh()
     }
@@ -201,7 +201,7 @@ final class AppModel {
         SyncService.scheduleBackgroundRefresh()
     }
 
-    // MARK: Tiempo real
+    // MARK: Realtime
 
     func startRealtime() {
         guard realtimeTask == nil else { return }
@@ -228,16 +228,16 @@ final class AppModel {
         case .reminderFire(let id, let text, _, _):
             bump("reminder")
             if let key = ev.dedupeKey, seen.markIfNew(key), !fromPush {
-                NotificationService.showNow(id: key, title: text, body: "Recordatorio", entityId: id, category: NotificationService.categoryReminder, destination: "reminders")
+                NotificationService.showNow(id: key, title: text, body: String(localized: "Reminder"), entityId: id, category: NotificationService.categoryReminder, destination: "reminders")
             }
         case .eventAlert(let id, let title, _, _, let minutes, let location, _):
             if let key = ev.dedupeKey, seen.markIfNew(key), !fromPush {
-                let when = minutes == 0 ? "Empieza ahora" : "En \(minutes) min"
+                let when = minutes == 0 ? String(localized: "Starts now") : String(localized: "In \(minutes) min")
                 NotificationService.showNow(id: key, title: title, body: when + (location.isEmpty ? "" : " · \(location)"), entityId: id, category: nil, destination: "calendar")
             }
         case .briefing(let text, _):
             if let key = ev.dedupeKey, seen.markIfNew(key), !fromPush {
-                NotificationService.showNow(id: key, title: "Tu día", body: text, entityId: nil, category: NotificationService.categoryBriefing, destination: "today")
+                NotificationService.showNow(id: key, title: String(localized: "Your day"), body: text, entityId: nil, category: NotificationService.categoryBriefing, destination: "today")
             }
         case .recordingUpdated:
             bump("recording")
@@ -259,14 +259,14 @@ final class AppModel {
     func bump(_ entity: String) { versions[entity, default: 0] += 1 }
     func version(_ entity: String) -> Int { versions[entity, default: 0] }
 
-    /// Avisos de la familia que llegaron mientras no había conexión (los muestra una sola vez).
+    /// Family notices that arrived while offline (shown only once).
     func showMissed(_ notices: [Notice]) {
         for n in notices where seen.markIfNew("notice:\(n.id)") {
             NotificationService.showNow(id: "notice:\(n.id)", title: n.title, body: n.body, entityId: n.entityId, category: nil, destination: AppSection.from(entity: n.entityType)?.rawValue ?? "family")
         }
     }
 
-    // MARK: Datos compartidos
+    // MARK: Shared data
 
     func refreshFamily() async {
         if let f = try? await api.family() { family = f }
@@ -283,7 +283,7 @@ final class AppModel {
         }
     }
 
-    /// Resumen para los widgets, las Live Activities y el reloj.
+    /// Summary for the widgets, the Live Activities and the watch.
     func refreshSnapshot() async {
         guard let t = try? await api.today() else { return }
         let snap = SharedSnapshot(today: t, userName: user?.firstName ?? "", unreadNotices: unreadNotices, family: family)
@@ -296,7 +296,7 @@ final class AppModel {
     func ownerName(_ id: String?) -> String? { family?.ownerName(id) }
     var hasFamily: Bool { (family?.members.count ?? 0) > 1 }
 
-    // MARK: Acciones
+    // MARK: Actions
 
     func show(_ t: Toast) {
         withAnimation(KairoMotion.spring) { toast = t }
@@ -313,7 +313,7 @@ final class AppModel {
         Task { await voice.talk(initialText: initialText) }
     }
 
-    /// Acciones que llegan de Siri, widgets, controles, notificaciones o enlaces.
+    /// Actions coming from Siri, widgets, controls, notifications or links.
     func perform(_ action: String) {
         if action == "talk" { startTalking(); return }
         if action == "briefing" {
@@ -326,14 +326,12 @@ final class AppModel {
         }
     }
 
-    /// kairo://talk, kairo://section/notes, kairo://unirse?codigo=XXXX-XXXX y enlaces https .../unirse?codigo=
+    /// kairo://talk, kairo://section/notes, kairo://join?code=XXXX-XXXX and https links .../join?code=
+    /// (the legacy `unirse?codigo=` form is accepted too, see `InviteLink`).
     func open(url: URL) {
-        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        if url.path.contains("unirse") || url.host == "unirse", let code = comps?.queryItems?.first(where: { $0.name == "codigo" })?.value {
-            pendingJoinCode = code
-            if let scheme = url.scheme, scheme.hasPrefix("http"), let host = url.host {
-                pendingJoinServer = "\(scheme)://\(host)" + (url.port.map { ":\($0)" } ?? "")
-            }
+        if let invite = InviteLink.parse(url: url) {
+            pendingJoinCode = invite.code
+            if let server = invite.server { pendingJoinServer = server }
             return
         }
         switch url.host {

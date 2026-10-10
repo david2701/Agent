@@ -8,7 +8,7 @@ struct FamilyBundle: Equatable {
     var notices: [Notice]
 }
 
-/// Familia: miembros, invitaciones, avisos y novedades. Lo personal sigue siendo privado.
+/// Family: members, invitations, notices and updates. Personal things stay private.
 struct FamilyScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<FamilyBundle> = .loading
@@ -27,7 +27,7 @@ struct FamilyScreen: View {
                     membersCard(b)
                     messageCard(b.info)
                     noticesCard(b.notices)
-                    Text("Lo que no marcas como familiar es privado, también para quien administra la familia.")
+                    Text("What you don't mark as family is private, even from whoever manages the family.")
                         .font(.kFootnote).foregroundStyle(KairoColor.muted).padding(.horizontal, 4)
                 }
                 .padding(.horizontal, 16)
@@ -37,31 +37,31 @@ struct FamilyScreen: View {
             .refreshable { await reload() }
             .onAppear { Task { await markSeen(b.notices) } }
         }
-        .navigationTitle("Familia")
+        .navigationTitle("Family")
         .sheet(isPresented: $inviting) { InviteSheet { created = $0; Task { await reload() } } }
         .sheet(item: $created) { c in CodeSheet(code: c) }
-        .alert("Nombre de la familia", isPresented: $renaming) {
-            TextField("Nombre", text: $newName)
-            Button("Cancelar", role: .cancel) {}
-            Button("Guardar") {
+        .alert("Family name", isPresented: $renaming) {
+            TextField("Name", text: $newName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
                 Task {
-                    await attempt(model, "Nombre guardado") { _ = try await model.api.renameFamily(newName.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    await attempt(model, "Name saved") { _ = try await model.api.renameFamily(newName.trimmingCharacters(in: .whitespacesAndNewlines)) }
                     await model.refreshFamily()
                     await reload()
                 }
             }
         }
-        .confirmationDialog(removing.map { "¿Quitar a \($0.firstName) de la familia?" } ?? "", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
-            Button("Quitar de la familia", role: .destructive) {
+        .confirmationDialog(removing.map { String(localized: "Remove \($0.firstName) from the family?") } ?? "", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
+            Button("Remove from family", role: .destructive) {
                 guard let m = removing else { return }
                 Task {
-                    await attempt(model, "\(m.firstName) ya no está en la familia") { try await model.api.removeMember(m.id) }
+                    await attempt(model, "\(m.firstName) is no longer in the family") { try await model.api.removeMember(m.id) }
                     await model.refreshFamily()
                     await reload()
                 }
             }
         } message: {
-            Text("Lo que había compartido con la familia pasa a ser tuyo. No se puede deshacer.")
+            Text("What they shared with the family becomes yours. This can't be undone.")
         }
         .kairoBackground()
     }
@@ -84,7 +84,7 @@ struct FamilyScreen: View {
         model.unreadNotices = 0
     }
 
-    // MARK: Miembros
+    // MARK: Members
 
     private func membersCard(_ b: FamilyBundle) -> some View {
         let f = b.info
@@ -93,14 +93,14 @@ struct FamilyScreen: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(f.household.name).font(.kTitle2)
-                    Text("\(f.members.count == 1 ? "1 miembro" : "\(f.members.count) miembros")\(f.isAdmin ? " · administras la familia" : "")")
+                    Text(verbatim: membersSummary(f))
                         .font(.kFootnote).foregroundStyle(KairoColor.muted)
                 }
                 Spacer()
                 if f.isAdmin {
                     Button { newName = f.household.name; renaming = true } label: { Image(systemName: "pencil").frame(width: 36, height: 36) }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Cambiar el nombre de la familia")
+                        .accessibilityLabel("Rename the family")
                 }
             }
             .padding(.bottom, 12)
@@ -110,23 +110,23 @@ struct FamilyScreen: View {
             }
             if f.members.count == 1 {
                 Divider().overlay(KairoColor.border)
-                Text("Aún no hay nadie más en la familia.").font(.kSubheadline).foregroundStyle(KairoColor.muted).padding(.vertical, 12)
+                Text("No one else is in the family yet.").font(.kSubheadline).foregroundStyle(KairoColor.muted).padding(.vertical, 12)
             }
             ForEach(pending) { inv in
                 Divider().overlay(KairoColor.border)
                 HStack(spacing: 12) {
                     Image(systemName: "clock").frame(width: 40, height: 40).overlay(Circle().strokeBorder(KairoColor.border)).foregroundStyle(KairoColor.muted)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(inv.kind == "reset" ? "Código de acceso de \(f.member(inv.targetUserId)?.firstName ?? "un miembro")" : (inv.name.isEmpty ? "Invitación sin nombre" : inv.name))
+                        Text(verbatim: inviteTitle(inv, f))
                             .font(.kBody)
                         if let d = KairoDate.parse(inv.expiresAt) {
-                            Text("Pendiente · vence \(KairoDate.humanDay(d))").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                            Text("Pending · expires \(KairoDate.humanDay(d))").font(.kFootnote).foregroundStyle(KairoColor.muted)
                         }
                     }
                     Spacer()
-                    Button("Revocar") {
+                    Button("Revoke") {
                         Task {
-                            await attempt(model, "Invitación revocada") { try await model.api.revokeInvite(inv.id) }
+                            await attempt(model, "Invitation revoked") { try await model.api.revokeInvite(inv.id) }
                             await reload()
                         }
                     }
@@ -135,7 +135,7 @@ struct FamilyScreen: View {
                 .padding(.vertical, 10)
             }
             if f.isAdmin {
-                Button { inviting = true } label: { Label("Invitar a la familia", systemImage: "person.badge.plus") }
+                Button { inviting = true } label: { Label("Invite someone", systemImage: "person.badge.plus") }
                     .buttonStyle(KairoButtonStyle(kind: .primary))
                     .padding(.top, 14)
             }
@@ -145,13 +145,25 @@ struct FamilyScreen: View {
         .overlay(RoundedRectangle(cornerRadius: KairoRadius.card, style: .continuous).strokeBorder(KairoColor.border))
     }
 
+    private func membersSummary(_ f: FamilyInfo) -> String {
+        let count = f.members.count == 1 ? String(localized: "1 member") : String(localized: "\(f.members.count) members")
+        return f.isAdmin ? count + " · " + String(localized: "you manage the family") : count
+    }
+
+    private func inviteTitle(_ inv: Invitation, _ f: FamilyInfo) -> String {
+        if inv.kind == "reset" {
+            return String(localized: "\(f.member(inv.targetUserId)?.firstName ?? String(localized: "a member"))'s access code")
+        }
+        return inv.name.isEmpty ? String(localized: "Unnamed invitation") : inv.name
+    }
+
     private func memberRow(_ m: Member, info f: FamilyInfo) -> some View {
         HStack(spacing: 12) {
             MemberAvatar(initials: m.initials, size: 40, highlighted: m.id == f.me)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(m.displayName).font(.kBody)
-                    if m.id == f.me { Tag("Tú") }
+                    if m.id == f.me { Tag("You") }
                     if m.isAdmin { Tag("Admin") }
                 }
                 Text(m.email).font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
@@ -159,16 +171,16 @@ struct FamilyScreen: View {
             Spacer()
             if f.isAdmin, m.id != f.me {
                 Menu {
-                    Button { Task { await accessCode(m) } } label: { Label("Código de acceso", systemImage: "key") }
+                    Button { Task { await accessCode(m) } } label: { Label("Access code", systemImage: "key") }
                     Button { Task { await setRole(m, m.isAdmin ? "member" : "admin") } } label: {
-                        Label(m.isAdmin ? "Quitar como administrador" : "Hacer administrador", systemImage: "person.badge.shield.checkmark")
+                        Label(m.isAdmin ? "Remove as admin" : "Make admin", systemImage: "person.badge.shield.checkmark")
                     }
                     Divider()
-                    Button(role: .destructive) { removing = m } label: { Label("Quitar de la familia", systemImage: "person.badge.minus") }
+                    Button(role: .destructive) { removing = m } label: { Label("Remove from family", systemImage: "person.badge.minus") }
                 } label: {
                     Image(systemName: "ellipsis").frame(width: 36, height: 36).contentShape(Rectangle())
                 }
-                .accessibilityLabel("Opciones de \(m.displayName)")
+                .accessibilityLabel("Options for \(m.displayName)")
             }
         }
         .padding(.vertical, 10)
@@ -177,40 +189,40 @@ struct FamilyScreen: View {
     private func accessCode(_ m: Member) async {
         do {
             let c = try await model.api.accessCode(memberId: m.id)
-            created = CreatedCode(created: c, title: "Código de acceso para \(m.firstName)", household: model.family?.household.name ?? "Kairo")
+            created = CreatedCode(created: c, title: String(localized: "Access code for \(m.firstName)"), household: model.family?.household.name ?? "Kairo")
             await reload()
         } catch {
-            model.show(Toast(title: "No se pudo crear el código", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't create the code"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 
     private func setRole(_ m: Member, _ role: String) async {
-        await attempt(model, role == "admin" ? "\(m.firstName) ahora administra la familia" : "\(m.firstName) ya no es administrador") {
+        await attempt(model, role == "admin" ? "\(m.firstName) now manages the family" : "\(m.firstName) is no longer an admin") {
             _ = try await model.api.setMemberRole(m.id, role: role)
         }
         await model.refreshFamily()
         await reload()
     }
 
-    // MARK: Avisar
+    // MARK: Notify
 
     private func messageCard(_ f: FamilyInfo) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Avisar a la familia").font(.kHeadline)
+            Text("Notify the family").font(.kHeadline)
             if f.others.isEmpty {
-                Text("Cuando invites a alguien, podrás avisarle al instante.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                Text("When you invite someone, you'll be able to notify them instantly.").font(.kSubheadline).foregroundStyle(KairoColor.muted)
             } else {
                 if f.others.count > 1 {
                     ScrollView(.horizontal) {
                         HStack(spacing: 8) {
-                            FilterChip("Todos", selected: messageTo == nil) { messageTo = nil }
+                            FilterChip("Everyone", selected: messageTo == nil) { messageTo = nil }
                             ForEach(f.others) { m in FilterChip(m.firstName, selected: messageTo == m.id) { messageTo = m.id } }
                         }
                     }
                     .scrollIndicators(.hidden)
                 }
                 HStack(spacing: 8) {
-                    TextField("La cena está lista", text: $message, axis: .vertical)
+                    TextField("Dinner is ready", text: $message, axis: .vertical)
                         .lineLimit(1...4)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
@@ -222,15 +234,22 @@ struct FamilyScreen: View {
                     .foregroundStyle(message.trimmingCharacters(in: .whitespaces).isEmpty ? KairoColor.faint : KairoColor.onAccent)
                     .background(message.trimmingCharacters(in: .whitespaces).isEmpty ? KairoColor.surface2 : KairoColor.accent, in: Circle())
                     .disabled(message.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .accessibilityLabel("Enviar aviso")
+                    .accessibilityLabel("Send notice")
                 }
-                let who = messageTo.flatMap { f.member($0)?.firstName } ?? ListFormatter.localizedString(byJoining: f.others.map(\.firstName))
-                Text("Le llega a \(who) al instante como notificación.").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                let who = messageTo.flatMap { f.member($0)?.firstName } ?? joinedNames(f.others.map(\.firstName))
+                Text("It reaches \(who) instantly as a notification.").font(.kFootnote).foregroundStyle(KairoColor.muted)
             }
         }
         .padding(16)
         .background(KairoColor.surface, in: RoundedRectangle(cornerRadius: KairoRadius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: KairoRadius.card, style: .continuous).strokeBorder(KairoColor.border))
+    }
+
+    /// "Alex, Sam and Mia" in the app language.
+    private func joinedNames(_ names: [String]) -> String {
+        let f = ListFormatter()
+        f.locale = KairoLanguage.locale
+        return f.string(from: names) ?? names.joined(separator: ", ")
     }
 
     private func sendMessage(_ f: FamilyInfo) async {
@@ -240,21 +259,21 @@ struct FamilyScreen: View {
             let n = try await model.api.familyMessage(t, to: messageTo.map { [$0] })
             message = ""
             let who = messageTo.flatMap { f.member($0)?.firstName }
-            model.show(Toast(title: who.map { "Aviso enviado a \($0)" } ?? "Aviso enviado a \(n) personas", symbol: "paperplane"))
+            model.show(Toast(title: who.map { String(localized: "Notice sent to \($0)") } ?? String(localized: "Notice sent to \(n) people"), symbol: "paperplane"))
         } catch {
-            model.show(Toast(title: "No se pudo enviar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't send"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 
-    // MARK: Novedades
+    // MARK: Updates
 
     private func noticesCard(_ notices: [Notice]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Novedades").font(.kHeadline)
+                Text("Updates").font(.kHeadline)
                 Spacer()
                 if notices.contains(where: { $0.readAt == nil }) {
-                    Button("Marcar todo leído") {
+                    Button("Mark all as read") {
                         Task {
                             try? await model.api.markNoticesRead()
                             model.unreadNotices = 0
@@ -265,7 +284,7 @@ struct FamilyScreen: View {
                 }
             }
             if notices.isEmpty {
-                Text("Sin novedades").font(.kSubheadline).foregroundStyle(KairoColor.muted)
+                Text("No updates").font(.kSubheadline).foregroundStyle(KairoColor.muted)
             }
             ForEach(notices) { n in
                 Button {
@@ -296,8 +315,8 @@ struct FamilyScreen: View {
 }
 
 private struct Tag: View {
-    var text: String
-    init(_ text: String) { self.text = text }
+    var text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
     var body: some View {
         Text(text).font(.kCaption).foregroundStyle(KairoColor.muted)
             .padding(.horizontal, 7).padding(.vertical, 2)
@@ -305,7 +324,7 @@ private struct Tag: View {
     }
 }
 
-/// Código recién creado (invitación o acceso) para compartir.
+/// Freshly created code (invitation or access) to share.
 struct CreatedCode: Identifiable {
     var created: InviteCreated
     var title: String
@@ -325,29 +344,29 @@ private struct InviteSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Nombre (Sofía)", text: $name).textContentType(.givenName)
-                    Toggle("Administrador", isOn: $admin).tint(KairoColor.accent)
+                    TextField("Name (Sam)", text: $name).textContentType(.givenName)
+                    Toggle("Administrator", isOn: $admin).tint(KairoColor.accent)
                 } footer: {
-                    Text("Verá y editará lo familiar; lo suyo personal sigue siendo privado. Recibirás un código de un solo uso que vence en 7 días.")
+                    Text("They'll see and edit what's shared with the family; their personal things stay private. You'll get a one-time code that expires in 7 days.")
                 }
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle("Invitar a la familia")
+            .navigationTitle("Invite someone")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Crear invitación") {
+                    Button("Create invitation") {
                         Task {
                             busy = true
                             defer { busy = false }
                             do {
                                 let c = try await model.api.createInvite(name: name.trimmingCharacters(in: .whitespacesAndNewlines), role: admin ? "admin" : "member")
                                 dismiss()
-                                onCreated(CreatedCode(created: c, title: "Invitación para \(name.isEmpty ? "tu familia" : name)", household: model.family?.household.name ?? "Kairo"))
+                                onCreated(CreatedCode(created: c, title: String(localized: "Invitation for \(name.isEmpty ? String(localized: "your family") : name)"), household: model.family?.household.name ?? "Kairo"))
                             } catch {
-                                model.show(Toast(title: "No se pudo crear", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+                                model.show(Toast(title: String(localized: "Couldn't create"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
                             }
                         }
                     }
@@ -366,8 +385,8 @@ private struct CodeSheet: View {
 
     private var shareText: String {
         code.created.invitation.kind == "reset"
-            ? "Tu código de acceso a Kairo es \(code.created.code). Ábrelo en \(code.created.link) o, en la app, toca \"Tengo un código de invitación\"."
-            : "Te invito a \(code.household) en Kairo. Únete en \(code.created.link) o, en la app, toca \"Tengo un código de invitación\" y escribe \(code.created.code)."
+            ? String(localized: "Your Kairo access code is \(code.created.code). Open \(code.created.link) or, in the app, tap \"I have an invite code\".")
+            : String(localized: "I'm inviting you to \(code.household) on Kairo. Join at \(code.created.link) or, in the app, tap \"I have an invite code\" and enter \(code.created.code).")
     }
 
     var body: some View {
@@ -381,24 +400,24 @@ private struct CodeSheet: View {
                     .padding(.vertical, 16)
                     .background(KairoColor.surface2, in: RoundedRectangle(cornerRadius: KairoRadius.card, style: .continuous))
                     .selectableText()
-                    .accessibilityLabel("Código \(code.created.code.map(String.init).joined(separator: " "))")
-                Text(code.created.invitation.kind == "reset" ? "Vence en 24 horas y sirve una sola vez." : "Vence en 7 días y sirve una sola vez.")
+                    .accessibilityLabel("Code \(code.created.code.map(String.init).joined(separator: " "))")
+                Text(code.created.invitation.kind == "reset" ? "Expires in 24 hours and works only once." : "Expires in 7 days and works only once.")
                     .font(.kFootnote).foregroundStyle(KairoColor.muted)
                 HStack(spacing: 12) {
                     Button {
                         UIPasteboard.general.string = code.created.code
                         withAnimation(KairoMotion.base) { copied = true }
-                    } label: { Label(copied ? "Copiado" : "Copiar código", systemImage: copied ? "checkmark" : "doc.on.doc") }
+                    } label: { Label(copied ? "Copied" : "Copy code", systemImage: copied ? "checkmark" : "doc.on.doc") }
                         .buttonStyle(KairoButtonStyle(kind: .secondary))
                         .sensoryFeedback(.success, trigger: copied)
-                    ShareLink(item: shareText) { Label(code.created.invitation.kind == "reset" ? "Compartir código" : "Compartir invitación", systemImage: "square.and.arrow.up") }
+                    ShareLink(item: shareText) { Label(code.created.invitation.kind == "reset" ? "Share code" : "Share invitation", systemImage: "square.and.arrow.up") }
                         .buttonStyle(KairoButtonStyle(kind: .primary))
                 }
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .kairoBackground()
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } } }
         }
         .presentationDetents([.medium])
     }

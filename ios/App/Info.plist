@@ -7,7 +7,7 @@
 		<string>$(KAIRO_BUNDLE_ID).sync</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>es</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Kairo</string>
 	<key>CFBundleExecutable</key>
@@ -16,6 +16,11 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>es</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
@@ -46,20 +51,20 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Kairo pone las alarmas y los temporizadores que le pides.</string>
+	<string>Kairo sets the alarms and timers you ask it for.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Para avisarte al llegar o salir de los lugares de tus recordatorios.</string>
+	<string>To notify you when you arrive at or leave the places in your reminders.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Para guardar lugares y darte el clima de donde estás.</string>
+	<string>To save places and give you the weather where you are.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Kairo te escucha cuando le hablas y graba las reuniones que le pides.</string>
+	<string>Kairo listens when you talk to it and records the meetings you ask it to.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Para reconocer "Oye Kairo" dentro del teléfono, sin enviar audio hasta que lo dices.</string>
+	<string>To recognize "Hey Kairo" on the phone itself, without sending audio until you say it.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>

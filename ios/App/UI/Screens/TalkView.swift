@@ -2,7 +2,7 @@ import SwiftUI
 import KairoCore
 import KairoUI
 
-/// Conversación por voz a pantalla completa: el orbe, lo que dijiste, lo que hizo Kairo y su respuesta.
+/// Full-screen voice conversation: the orb, what you said, what Kairo did and its answer.
 struct TalkView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -42,7 +42,7 @@ struct TalkView: View {
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
             .padding(16)
-            .accessibilityLabel("Cerrar")
+            .accessibilityLabel("Close")
         }
         .kairoBackground()
         .sensoryFeedback(.impact(weight: .light), trigger: voice.phase)
@@ -55,8 +55,8 @@ struct TalkView: View {
                 .frame(width: size, height: size)
                 .onTapGesture { tapOrb() }
                 .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Toca para hablar o detener")
-            Text(voice.statusText)
+                .accessibilityHint("Tap to talk or stop")
+            Text(verbatim: voice.statusText)
                 .font(.kairo(17, .medium))
                 .foregroundStyle(voice.errorMessage != nil && voice.phase == .idle ? KairoColor.danger : KairoColor.muted)
                 .contentTransition(.opacity)
@@ -69,7 +69,7 @@ struct TalkView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if let t = voice.turn.transcript, !t.isEmpty {
-                        Text("“\(t)”")
+                        Text(verbatim: "“\(t)”")
                             .font(.kairo(19, .medium))
                             .foregroundStyle(KairoColor.text)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -101,7 +101,7 @@ struct TalkView: View {
     private var controls: some View {
         HStack(spacing: 12) {
             if typing {
-                TextField("Escribe a Kairo", text: $text, axis: .vertical)
+                TextField("Type to Kairo", text: $text, axis: .vertical)
                     .font(.kBody)
                     .lineLimit(1...4)
                     .focused($focused)
@@ -123,7 +123,7 @@ struct TalkView: View {
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Nueva conversación")
+                .accessibilityLabel("New conversation")
                 Spacer()
                 Button(action: tapOrb) {
                     Image(systemName: voice.phase == .idle ? "mic.fill" : "stop.fill")
@@ -134,14 +134,14 @@ struct TalkView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(KairoColor.onAccent)
                 .background(KairoColor.accent, in: Circle())
-                .accessibilityLabel(voice.phase == .idle ? "Hablar" : "Detener")
+                .accessibilityLabel(voice.phase == .idle ? "Talk" : "Stop")
                 Spacer()
                 Button { withAnimation(KairoMotion.base) { typing = true }; focused = true } label: {
                     Image(systemName: "keyboard").font(.system(size: 17, weight: .medium)).frame(width: 50, height: 50)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .circle)
-                .accessibilityLabel("Escribir")
+                .accessibilityLabel("Type")
             }
         }
         .padding(.horizontal, 20)

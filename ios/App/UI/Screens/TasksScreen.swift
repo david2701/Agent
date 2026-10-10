@@ -7,7 +7,7 @@ struct TasksBundle: Equatable {
     var projects: [Project]
 }
 
-/// Tareas: lista por estado en el iPhone; tablero de tres columnas en iPad y en el iPhone Duo abierto.
+/// Tasks: list by status on iPhone; three-column board on iPad and on an unfolded iPhone Duo.
 struct TasksScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -25,16 +25,16 @@ struct TasksScreen: View {
             VStack(spacing: 0) {
                 if model.hasFamily {
                     OwnershipFilter<Filter>(options: [
-                        (.all, "Todas", nil),
-                        (.mine, "Asignadas a mí", b.tasks.filter { isAssignedToMe($0) && !$0.isDone }.count),
-                        (.family, "Familiares", b.tasks.filter { $0.shared && !$0.isDone }.count),
+                        (.all, "All", nil),
+                        (.mine, "Assigned to me", b.tasks.filter { isAssignedToMe($0) && !$0.isDone }.count),
+                        (.family, "Shared", b.tasks.filter { $0.shared && !$0.isDone }.count),
                     ], selection: $filter)
                     .padding(.vertical, 8)
                 }
                 if tasks.isEmpty {
-                    EmptyStateView(symbol: "checkmark.circle", title: "Nada por aquí",
-                                   message: "Dile a Kairo \"recuérdame pagar la luz el viernes\" o crea una tarea.",
-                                   actionTitle: "Nueva tarea") { editing = TaskDraft() }
+                    EmptyStateView(symbol: "checkmark.circle", title: "Nothing here",
+                                   message: "Tell Kairo \"remind me to pay the electricity bill on Friday\" or create a task.",
+                                   actionTitle: "New task") { editing = TaskDraft() }
                         .frame(maxHeight: .infinity)
                 } else if hSize == .regular {
                     board(tasks, projects: b.projects)
@@ -43,10 +43,10 @@ struct TasksScreen: View {
                 }
             }
         }
-        .navigationTitle("Tareas")
+        .navigationTitle("Tasks")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { editing = TaskDraft() } label: { Label("Nueva tarea", systemImage: "plus") }
+                Button { editing = TaskDraft() } label: { Label("New task", systemImage: "plus") }
                     .keyboardShortcut("n", modifiers: .command)
             }
         }
@@ -93,7 +93,7 @@ struct TasksScreen: View {
 
     private func rank(_ p: String) -> Int { ["low": 0, "medium": 1, "high": 2, "urgent": 3][p] ?? 1 }
 
-    // MARK: Lista (compacto)
+    // MARK: List (compact)
 
     private func list(_ tasks: [KTask], projects: [Project]) -> some View {
         let todo = sorted(tasks.filter { $0.status == "todo" || pendingDone.contains($0.id) })
@@ -101,16 +101,16 @@ struct TasksScreen: View {
         let done = tasks.filter { $0.isDone && !pendingDone.contains($0.id) }.sorted { ($0.completedAt ?? "") > ($1.completedAt ?? "") }
         return List {
             if !doing.isEmpty {
-                Section { ForEach(doing) { row($0) } } header: { SectionLabel("En curso", count: doing.count) }
+                Section { ForEach(doing) { row($0) } } header: { SectionLabel("In progress", count: doing.count) }
             }
             if !todo.isEmpty {
-                Section { ForEach(todo) { row($0) } } header: { SectionLabel("Por hacer", count: todo.count) }
+                Section { ForEach(todo) { row($0) } } header: { SectionLabel("To do", count: todo.count) }
             }
             if !done.isEmpty {
                 Section(isExpanded: $showDone) {
                     ForEach(done.prefix(50)) { row($0) }
                 } header: {
-                    SectionLabel("Hecho", count: done.count)
+                    SectionLabel("Done", count: done.count)
                 }
             }
         }
@@ -128,33 +128,33 @@ struct TasksScreen: View {
             .contentShape(Rectangle())
             .onTapGesture { editing = TaskDraft(t) }
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                Button { toggle(t) } label: { Label(t.isDone ? "Pendiente" : "Hecho", systemImage: t.isDone ? "arrow.uturn.backward" : "checkmark") }
+                Button { toggle(t) } label: { Label(t.isDone ? "Reopen" : "Done", systemImage: t.isDone ? "arrow.uturn.backward" : "checkmark") }
                     .tint(KairoColor.success)
             }
             .swipeActions(edge: .trailing) {
-                Button(role: .destructive) { delete(t) } label: { Label("Eliminar", systemImage: "trash") }
+                Button(role: .destructive) { delete(t) } label: { Label("Delete", systemImage: "trash") }
                 if t.status == "todo" {
-                    Button { setStatus(t, "doing") } label: { Label("En curso", systemImage: "play") }.tint(KairoColor.accent)
+                    Button { setStatus(t, "doing") } label: { Label("In progress", systemImage: "play") }.tint(KairoColor.accent)
                 }
             }
             .contextMenu { menu(t) }
     }
 
     @ViewBuilder private func menu(_ t: KTask) -> some View {
-        Button { editing = TaskDraft(t) } label: { Label("Editar tarea", systemImage: "pencil") }
-        if t.status != "doing" && !t.isDone { Button { setStatus(t, "doing") } label: { Label("Pasar a en curso", systemImage: "play") } }
-        Button { toggle(t) } label: { Label(t.isDone ? "Marcar pendiente" : "Marcar hecha", systemImage: t.isDone ? "arrow.uturn.backward" : "checkmark") }
+        Button { editing = TaskDraft(t) } label: { Label("Edit task", systemImage: "pencil") }
+        if t.status != "doing" && !t.isDone { Button { setStatus(t, "doing") } label: { Label("Move to in progress", systemImage: "play") } }
+        Button { toggle(t) } label: { Label(t.isDone ? "Mark as to do" : "Mark as done", systemImage: t.isDone ? "arrow.uturn.backward" : "checkmark") }
         Divider()
-        Button(role: .destructive) { delete(t) } label: { Label("Eliminar", systemImage: "trash") }
+        Button(role: .destructive) { delete(t) } label: { Label("Delete", systemImage: "trash") }
     }
 
-    // MARK: Tablero (regular)
+    // MARK: Board (regular)
 
     private func board(_ tasks: [KTask], projects: [Project]) -> some View {
-        let columns: [(String, String, [KTask])] = [
-            ("todo", "Por hacer", sorted(tasks.filter { $0.status == "todo" })),
-            ("doing", "En curso", sorted(tasks.filter { $0.status == "doing" })),
-            ("done", "Hecho", Array(tasks.filter(\.isDone).sorted { ($0.completedAt ?? "") > ($1.completedAt ?? "") }.prefix(40))),
+        let columns: [(String, LocalizedStringKey, [KTask])] = [
+            ("todo", "To do", sorted(tasks.filter { $0.status == "todo" })),
+            ("doing", "In progress", sorted(tasks.filter { $0.status == "doing" })),
+            ("done", "Done", Array(tasks.filter(\.isDone).sorted { ($0.completedAt ?? "") > ($1.completedAt ?? "") }.prefix(40))),
         ]
         return ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 14) {
@@ -190,7 +190,7 @@ struct TasksScreen: View {
         .animation(KairoMotion.spring, value: tasks)
     }
 
-    // MARK: Acciones
+    // MARK: Actions
 
     private func toggle(_ t: KTask) {
         if t.isDone {
@@ -199,7 +199,7 @@ struct TasksScreen: View {
         }
         withAnimation(KairoMotion.spring) { _ = pendingDone.insert(t.id) }
         Task {
-            await attempt(model, "Tarea completada") { _ = try await model.api.updateTask(t.id, ["status": "done"]) }
+            await attempt(model, "Task completed") { _ = try await model.api.updateTask(t.id, ["status": "done"]) }
             try? await Task.sleep(for: .milliseconds(500))
             await reload()
             pendingDone.remove(t.id)
@@ -215,13 +215,13 @@ struct TasksScreen: View {
 
     private func delete(_ t: KTask) {
         Task {
-            await attempt(model, "Tarea eliminada. Puedes deshacerlo en Actividad.") { try await model.api.deleteTask(t.id) }
+            await attempt(model, "Task deleted. You can undo it in Activity.") { try await model.api.deleteTask(t.id) }
             await reload()
         }
     }
 }
 
-/// Tarjeta del tablero.
+/// Board card.
 private struct BoardCard: View {
     @Environment(AppModel.self) private var model
     var task: KTask
@@ -302,54 +302,60 @@ struct TaskEditor: View {
         return false
     }
 
+    /// Why the "Family" switch is locked, when the task is assigned to someone else.
+    private var lockedReason: String? {
+        guard assignedToOther else { return nil }
+        let who = model.family?.member(draft.assigneeId)?.firstName ?? String(localized: "another member")
+        return String(localized: "Assigning it to \(who) makes it a family task.")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Qué hay que hacer", text: $draft.title, axis: .vertical)
+                    TextField("What needs to be done", text: $draft.title, axis: .vertical)
                         .font(.kairo(18, .medium))
                         .focused($titleFocused)
-                    TextField("Notas", text: $draft.notes, axis: .vertical).lineLimit(2...6)
+                    TextField("Notes", text: $draft.notes, axis: .vertical).lineLimit(2...6)
                 }
                 Section {
-                    Toggle(isOn: $draft.hasDue.animation(KairoMotion.base)) { Label("Fecha límite", systemImage: "calendar") }
+                    Toggle(isOn: $draft.hasDue.animation(KairoMotion.base)) { Label("Due date", systemImage: "calendar") }
                     if draft.hasDue {
-                        DatePicker("Día", selection: $draft.due, displayedComponents: .date)
+                        DatePicker("Day", selection: $draft.due, displayedComponents: .date)
                             .datePickerStyle(.graphical)
                             .tint(KairoColor.accent)
                     }
                     Picker(selection: $draft.priority) {
-                        Text("Baja").tag("low")
-                        Text("Media").tag("medium")
-                        Text("Alta").tag("high")
-                        Text("Urgente").tag("urgent")
-                    } label: { Label("Prioridad", systemImage: "flag") }
+                        Text("Low").tag("low")
+                        Text("Medium").tag("medium")
+                        Text("High").tag("high")
+                        Text("Urgent").tag("urgent")
+                    } label: { Label("Priority", systemImage: "flag") }
                     if !projects.isEmpty {
                         Picker(selection: $draft.projectId) {
-                            Text("Ninguno").tag(String?.none)
+                            Text("None").tag(String?.none)
                             ForEach(projects) { p in Text(p.name).tag(Optional(p.id)) }
-                        } label: { Label("Proyecto", systemImage: "folder") }
+                        } label: { Label("Project", systemImage: "folder") }
                     }
                     if draft.original != nil {
                         Picker(selection: $draft.status) {
-                            Text("Por hacer").tag("todo")
-                            Text("En curso").tag("doing")
-                            Text("Hecho").tag("done")
-                        } label: { Label("Estado", systemImage: "circle.dashed") }
+                            Text("To do").tag("todo")
+                            Text("In progress").tag("doing")
+                            Text("Done").tag("done")
+                        } label: { Label("Status", systemImage: "circle.dashed") }
                     }
                 }
                 if model.hasFamily {
                     Section {
-                        MemberPicker(title: "Responsable", memberId: $draft.assigneeId)
-                        FamilyShareToggle(shared: $draft.shared, ownerId: draft.original?.ownerId,
-                                          lockedReason: assignedToOther ? "Al asignarla a \(model.family?.member(draft.assigneeId)?.firstName ?? "otro miembro") se vuelve familiar." : nil)
+                        MemberPicker(title: "Assignee", memberId: $draft.assigneeId)
+                        FamilyShareToggle(shared: $draft.shared, ownerId: draft.original?.ownerId, lockedReason: lockedReason)
                     }
                 }
                 if let t = draft.original {
                     Section {
-                        Button("Eliminar tarea", role: .destructive) {
+                        Button("Delete task", role: .destructive) {
                             Task {
-                                await attempt(model, "Tarea eliminada") { try await model.api.deleteTask(t.id) }
+                                await attempt(model, "Task deleted") { try await model.api.deleteTask(t.id) }
                                 await onSaved()
                                 dismiss()
                             }
@@ -359,12 +365,12 @@ struct TaskEditor: View {
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle(draft.original == nil ? "Nueva tarea" : "Editar tarea")
+            .navigationTitle(draft.original == nil ? "New task" : "Edit task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") { Task { await save() } }
+                    Button("Save") { Task { await save() } }
                         .disabled(busy || draft.title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
@@ -394,11 +400,11 @@ struct TaskEditor: View {
                 b = b.filter { !$0.value.isNull }
                 _ = try await model.api.createTask(b)
             }
-            model.show(Toast(title: isNew ? "Tarea creada" : "Tarea guardada"))
+            model.show(Toast(title: isNew ? String(localized: "Task created") : String(localized: "Task saved")))
             await onSaved()
             dismiss()
         } catch {
-            model.show(Toast(title: "No se pudo guardar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't save"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 }

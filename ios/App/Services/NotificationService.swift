@@ -2,8 +2,8 @@ import Foundation
 import UserNotifications
 import KairoCore
 
-/// Notificaciones locales: recordatorios, avisos de eventos y resumen matinal suenan aunque no haya internet.
-/// También muestra al instante lo que llega por la conexión en vivo con la app en segundo plano.
+/// Local notifications: reminders, event alerts and the morning briefing ring even without internet.
+/// It also shows instantly what arrives over the live connection while the app is in the background.
 enum NotificationService {
     static let categoryReminder = "kairo.reminder"
     static let categoryBriefing = "kairo.briefing"
@@ -13,9 +13,9 @@ enum NotificationService {
     private static let managedPrefixes = ["rem:", "ev:", "brief:"]
 
     static func registerCategories() {
-        let done = UNNotificationAction(identifier: actionDone, title: "Hecho", options: [], icon: UNNotificationActionIcon(systemImageName: "checkmark"))
-        let snooze = UNNotificationAction(identifier: actionSnooze, title: "En 10 min", options: [], icon: UNNotificationActionIcon(systemImageName: "clock.arrow.circlepath"))
-        let listen = UNNotificationAction(identifier: actionListen, title: "Escuchar", options: [.foreground], icon: UNNotificationActionIcon(systemImageName: "play.fill"))
+        let done = UNNotificationAction(identifier: actionDone, title: String(localized: "Done"), options: [], icon: UNNotificationActionIcon(systemImageName: "checkmark"))
+        let snooze = UNNotificationAction(identifier: actionSnooze, title: String(localized: "Snooze 10 min"), options: [], icon: UNNotificationActionIcon(systemImageName: "clock.arrow.circlepath"))
+        let listen = UNNotificationAction(identifier: actionListen, title: String(localized: "Listen"), options: [.foreground], icon: UNNotificationActionIcon(systemImageName: "play.fill"))
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(identifier: categoryReminder, actions: [done, snooze], intentIdentifiers: []),
             UNNotificationCategory(identifier: categoryBriefing, actions: [listen], intentIdentifiers: []),
@@ -26,7 +26,7 @@ enum NotificationService {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    /// Reemplaza las notificaciones programadas por el plan nuevo (sin tocar las que no cambian).
+    /// Replaces the scheduled notifications with the new plan (without touching the ones that do not change).
     static func apply(_ plan: [PlannedNotification]) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
@@ -75,7 +75,7 @@ enum NotificationService {
         var info = ["destination": destination]
         entityId.map { info["entityId"] = $0 }
         content.userInfo = info
-        // Si ya estaba programada la alarma local con el mismo id, se reemplaza: suena una sola vez
+        // If the local alarm with the same id was already scheduled, it is replaced: it rings only once
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }

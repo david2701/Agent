@@ -7,7 +7,7 @@ struct RemindersBundle: Equatable {
     var places: [Place]
 }
 
-/// Recordatorios: lo que sonó, lo próximo, por lugar y los que se repiten; y tus lugares.
+/// Reminders: what went off, what is next, by place and the repeating ones; and your places.
 struct RemindersScreen: View {
     @Environment(AppModel.self) private var model
     @State private var state: Loadable<RemindersBundle> = .loading
@@ -27,51 +27,51 @@ struct RemindersScreen: View {
             let done = b.reminders.filter { $0.status == "done" || $0.status == "cancelled" }
             List {
                 if b.reminders.isEmpty {
-                    EmptyStateView(symbol: "bell", title: "Nada pendiente",
-                                   message: "Dile a Kairo \"recuérdame llamar a mamá mañana a las 6\" o \"cuando llegue a casa, sacar la basura\".",
-                                   actionTitle: "Nuevo recordatorio") { editing = ReminderDraft() }
+                    EmptyStateView(symbol: "bell", title: "Nothing pending",
+                                   message: "Tell Kairo \"remind me to call mom tomorrow at 6\" or \"when I get home, take out the trash\".",
+                                   actionTitle: "New reminder") { editing = ReminderDraft() }
                         .listRowBackground(Color.clear)
                 }
                 if !fired.isEmpty {
-                    Section { ForEach(fired) { r in row(r, highlight: true) } } header: { SectionLabel("Sonaron", count: fired.count, tint: KairoColor.accentStrong) }
+                    Section { ForEach(fired) { r in row(r, highlight: true) } } header: { SectionLabel("Went off", count: fired.count, tint: KairoColor.accentStrong) }
                 }
                 if !timed.isEmpty {
-                    Section { ForEach(timed) { row($0) } } header: { SectionLabel("Próximos", count: timed.count) }
+                    Section { ForEach(timed) { row($0) } } header: { SectionLabel("Upcoming", count: timed.count) }
                 }
                 if !byPlace.isEmpty {
-                    Section { ForEach(byPlace) { row($0) } } header: { SectionLabel("Por lugar", count: byPlace.count) }
+                    Section { ForEach(byPlace) { row($0) } } header: { SectionLabel("By place", count: byPlace.count) }
                 }
                 if !repeating.isEmpty {
-                    Section { ForEach(repeating) { row($0) } } header: { SectionLabel("Se repiten", count: repeating.count) }
+                    Section { ForEach(repeating) { row($0) } } header: { SectionLabel("Repeating", count: repeating.count) }
                 }
                 if !done.isEmpty {
                     Section(isExpanded: $showDone) {
                         ForEach(done.prefix(30)) { r in
                             ReminderRow(reminder: r).opacity(0.6)
                                 .listRowBackground(KairoColor.surface)
-                                .swipeActions { Button(role: .destructive) { delete(r) } label: { Label("Eliminar", systemImage: "trash") } }
+                                .swipeActions { Button(role: .destructive) { delete(r) } label: { Label("Delete", systemImage: "trash") } }
                         }
-                    } header: { SectionLabel("Hechos", count: done.count) }
+                    } header: { SectionLabel("Completed", count: done.count) }
                 }
                 Section {
                     ForEach(b.places) { p in placeRow(p) }
                     if savingPlace {
                         HStack {
-                            TextField("Nombre (Casa, Trabajo, Súper)", text: $placeName).submitLabel(.done).onSubmit { Task { await savePlace() } }
-                            Button("Guardar") { Task { await savePlace() } }.disabled(placeName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            TextField("Name (Home, Work, Store)", text: $placeName).submitLabel(.done).onSubmit { Task { await savePlace() } }
+                            Button("Save") { Task { await savePlace() } }.disabled(placeName.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
                         .listRowBackground(KairoColor.surface)
-                        Text("Se usará tu ubicación actual.").font(.kFootnote).foregroundStyle(KairoColor.muted).listRowBackground(Color.clear)
+                        Text("Your current location will be used.").font(.kFootnote).foregroundStyle(KairoColor.muted).listRowBackground(Color.clear)
                     } else {
                         Button { withAnimation(KairoMotion.base) { savingPlace = true } } label: {
-                            Label("Guardar este lugar", systemImage: "location")
+                            Label("Save this place", systemImage: "location")
                         }
                         .listRowBackground(KairoColor.surface)
                     }
                 } header: {
-                    SectionLabel("Lugares", count: b.places.count)
+                    SectionLabel("Places", count: b.places.count)
                 } footer: {
-                    Text("Kairo te avisa al llegar o salir aunque la app esté cerrada. Para eso, permite la ubicación \"Siempre\".")
+                    Text("Kairo notifies you when you arrive or leave, even if the app is closed. To do that, allow \"Always\" location access.")
                 }
             }
             .listStyle(.insetGrouped)
@@ -79,10 +79,10 @@ struct RemindersScreen: View {
             .refreshable { await reload() }
             .animation(KairoMotion.spring, value: b)
         }
-        .navigationTitle("Recordatorios")
+        .navigationTitle("Reminders")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { editing = ReminderDraft() } label: { Label("Nuevo recordatorio", systemImage: "plus") }
+                Button { editing = ReminderDraft() } label: { Label("New reminder", systemImage: "plus") }
                     .keyboardShortcut("n", modifiers: .command)
             }
         }
@@ -102,17 +102,17 @@ struct RemindersScreen: View {
 
     private func row(_ r: Reminder, highlight: Bool = false) -> some View {
         ReminderRow(reminder: r, highlight: highlight,
-                    onDone: highlight ? { act("Hecho") { _ = try await model.api.reminderDone(r.id) } } : nil,
-                    onSnooze: highlight ? { act("Te aviso en 10 minutos") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } } : nil)
+                    onDone: highlight ? { act("Done") { _ = try await model.api.reminderDone(r.id) } } : nil,
+                    onSnooze: highlight ? { act("I'll remind you in 10 minutes") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } } : nil)
             .listRowBackground(KairoColor.surface)
             .contentShape(Rectangle())
             .onTapGesture { editing = ReminderDraft(r) }
             .swipeActions(edge: .leading) {
-                Button { act("Hecho") { _ = try await model.api.reminderDone(r.id) } } label: { Label("Hecho", systemImage: "checkmark") }.tint(KairoColor.success)
+                Button { act("Done") { _ = try await model.api.reminderDone(r.id) } } label: { Label("Done", systemImage: "checkmark") }.tint(KairoColor.success)
             }
             .swipeActions(edge: .trailing) {
-                Button(role: .destructive) { delete(r) } label: { Label("Eliminar", systemImage: "trash") }
-                Button { act("Te aviso en 10 minutos") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } } label: { Label("Posponer", systemImage: "zzz") }
+                Button(role: .destructive) { delete(r) } label: { Label("Delete", systemImage: "trash") }
+                Button { act("I'll remind you in 10 minutes") { _ = try await model.api.reminderSnooze(r.id, minutes: 10) } } label: { Label("Snooze", systemImage: "zzz") }
                     .tint(KairoColor.accent)
             }
     }
@@ -125,20 +125,20 @@ struct RemindersScreen: View {
                     Text(p.name).font(.kBody)
                     if p.shared { SharedBadge(owner: model.ownerName(p.ownerId), compact: true) }
                 }
-                Text(p.address ?? "Radio \(p.radiusM) m").font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
+                Text(p.address ?? String(localized: "Radius \(p.radiusM) m")).font(.kFootnote).foregroundStyle(KairoColor.muted).lineLimit(1)
             }
             Spacer()
         }
         .listRowBackground(KairoColor.surface)
         .contextMenu {
             if model.hasFamily, p.ownerId == nil || p.ownerId == model.user?.id {
-                Button { act(p.shared ? "Ya no es familiar" : "Lugar familiar") { _ = try await model.api.sharePlace(p.id, shared: !p.shared) } } label: {
-                    Label(p.shared ? "Dejar de compartir" : "Compartir con la familia", systemImage: "house")
+                Button { act(p.shared ? "No longer shared" : "Family place") { _ = try await model.api.sharePlace(p.id, shared: !p.shared) } } label: {
+                    Label(p.shared ? "Stop sharing" : "Share with family", systemImage: "house")
                 }
             }
-            Button(role: .destructive) { act("Lugar eliminado") { try await model.api.deletePlace(p.id) } } label: { Label("Eliminar lugar", systemImage: "trash") }
+            Button(role: .destructive) { act("Place deleted") { try await model.api.deletePlace(p.id) } } label: { Label("Delete place", systemImage: "trash") }
         }
-        .swipeActions { Button(role: .destructive) { act("Lugar eliminado") { try await model.api.deletePlace(p.id) } } label: { Label("Eliminar", systemImage: "trash") } }
+        .swipeActions { Button(role: .destructive) { act("Place deleted") { try await model.api.deletePlace(p.id) } } label: { Label("Delete", systemImage: "trash") } }
     }
 
     private func savePlace() async {
@@ -146,10 +146,10 @@ struct RemindersScreen: View {
         guard !name.isEmpty else { return }
         LocationService.shared.requestAlways()
         guard let loc = await LocationService.shared.current() else {
-            model.show(Toast(title: "No se pudo obtener tu ubicación", message: "Revisa el permiso de ubicación en Ajustes.", symbol: "location.slash"))
+            model.show(Toast(title: String(localized: "Couldn't get your location"), message: String(localized: "Check the location permission in Settings."), symbol: "location.slash"))
             return
         }
-        await attempt(model, "Lugar guardado: \(name)") {
+        await attempt(model, "Place saved: \(name)") {
             _ = try await model.api.savePlace(name: name, latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude)
         }
         placeName = ""
@@ -157,14 +157,14 @@ struct RemindersScreen: View {
         await reload()
     }
 
-    private func act(_ success: String, _ f: @escaping () async throws -> Void) {
+    private func act(_ success: LocalizedStringResource, _ f: @escaping () async throws -> Void) {
         Task {
             await attempt(model, success, f)
             await reload()
         }
     }
 
-    private func delete(_ r: Reminder) { act("Eliminado. Puedes deshacerlo en Actividad.") { try await model.api.deleteReminder(r.id) } }
+    private func delete(_ r: Reminder) { act("Deleted. You can undo it in Activity.") { try await model.api.deleteReminder(r.id) } }
 }
 
 // MARK: - Editor
@@ -174,13 +174,13 @@ struct ReminderDraft: Identifiable {
     enum Repeat: String, CaseIterable, Identifiable {
         case none, daily, weekdays, weekly, monthly
         var id: String { rawValue }
-        var label: String {
+        var label: LocalizedStringKey {
             switch self {
-            case .none: "No se repite"
-            case .daily: "Cada día"
-            case .weekdays: "Días hábiles"
-            case .weekly: "Cada semana"
-            case .monthly: "Cada mes"
+            case .none: "Doesn't repeat"
+            case .daily: "Every day"
+            case .weekdays: "Weekdays"
+            case .weekly: "Every week"
+            case .monthly: "Every month"
             }
         }
     }
@@ -232,37 +232,37 @@ struct ReminderEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Qué recordar", text: $draft.text, axis: .vertical).font(.kairo(18, .medium))
-                    Picker("Cuándo", selection: $draft.mode.animation(KairoMotion.base)) {
-                        Text("A una hora").tag(ReminderDraft.Mode.time)
-                        Text("En un lugar").tag(ReminderDraft.Mode.place)
+                    TextField("What to remember", text: $draft.text, axis: .vertical).font(.kairo(18, .medium))
+                    Picker("When", selection: $draft.mode.animation(KairoMotion.base)) {
+                        Text("At a time").tag(ReminderDraft.Mode.time)
+                        Text("At a place").tag(ReminderDraft.Mode.place)
                     }
                     .pickerStyle(.segmented)
                 }
                 if draft.mode == .time {
                     Section {
-                        DatePicker("Día y hora", selection: $draft.at, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
+                        DatePicker("Day and time", selection: $draft.at, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
                         HStack(spacing: 8) {
-                            QuickTime("En 1 hora") { draft.at = .now.addingTimeInterval(3600) }
-                            QuickTime("Esta noche") { draft.at = Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: .now)! }
-                            QuickTime("Mañana") { draft.at = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: .now.addingTimeInterval(86400))! }
+                            QuickTime("In 1 hour") { draft.at = .now.addingTimeInterval(3600) }
+                            QuickTime("Tonight") { draft.at = Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: .now)! }
+                            QuickTime("Tomorrow") { draft.at = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: .now.addingTimeInterval(86400))! }
                         }
                         Picker(selection: $draft.repeats) {
                             ForEach(ReminderDraft.Repeat.allCases) { Text($0.label).tag($0) }
-                        } label: { Label("Repetir", systemImage: "repeat") }
+                        } label: { Label("Repeat", systemImage: "repeat") }
                     }
                 } else {
                     Section {
                         if places.isEmpty {
-                            Text("Guarda un lugar primero en Recordatorios > Lugares.").font(.kFootnote).foregroundStyle(KairoColor.muted)
+                            Text("Save a place first in Reminders > Places.").font(.kFootnote).foregroundStyle(KairoColor.muted)
                         } else {
                             Picker(selection: $draft.placeId) {
-                                Text("Elige un lugar").tag(String?.none)
+                                Text("Choose a place").tag(String?.none)
                                 ForEach(places) { p in Text(p.name).tag(Optional(p.id)) }
-                            } label: { Label("Lugar", systemImage: "mappin.and.ellipse") }
-                            Picker("Avisar", selection: $draft.trigger) {
-                                Text("Al llegar").tag("arrive")
-                                Text("Al salir").tag("leave")
+                            } label: { Label("Place", systemImage: "mappin.and.ellipse") }
+                            Picker("Notify", selection: $draft.trigger) {
+                                Text("On arrival").tag("arrive")
+                                Text("On leaving").tag("leave")
                             }
                             .pickerStyle(.segmented)
                         }
@@ -270,22 +270,22 @@ struct ReminderEditor: View {
                 }
                 if model.hasFamily, draft.original == nil {
                     Section {
-                        MemberPicker(title: "Para", noneLabel: "Para mí", memberId: $draft.forUserId)
+                        MemberPicker(title: "For", noneLabel: "For me", memberId: $draft.forUserId)
                     } footer: {
                         if let id = draft.forUserId, id != model.user?.id, let m = model.family?.member(id) {
-                            Text("Suena en el teléfono de \(m.firstName) y le llega un aviso.")
+                            Text("It rings on \(m.firstName)'s phone and they get a notice.")
                         }
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .kairoBackground()
-            .navigationTitle(draft.original == nil ? "Nuevo recordatorio" : "Recordatorio")
+            .navigationTitle(draft.original == nil ? "New reminder" : "Reminder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(draft.original == nil ? "Crear" : "Guardar") { Task { await save() } }
+                    Button(draft.original == nil ? "Create" : "Save") { Task { await save() } }
                         .disabled(busy || draft.text.trimmingCharacters(in: .whitespaces).isEmpty || (draft.mode == .place && draft.placeId == nil))
                 }
             }
@@ -310,25 +310,25 @@ struct ReminderEditor: View {
         do {
             if let r = draft.original {
                 _ = try await model.api.updateReminder(r.id, b)
-                model.show(Toast(title: "Recordatorio guardado", symbol: "bell"))
+                model.show(Toast(title: String(localized: "Reminder saved"), symbol: "bell"))
             } else {
                 if let target { b["forUserId"] = .string(target) }
                 _ = try await model.api.createReminder(b.filter { !$0.value.isNull })
                 let who = target.flatMap { model.family?.member($0)?.firstName }
-                model.show(Toast(title: who.map { "Recordatorio programado para \($0)" } ?? "Recordatorio creado", symbol: "bell"))
+                model.show(Toast(title: who.map { String(localized: "Reminder set for \($0)") } ?? String(localized: "Reminder created"), symbol: "bell"))
             }
             await onSaved()
             dismiss()
         } catch {
-            model.show(Toast(title: "No se pudo guardar", message: error.localizedDescription, symbol: "exclamationmark.triangle"))
+            model.show(Toast(title: String(localized: "Couldn't save"), message: error.localizedDescription, symbol: "exclamationmark.triangle"))
         }
     }
 }
 
 private struct QuickTime: View {
-    var title: String
+    var title: LocalizedStringKey
     var action: () -> Void
-    init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
+    init(_ title: LocalizedStringKey, action: @escaping () -> Void) { self.title = title; self.action = action }
 
     var body: some View {
         Button(title, action: action)
