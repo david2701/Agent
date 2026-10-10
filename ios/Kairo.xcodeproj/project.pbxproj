@@ -30,6 +30,7 @@
 		705C30A1DB783C2DCFE5477B /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EC5A16FA69237666CC5AD80 /* AppModel.swift */; };
 		71ED114A11FB6F7B40B558C8 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */; };
 		77262498E2159F9DAE69273A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31F77D751C778C8B40645715 /* WidgetKit.framework */; };
+		7DF1562C34697CF19C2EF037 /* FamilyFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */; };
 		8089AD23BC3276F493CA06B9 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3213C03D9AE59BB20116D82C /* KairoUI */; };
 		835E727D711179DE3640B375 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 7C47A7D022BD5AC45C87D97A /* KairoUI */; };
 		8925A707400684B64A9EB091 /* KairoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0DDAEA7300F693FAAFA0472B /* KairoUI */; };
@@ -41,6 +42,7 @@
 		A84F7500D9F0FF75C87CC0E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3568EE34CF8AEAB25B548074 /* Assets.xcassets */; };
 		AC055CF0B9EE8E79466E9FA2 /* KairoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FBCC43C160C59777C656610 /* KairoWatchApp.swift */; };
 		ADF87BCE7D88AB8C132F345A /* KairoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 305CF04161096F9D8756F9FF /* KairoCore */; };
+		B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E385C05FD9D47E0E19203EE /* TasksScreen.swift */; };
 		B58BFA163634DEA089B883CC /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C343F683C082B5F7179CB161 /* NotificationService.swift */; };
 		B8F80F52A5AF6BEC24A5F516 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D9EE22774C519185646F8B15 /* Assets.xcassets */; };
 		B9D9329B6FA6FE5C8859993F /* KairoWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60BCCFEDA071603941082962 /* KairoWidgetsBundle.swift */; };
@@ -142,6 +144,7 @@
 		2E31B1DAFA869872A6C83069 /* Intents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intents.swift; sourceTree = "<group>"; };
 		31F77D751C778C8B40645715 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		3568EE34CF8AEAB25B548074 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3E385C05FD9D47E0E19203EE /* TasksScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksScreen.swift; sourceTree = "<group>"; };
 		452D7E025DCB3D1443D21756 /* KairoWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KairoWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		47745F20972C8216F5F5159B /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		48EE6490929F9923A9D5E880 /* KairoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KairoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -161,6 +164,7 @@
 		816DC79E95EE8F281DF214C9 /* DeviceActionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActionService.swift; sourceTree = "<group>"; };
 		857A38C946ECE0C1BEBD3EEF /* KairoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KairoApp.swift; sourceTree = "<group>"; };
 		873CF4F6695286601659198D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyFields.swift; sourceTree = "<group>"; };
 		8B7733A998E5379EABF0A30B /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		8FC48CD93378DFF370EBF9E2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		94FDEDF1E3DE6C367D78C0AC /* ActivityTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityTypes.swift; sourceTree = "<group>"; };
@@ -275,6 +279,7 @@
 		3BD396BF200635FDA453CAB0 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				89E07E339C9FB4B78FEFF9F1 /* FamilyFields.swift */,
 				50047D865C40A2A2F8B4FD03 /* Loadable.swift */,
 				979B193DF41BFF42244BBBF9 /* Rows.swift */,
 			);
@@ -350,6 +355,7 @@
 				556F6860B7C3E208A85E22F8 /* LoginScreen.swift */,
 				FC528C9E5F8716127C4149CD /* Pending.swift */,
 				707F7FF55F1FD406C59510DE /* TalkView.swift */,
+				3E385C05FD9D47E0E19203EE /* TasksScreen.swift */,
 				1679E4951BB72CAF5529474E /* TodayScreen.swift */,
 			);
 			path = Screens;
@@ -640,6 +646,7 @@
 				8B4DB8F2E4033506305BD12E /* AppConfig.swift in Sources */,
 				705C30A1DB783C2DCFE5477B /* AppModel.swift in Sources */,
 				C89275E93D4E94EABF00AC2F /* DeviceActionService.swift in Sources */,
+				7DF1562C34697CF19C2EF037 /* FamilyFields.swift in Sources */,
 				4D7CF4DBD2641E627C322CCB /* Intents.swift in Sources */,
 				1B094C983E8CBDA0B438E320 /* KairoApp.swift in Sources */,
 				F01D9C56AE43158924220086 /* Loadable.swift in Sources */,
@@ -651,6 +658,7 @@
 				A53834D73882B6630C6F62F8 /* Rows.swift in Sources */,
 				C9AC3A239D61DD317D0AACCC /* SyncService.swift in Sources */,
 				4F19CCD0ACB9FC0AFB96FDDE /* TalkView.swift in Sources */,
+				B3AE6BA3D6B44E83C8585744 /* TasksScreen.swift in Sources */,
 				1B9B162022F98F2CA33981BD /* TodayScreen.swift in Sources */,
 				5FACB13713129F609F00DEA1 /* VoiceEngine.swift in Sources */,
 				0B610B40E67D229B7F1090AE /* WakeWordService.swift in Sources */,

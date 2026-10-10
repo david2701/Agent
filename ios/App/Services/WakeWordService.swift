@@ -68,7 +68,7 @@ final class WakeWordService {
     private func begin() throws {
         end()
         let s = AVAudioSession.sharedInstance()
-        try s.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+        try s.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
         try s.setActive(true)
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true

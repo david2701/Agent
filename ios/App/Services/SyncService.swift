@@ -23,9 +23,11 @@ final class SyncService {
 
     /// iOS decide cuándo; pedimos cada 15 minutos como mínimo.
     nonisolated static func scheduleBackgroundRefresh() {
-        let req = BGAppRefreshTaskRequest(identifier: AppConfig.syncTaskId)
-        req.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(req)
+        Task {
+            let req = BGAppRefreshTaskRequest(identifier: AppConfig.syncTaskId)
+            req.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+            try? await BGTaskScheduler.shared.submitTaskRequest(req)
+        }
     }
 }
 
@@ -127,9 +129,11 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     /// Ubicación actual, pidiendo una lectura nueva.
     func current() async -> CLLocation? {
         if !authorized { requestWhenInUse() }
-        for await update in CLLocationUpdate.liveUpdates() {
-            if let l = update.location { return l }
-        }
+        do {
+            for try await update in CLLocationUpdate.liveUpdates() {
+                if let l = update.location { return l }
+            }
+        } catch {}
         return nil
     }
 

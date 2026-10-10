@@ -347,7 +347,8 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-public struct Activity: Codable, Sendable, Hashable, Identifiable {
+/// Entrada del historial de actividad (no confundir con `ActivityKit.Activity`).
+public struct ActivityEntry: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var kind: String
     public var entityType: String

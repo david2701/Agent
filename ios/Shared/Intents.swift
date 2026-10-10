@@ -29,7 +29,7 @@ nonisolated extension Notification.Name {
 
 // MARK: - Hablar
 
-nonisolated struct TalkToKairoIntent: AppIntent {
+struct TalkToKairoIntent: AppIntent {
     static let title: LocalizedStringResource = "Hablar con Kairo"
     static let description = IntentDescription("Abre Kairo y empieza a escucharte.")
     static let openAppWhenRun = true
@@ -53,7 +53,7 @@ nonisolated enum KairoSection: String, AppEnum {
     ]
 }
 
-nonisolated struct OpenKairoIntent: AppIntent {
+struct OpenKairoIntent: AppIntent {
     static let title: LocalizedStringResource = "Abrir en Kairo"
     static let openAppWhenRun = true
 
@@ -72,7 +72,7 @@ nonisolated struct OpenKairoIntent: AppIntent {
 
 // MARK: - Widgets interactivos
 
-nonisolated struct ToggleListItemIntent: AppIntent {
+struct ToggleListItemIntent: AppIntent {
     static let title: LocalizedStringResource = "Marcar en la lista"
     static let isDiscoverable = false
 
@@ -102,7 +102,7 @@ nonisolated struct ToggleListItemIntent: AppIntent {
     }
 }
 
-nonisolated struct CompleteTaskIntent: AppIntent {
+struct CompleteTaskIntent: AppIntent {
     static let title: LocalizedStringResource = "Completar tarea"
     static let isDiscoverable = false
 
@@ -150,7 +150,7 @@ nonisolated struct KairoListQuery: EntityQuery {
     func defaultResult() async -> KairoListEntity? { try? await suggestedEntities().first }
 }
 
-nonisolated struct SelectListIntent: WidgetConfigurationIntent {
+struct SelectListIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Lista"
     static let description = IntentDescription("Elige qué lista mostrar.")
 

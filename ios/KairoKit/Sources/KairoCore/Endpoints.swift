@@ -139,7 +139,7 @@ public extension KairoAPI {
 
     // MARK: Actividad, ajustes y dispositivos
 
-    func activity(limit: Int = 60) async throws -> [Activity] { try await send("GET", "/api/activity?limit=\(limit)") }
+    func activity(limit: Int = 60) async throws -> [ActivityEntry] { try await send("GET", "/api/activity?limit=\(limit)") }
     func undo(_ activityId: String) async throws { try await call("POST", "/api/activity/\(activityId)/undo") }
     func settings() async throws -> SettingsResponse { try await send("GET", "/api/settings") }
     func updateSettings(_ patch: JSONObject) async throws -> SettingsResponse { try await send("PATCH", "/api/settings", patch) }

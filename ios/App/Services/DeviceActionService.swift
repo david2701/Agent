@@ -14,7 +14,8 @@ enum DeviceActionService {
         case .timer(let seconds, let label):
             let alert = AlarmPresentation.Alert(
                 title: LocalizedStringResource(stringLiteral: label),
-                stopButton: AlarmButton(text: "Listo", textColor: .white, systemImageName: "checkmark")
+                secondaryButton: nil,
+                secondaryButtonBehavior: nil
             )
             let attributes = AlarmAttributes<KairoAlarmMetadata>(
                 presentation: AlarmPresentation(alert: alert),
@@ -30,7 +31,8 @@ enum DeviceActionService {
         case .alarm(let hour, let minute, let label, let days):
             let alert = AlarmPresentation.Alert(
                 title: LocalizedStringResource(stringLiteral: label),
-                stopButton: AlarmButton(text: "Detener", textColor: .white, systemImageName: "stop.fill")
+                secondaryButton: nil,
+                secondaryButtonBehavior: nil
             )
             let attributes = AlarmAttributes<KairoAlarmMetadata>(
                 presentation: AlarmPresentation(alert: alert),

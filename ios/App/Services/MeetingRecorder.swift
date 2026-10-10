@@ -20,7 +20,7 @@ final class MeetingRecorder {
     private var rotateTask: Task<Void, Never>?
     private var meterTask: Task<Void, Never>?
     private var uploads: [Task<Void, Never>] = []
-    private var activity: Activity<RecordingActivityAttributes>?
+    private var activity: ActivityKit.Activity<RecordingActivityAttributes>?
     private let segmentSeconds: TimeInterval = 300
 
     init(api: KairoAPI) { self.api = api }
@@ -31,7 +31,7 @@ final class MeetingRecorder {
         do {
             let rec = try await api.createRecording(title: title)
             recordingId = rec.id
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try AVAudioSession.sharedInstance().setActive(true)
             segments = 0
             startedAt = .now

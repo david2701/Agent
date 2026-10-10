@@ -111,7 +111,7 @@ nonisolated final class Microphone: @unchecked Sendable {
     static func configureSession(forRecording: Bool) throws {
         let s = AVAudioSession.sharedInstance()
         if forRecording {
-            try s.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
+            try s.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP, .duckOthers])
         } else {
             try s.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         }
@@ -314,7 +314,7 @@ final class VoiceEngine {
 /// Live Activity de la conversación por voz (Isla Dinámica y pantalla bloqueada).
 @MainActor
 final class VoiceActivityController {
-    private var activity: Activity<VoiceActivityAttributes>?
+    private var activity: ActivityKit.Activity<VoiceActivityAttributes>?
 
     func start(phase: String) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }

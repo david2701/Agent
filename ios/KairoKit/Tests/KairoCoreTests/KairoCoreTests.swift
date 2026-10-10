@@ -34,7 +34,7 @@ struct ModelTests {
         let sync = try decode(DeviceSync.self, "sync")
         #expect(!sync.eventAlerts.isEmpty)
         _ = try decode(SettingsResponse.self, "settings")
-        _ = try decode([Activity].self, "activity")
+        _ = try decode([ActivityEntry].self, "activity")
         _ = try decode([Conversation].self, "conversations")
         _ = try decode([Place].self, "places")
         _ = try decode([Recording].self, "recordings")

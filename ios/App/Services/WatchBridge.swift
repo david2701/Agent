@@ -46,7 +46,7 @@ nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sen
 }
 
 /// El replyHandler de WatchConnectivity no es Sendable; se llama una sola vez.
-private struct UncheckedReply: @unchecked Sendable {
+nonisolated private struct UncheckedReply: @unchecked Sendable {
     let f: ([String: Any]) -> Void
     init(_ f: @escaping ([String: Any]) -> Void) { self.f = f }
     func callAsFunction(_ v: [String: Any]) { f(v) }

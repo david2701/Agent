@@ -5,7 +5,6 @@ import KairoUI
 // Pantallas provisionales mientras se completan (se reemplazan una por una).
 
 struct ChatScreen: View { var body: some View { PendingScreen(section: .chat) } }
-struct TasksScreen: View { var body: some View { PendingScreen(section: .tasks) } }
 struct CalendarScreen: View { var body: some View { PendingScreen(section: .calendar) } }
 struct NotesScreen: View { var body: some View { PendingScreen(section: .notes) } }
 struct RemindersScreen: View { var body: some View { PendingScreen(section: .reminders) } }
