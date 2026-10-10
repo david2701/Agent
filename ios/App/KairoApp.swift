@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import BackgroundTasks
 import KairoCore
 import KairoUI
@@ -20,7 +21,7 @@ struct KairoApp: App {
                 .tint(KairoColor.accent)
                 .onOpenURL { model.open(url: $0) }
                 .onContinueUserActivity(AppConfig.talkActivityType) { _ in model.perform("talk") }
-                .onReceive(NotificationCenter.default.publisher(for: .kairoPendingAction)) { note in
+                .onReceive(NotificationCenter.default.publisher(for: .kairoPendingAction).receive(on: DispatchQueue.main)) { note in
                     if let a = note.object as? String { _ = PendingAction.take(); model.perform(a) }
                 }
         }
