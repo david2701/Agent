@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MicRecorder, micErrorMessage, micSupported, speak, unlockAudio, type Speech } from './audio'
+import { t } from './i18n'
 
 export type VoicePhase = 'off' | 'listening' | 'thinking' | 'speaking'
 
+/** Wake phrases accepted in every language ("Hey Kairo" in English, "Oye Kairo" in Spanish). */
+const WAKE_PHRASE = /^\s*(?:hey|oye)[\s,.!\u00a1]*kairo\b[\s,.:;!]*/i
+
+/** Removes a leading wake phrase, leaving just the request. */
+export function stripWakePhrase(text: string): string {
+  return text.replace(WAKE_PHRASE, '').trim()
+}
+
 /**
- * Sesión de voz: graba un turno (con corte automático al detectar silencio),
- * entrega el audio y puede reproducir la respuesta.
+ * Voice session: records a turn (cutting automatically when silence is detected),
+ * hands over the audio and can play the reply.
  */
 export function useVoice(onAudio: (blob: Blob, ext: string) => void) {
   const [phase, setPhase] = useState<VoicePhase>('off')
@@ -30,7 +39,7 @@ export function useVoice(onAudio: (blob: Blob, ext: string) => void) {
     const blob = await r.stop()
     if (elapsed < 0.6 || blob.size < 1500) {
       setPhase('off')
-      setError('No alcancé a escucharte. Mantén el micrófono un poco más.')
+      setError(t('voice.tooShort'))
       return
     }
     setPhase('thinking')
@@ -40,7 +49,7 @@ export function useVoice(onAudio: (blob: Blob, ext: string) => void) {
   const start = useCallback(async () => {
     setError(null)
     if (!micSupported()) {
-      setError('Este navegador no permite grabar audio.')
+      setError(t('voice.noRecording'))
       return
     }
     unlockAudio()
@@ -55,7 +64,7 @@ export function useVoice(onAudio: (blob: Blob, ext: string) => void) {
     }
     rec.current = r
     setPhase('listening')
-    // Detección simple de voz: tras hablar, 1,6 s de silencio cortan la grabación.
+    // Simple voice detection: after speaking, 1.6 s of silence ends the recording.
     let heard = false
     let quietSince = 0
     vad.current = setInterval(() => {
@@ -92,7 +101,7 @@ export function useVoice(onAudio: (blob: Blob, ext: string) => void) {
       speech.current = s
       await s.done
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No pude reproducir la respuesta.')
+      setError(e instanceof Error ? e.message : t('voice.playFailed'))
     } finally {
       speech.current = null
       setPhase((p) => (p === 'speaking' ? 'off' : p))

@@ -12,6 +12,7 @@ import {
   Lightning,
   type Icon,
 } from '@phosphor-icons/react'
+import { t, type TKey } from './i18n'
 
 export const ENTITY_ICON: Record<string, Icon> = {
   note: Notepad,
@@ -30,102 +31,65 @@ export function entityIcon(type: string): Icon {
   return ENTITY_ICON[type] ?? Lightning
 }
 
-export const ENTITY_LABEL: Record<string, string> = {
-  note: 'Nota',
-  task: 'Tarea',
-  reminder: 'Recordatorio',
-  list: 'Lista',
-  event: 'Evento',
-  memory: 'Recuerdo',
-  place: 'Lugar',
-  project: 'Proyecto',
-  recording: 'Grabación',
-  conversation: 'Conversación',
+const ENTITY_TYPES = ['note', 'task', 'reminder', 'list', 'event', 'memory', 'place', 'project', 'recording', 'conversation']
+
+/** Singular name of an entity type, or undefined if unknown. */
+export function entityLabel(type: string): string | undefined {
+  return ENTITY_TYPES.includes(type) ? t(`entity.${type}` as TKey) : undefined
 }
 
-/** Ruta del dashboard donde vive una entidad. */
+/** Dashboard route where an entity lives. */
 export function entityHref(type: string, id: string): string | null {
   switch (type) {
     case 'note':
-      return `/notas/${id}`
+      return `/notes/${id}`
     case 'task':
-      return `/tareas?tarea=${id}`
+      return `/tasks?task=${id}`
     case 'reminder':
-      return `/recordatorios?r=${id}`
+      return `/reminders?r=${id}`
     case 'list':
-      return `/listas/${id}`
+      return `/lists/${id}`
     case 'event':
-      return `/calendario?evento=${id}`
+      return `/calendar?event=${id}`
     case 'memory':
-      return `/memoria?m=${id}`
+      return `/memory?m=${id}`
     case 'place':
-      return '/recordatorios#lugares'
+      return '/reminders#places'
     case 'project':
-      return `/tareas?proyecto=${id}`
+      return `/tasks?project=${id}`
     case 'recording':
-      return `/grabaciones/${id}`
+      return `/recordings/${id}`
     default:
       return null
   }
 }
 
-export const SOURCE_LABEL: Record<string, string> = {
-  chat: 'Chat',
-  voice: 'Voz',
-  wear: 'Reloj',
-  app: 'App',
-  dashboard: 'Panel web',
-  system: 'Sistema',
-  recording: 'Grabación',
-  share: 'Compartido',
-  undo: 'Deshacer',
-  google: 'Google',
-  scheduler: 'Sistema',
-  briefing: 'Resumen',
-}
+/** Sources the server reports (`scheduler` is shown as `system`). */
+const SOURCES = ['chat', 'voice', 'wear', 'app', 'dashboard', 'system', 'recording', 'share', 'undo', 'google', 'briefing']
 
-/** "desde el chat", "por voz"... para frases de metadatos. */
+/** "from chat", "by voice"... for metadata phrases. */
 export function sourcePhrase(s: string) {
-  const map: Record<string, string> = {
-    chat: 'desde el chat',
-    voice: 'por voz',
-    wear: 'desde el reloj',
-    app: 'desde la app',
-    dashboard: 'desde el panel web',
-    system: 'automáticamente',
-    scheduler: 'automáticamente',
-    recording: 'desde una grabación',
-    share: 'al compartir',
-    undo: 'al deshacer',
-    google: 'desde Google Calendar',
-    briefing: 'en el resumen',
-  }
-  return map[s] ?? `desde ${s}`
+  const key = s === 'scheduler' ? 'system' : s
+  return SOURCES.includes(key) ? t(`sourcePhrase.${key}` as TKey) : t('sourcePhrase.other', { source: s })
 }
 
 export function sourceLabel(s: string) {
-  return SOURCE_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1)
+  const key = s === 'scheduler' ? 'system' : s
+  return SOURCES.includes(key) ? t(`source.${key}` as TKey) : s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export const PRIORITY_LABEL: Record<string, string> = {
-  urgent: 'Urgente',
-  high: 'Alta',
-  medium: 'Media',
-  low: 'Baja',
+export function priorityLabel(p: string): string {
+  return t(`priority.${p}` as TKey)
 }
 
-export const STATUS_LABEL: Record<string, string> = {
-  todo: 'Por hacer',
-  doing: 'En curso',
-  done: 'Hecho',
+export function statusLabel(s: string): string {
+  return t(`status.${s}` as TKey)
 }
 
-export const MEMORY_CATEGORIES = [
-  { id: 'perfil', label: 'Perfil' },
-  { id: 'preferencias', label: 'Preferencias' },
-  { id: 'personas', label: 'Personas' },
-  { id: 'salud', label: 'Salud' },
-  { id: 'trabajo', label: 'Trabajo' },
-  { id: 'hogar', label: 'Hogar' },
-  { id: 'general', label: 'General' },
-] as const
+/** Memory categories. The ids are the API values (kept as they are); only the labels are translated. */
+export function memoryCategories() {
+  return (['perfil', 'preferencias', 'personas', 'salud', 'trabajo', 'hogar', 'general'] as const).map((id) => ({
+    id,
+    label: t(`memoryCategory.${id}` as TKey),
+  }))
+}

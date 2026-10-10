@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Field, FormError, Input } from '@/components/ui/form'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { isCompleteCode, normalizeCode } from '@/lib/family'
+import { isCompleteCode, looksLikeInviteLink, normalizeCode } from '@/lib/family'
+import { t } from '@/lib/i18n'
 
 export default function Login() {
   const { login } = useAuth()
@@ -21,19 +22,16 @@ export default function Login() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: typeof errors = {}
-    if (!email.trim()) next.email = 'Escribe tu correo.'
-    else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = 'Ese correo no parece válido.'
-    if (!password) next.password = 'Escribe tu contraseña.'
+    if (!email.trim()) next.email = t('auth.enterEmail')
+    else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = t('auth.invalidEmail')
+    if (!password) next.password = t('auth.enterPassword')
     setErrors(next)
     if (Object.keys(next).length) return
     setLoading(true)
     try {
       await login(email, password)
     } catch (err) {
-      const msg =
-        err instanceof ApiError
-          ? err.message
-          : 'No pude conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
+      const msg = err instanceof ApiError ? err.message : t('auth.cantReachServer')
       setErrors({ form: msg })
     } finally {
       setLoading(false)
@@ -51,11 +49,11 @@ export default function Login() {
         <div className="mb-8 flex flex-col items-center text-center">
           <KairoMark className="size-12" />
           <h1 className="mt-5 text-xl font-semibold tracking-tight">Kairo</h1>
-          <p className="mt-1.5 text-base text-muted">Entra para continuar con tu asistente.</p>
+          <p className="mt-1.5 text-base text-muted">{t('auth.signInSubtitle')}</p>
         </div>
 
         <form onSubmit={submit} noValidate className="grid gap-4 rounded-card border border-line bg-surface p-5 sm:p-6">
-          <Field label="Correo" error={errors.email}>
+          <Field label={t('auth.email')} error={errors.email}>
             {(id, d) => (
               <Input
                 id={id}
@@ -70,7 +68,7 @@ export default function Login() {
               />
             )}
           </Field>
-          <Field label="Contraseña" error={errors.password}>
+          <Field label={t('auth.password')} error={errors.password}>
             {(id, d) => (
               <div className="relative">
                 <Input
@@ -86,7 +84,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
-                  aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  aria-label={show ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-faint transition-colors hover:bg-surface-2 hover:text-fg"
                 >
                   {show ? <EyeSlash className="size-4" /> : <Eye className="size-4" />}
@@ -96,19 +94,19 @@ export default function Login() {
           </Field>
           {errors.form && <FormError>{errors.form}</FormError>}
           <Button type="submit" variant="primary" size="lg" loading={loading} className="mt-1 w-full">
-            Entrar
+            {t('auth.signIn')}
           </Button>
         </form>
 
         <InviteCode />
 
-        <p className="mt-6 text-center text-sm text-faint">La sesión queda guardada en este navegador hasta que la cierres.</p>
+        <p className="mt-6 text-center text-sm text-faint">{t('auth.staySignedIn')}</p>
       </motion.div>
     </div>
   )
 }
 
-/** "¿Tienes un código de invitación?": lleva a /unirse con el código escrito o pegado (también acepta el enlace). */
+/** "I have an invite code": goes to /join with the typed or pasted code (a full link works too). */
 function InviteCode() {
   const navigate = useNavigate()
   const reduce = useReducedMotion()
@@ -119,8 +117,8 @@ function InviteCode() {
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const c = normalizeCode(code)
-    if (!isCompleteCode(c)) return setError('El código tiene 8 letras o números, como K7QM-4XPA.')
-    navigate(`/unirse?codigo=${encodeURIComponent(c)}`)
+    if (!isCompleteCode(c)) return setError(t('auth.badCode'))
+    navigate(`/join?code=${encodeURIComponent(c)}`)
   }
 
   return (
@@ -132,7 +130,7 @@ function InviteCode() {
           className="mx-auto flex items-center gap-2 rounded-control px-2 py-1.5 text-sm text-muted transition-colors hover:text-fg"
         >
           <Ticket className="size-4 text-faint" />
-          ¿Tienes un código de invitación?
+          {t('auth.haveCode')}
         </button>
       ) : null}
       <AnimatePresence initial={false}>
@@ -145,14 +143,14 @@ function InviteCode() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className="grid gap-3 rounded-card border border-line bg-surface p-5 sm:p-6"
-            aria-label="Unirse con un código"
+            aria-label={t('auth.joinWithCode')}
           >
-            <Field label="Código de invitación o de acceso" error={error} hint={error ? undefined : 'Te lo da quien administra tu familia en Kairo.'}>
+            <Field label={t('auth.codeLabel')} error={error} hint={error ? undefined : t('auth.codeHintAdmin')}>
               {(id, d) => (
                 <Input
                   id={id}
                   value={code}
-                  onChange={(e) => setCode(e.target.value.includes('codigo=') ? normalizeCode(e.target.value) : e.target.value.toUpperCase())}
+                  onChange={(e) => setCode(looksLikeInviteLink(e.target.value) ? normalizeCode(e.target.value) : e.target.value.toUpperCase())}
                   onBlur={() => code && setCode(normalizeCode(code))}
                   placeholder="XXXX-XXXX"
                   autoFocus
@@ -167,10 +165,10 @@ function InviteCode() {
             </Field>
             <div className="flex gap-2">
               <Button variant="ghost" className="flex-1" onClick={() => setOpen(false)}>
-                Cancelar
+                {t('common.cancel')}
               </Button>
               <Button type="submit" className="flex-1">
-                Continuar
+                {t('auth.continue')}
               </Button>
             </div>
           </motion.form>

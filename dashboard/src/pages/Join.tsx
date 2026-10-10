@@ -9,18 +9,21 @@ import { Skeleton } from '@/components/ui/feedback'
 import { Field, FormError, Input } from '@/components/ui/form'
 import { ApiError, join, previewInvite } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { firstName, isCompleteCode, normalizeCode } from '@/lib/family'
+import { firstName, isCompleteCode, looksLikeInviteLink, normalizeCode } from '@/lib/family'
+import { t } from '@/lib/i18n'
 import type { InvitePreview } from '@/lib/types'
 
 const MIN_PASSWORD = 10
 
 /**
- * /unirse?codigo=XXXX-XXXX (pública). Con una invitación crea la cuenta del nuevo miembro;
- * con un código de acceso define una contraseña nueva para un miembro existente.
+ * /join?code=XXXX-XXXX (public). With an invitation it creates the new member's account;
+ * with an access code it sets a new password for an existing member.
+ * The legacy `?codigo=` parameter is still read (old links redirect here from /unirse).
  */
-export default function Unirse() {
+export default function Join() {
   const [params, setParams] = useSearchParams()
-  const code = normalizeCode(params.get('codigo') ?? '')
+  const rawCode = params.get('code') ?? params.get('codigo') ?? ''
+  const code = normalizeCode(rawCode)
   const valid = isCompleteCode(code)
 
   const preview = useQuery<InvitePreview | null>({
@@ -31,26 +34,26 @@ export default function Unirse() {
     retry: false,
   })
 
-  const setCode = (c: string) => setParams(c ? { codigo: c } : {}, { replace: false })
+  const setCode = (c: string) => setParams(c ? { code: c } : {}, { replace: false })
 
   let body: ReactNode
-  if (!valid) body = <CodeEntry onSubmit={setCode} initial={params.get('codigo') ? code : ''} />
+  if (!valid) body = <CodeEntry onSubmit={setCode} initial={rawCode ? code : ''} />
   else if (preview.isLoading) body = <PreviewSkeleton />
   else if (preview.isError)
     body = (
       <Card>
         <Heading
-          title="No pude revisar el código"
+          title={t('join.couldNotCheck')}
           subtitle={
             preview.error instanceof ApiError && preview.error.status === 429
-              ? 'Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo.'
+              ? t('auth.tooManyTries')
               : preview.error instanceof ApiError
                 ? preview.error.message
-                : 'No pude conectar con el servidor. Revisa tu conexión.'
+                : t('auth.cantReachServer')
           }
         />
         <Button className="mt-5 w-full" size="lg" onClick={() => void preview.refetch()}>
-          Reintentar
+          {t('common.retry')}
         </Button>
       </Card>
     )
@@ -60,7 +63,7 @@ export default function Unirse() {
           <div className="mb-5 flex items-start gap-3 rounded-control border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] px-3 py-2.5 text-sm text-danger" role="alert">
             <WarningCircle className="mt-px size-4 shrink-0" />
             <span>
-              El código <span className="font-mono">{code}</span> no es válido o ya venció. Pide uno nuevo a quien administra la familia.
+              {t('join.invalidPre')} <span className="font-mono">{code}</span> {t('join.invalidPost')}
             </span>
           </div>
           <CodeEntry bare onSubmit={setCode} initial="" />
@@ -72,9 +75,9 @@ export default function Unirse() {
     <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-10">
       <Shell>{body}</Shell>
       <p className="mt-6 text-center text-sm text-faint">
-        ¿Ya tienes cuenta?{' '}
+        {t('join.haveAccount')}{' '}
         <Link to="/login" className="rounded-[6px] font-medium text-muted underline-offset-4 hover:text-fg hover:underline">
-          Entrar
+          {t('auth.signIn')}
         </Link>
       </p>
     </div>
@@ -114,7 +117,7 @@ function Heading({ title, subtitle }: { title: ReactNode; subtitle?: ReactNode }
 function PreviewSkeleton() {
   return (
     <Card>
-      <div className="grid gap-2" aria-busy="true" aria-label="Revisando el código">
+      <div className="grid gap-2" aria-busy="true" aria-label={t('join.checking')}>
         <Skeleton className="h-6 w-3/4" />
         <Skeleton className="h-4 w-full" />
         <div className="mt-4 grid gap-4">
@@ -130,25 +133,25 @@ function PreviewSkeleton() {
   )
 }
 
-/** Campo para escribir o pegar un código (o el enlace completo). */
+/** Field to type or paste a code (or the full link). */
 function CodeEntry({ onSubmit, initial, bare }: { onSubmit: (code: string) => void; initial: string; bare?: boolean }) {
   const [value, setValue] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const c = normalizeCode(value)
-    if (!isCompleteCode(c)) return setError('El código tiene 8 letras o números, como K7QM-4XPA.')
+    if (!isCompleteCode(c)) return setError(t('auth.badCode'))
     setError(null)
     onSubmit(c)
   }
   const form = (
     <form onSubmit={submit} noValidate className="grid gap-4">
-      <Field label="Código" error={error} hint={error ? undefined : 'Te lo dio quien administra tu familia en Kairo.'}>
+      <Field label={t('join.code')} error={error} hint={error ? undefined : t('join.codeHint')}>
         {(id, d) => (
           <Input
             id={id}
             value={value}
-            onChange={(e) => setValue(e.target.value.includes('codigo=') ? normalizeCode(e.target.value) : e.target.value.toUpperCase())}
+            onChange={(e) => setValue(looksLikeInviteLink(e.target.value) ? normalizeCode(e.target.value) : e.target.value.toUpperCase())}
             onBlur={() => value && setValue(normalizeCode(value))}
             placeholder="XXXX-XXXX"
             autoComplete="one-time-code"
@@ -162,14 +165,14 @@ function CodeEntry({ onSubmit, initial, bare }: { onSubmit: (code: string) => vo
         )}
       </Field>
       <Button type="submit" variant="primary" size="lg" className="w-full">
-        Continuar
+        {t('auth.continue')}
       </Button>
     </form>
   )
   if (bare) return form
   return (
     <Card>
-      <Heading title="Únete a tu familia" subtitle="Escribe el código de invitación o de acceso que te compartieron." />
+      <Heading title={t('join.title')} subtitle={t('join.subtitle')} />
       {form}
     </Card>
   )
@@ -209,7 +212,7 @@ function PasswordInput({
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        aria-label={show ? t('auth.hidePassword') : t('auth.showPassword')}
         className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-faint transition-colors hover:bg-surface-2 hover:text-fg"
       >
         {show ? <EyeSlash className="size-4" /> : <Eye className="size-4" />}
@@ -235,26 +238,26 @@ function JoinForm({ code, preview }: { code: string; preview: InvitePreview }) {
     e.preventDefault()
     const next: Errors = {}
     if (isInvite) {
-      if (!name.trim()) next.name = 'Escribe tu nombre.'
-      if (!email.trim()) next.email = 'Escribe tu correo.'
-      else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = 'Ese correo no parece válido.'
+      if (!name.trim()) next.name = t('join.enterName')
+      if (!email.trim()) next.email = t('auth.enterEmail')
+      else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = t('auth.invalidEmail')
     }
-    if (password.length < MIN_PASSWORD) next.password = `Usa al menos ${MIN_PASSWORD} caracteres.`
-    if (!next.password && confirm !== password) next.confirm = 'Las contraseñas no coinciden.'
+    if (password.length < MIN_PASSWORD) next.password = t('join.minChars', { min: MIN_PASSWORD })
+    if (!next.password && confirm !== password) next.confirm = t('join.mismatch')
     setErrors(next)
     if (Object.keys(next).length) return
     setLoading(true)
     try {
       await join(isInvite ? { code, email: email.trim(), password, displayName: name.trim() } : { code, password })
-      navigate('/', { replace: true })
+      navigate('/today', { replace: true })
     } catch (err) {
       setErrors({
         form:
           err instanceof ApiError
             ? err.status === 429
-              ? 'Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo.'
+              ? t('auth.tooManyTries')
               : err.message
-            : 'No pude conectar con el servidor. Revisa tu conexión e intenta de nuevo.',
+            : t('auth.cantReachServer'),
       })
     } finally {
       setLoading(false)
@@ -265,31 +268,31 @@ function JoinForm({ code, preview }: { code: string; preview: InvitePreview }) {
     <Card>
       {isInvite ? (
         <Heading
-          title={`Te invitaron a ${preview.householdName}`}
-          subtitle="Crea tu cuenta. Verás lo que la familia comparte y tendrás tu propio espacio personal."
+          title={t('join.invitedTo', { household: preview.householdName })}
+          subtitle={t('join.inviteSubtitle')}
         />
       ) : (
         <Heading
-          title="Nueva contraseña"
-          subtitle={`${preview.name ? `Hola, ${firstName(preview.name)}. ` : ''}Define una contraseña nueva para entrar a ${preview.householdName}.`}
+          title={t('join.newPassword')}
+          subtitle={`${preview.name ? `${t('join.hello', { name: firstName(preview.name) })} ` : ''}${t('join.setPassword', { household: preview.householdName })}`}
         />
       )}
 
       {status === 'authenticated' && user && (
         <p className="mb-4 rounded-control border border-line bg-surface-2 px-3 py-2 text-sm text-muted">
-          Tienes abierta la sesión de {firstName(user.displayName) || user.email}. Si continúas, este navegador entrará con {isInvite ? 'la cuenta nueva' : 'esa cuenta'}.
+          {t(isInvite ? 'join.sessionOpenNew' : 'join.sessionOpenExisting', { name: firstName(user.displayName) || user.email })}
         </p>
       )}
 
       <form onSubmit={submit} noValidate className="grid gap-4">
         {isInvite ? (
           <>
-            <Field label="Nombre" error={errors.name}>
+            <Field label={t('join.name')} error={errors.name}>
               {(id, d) => (
                 <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" maxLength={60} aria-invalid={!!errors.name} aria-describedby={d} autoFocus={!preview.name} />
               )}
             </Field>
-            <Field label="Correo" error={errors.email}>
+            <Field label={t('auth.email')} error={errors.email}>
               {(id, d) => (
                 <Input
                   id={id}
@@ -308,24 +311,24 @@ function JoinForm({ code, preview }: { code: string; preview: InvitePreview }) {
         ) : (
           preview.email && (
             <div className="grid gap-1.5">
-              <span className="text-sm font-medium text-fg">Correo</span>
+              <span className="text-sm font-medium text-fg">{t('auth.email')}</span>
               <p className="flex h-10 items-center truncate rounded-control border border-line bg-surface-2 px-3 text-base text-muted">{preview.email}</p>
             </div>
           )
         )}
-        <Field label={isInvite ? 'Contraseña' : 'Contraseña nueva'} error={errors.password} hint={`Mínimo ${MIN_PASSWORD} caracteres.`}>
+        <Field label={isInvite ? t('join.password') : t('join.passwordNew')} error={errors.password} hint={t('join.passwordHint', { min: MIN_PASSWORD })}>
           {(id, d) => (
             <PasswordInput id={id} value={password} onChange={setPassword} invalid={!!errors.password} describedBy={d} autoComplete="new-password" autoFocus={!isInvite} />
           )}
         </Field>
-        <Field label="Confirmar contraseña" error={errors.confirm}>
+        <Field label={t('join.confirm')} error={errors.confirm}>
           {(id, d) => <PasswordInput id={id} value={confirm} onChange={setConfirm} invalid={!!errors.confirm} describedBy={d} autoComplete="new-password" />}
         </Field>
         {errors.form && <FormError>{errors.form}</FormError>}
         <Button type="submit" variant="primary" size="lg" loading={loading} className="mt-1 w-full">
-          {isInvite ? 'Unirme a la familia' : 'Guardar y entrar'}
+          {isInvite ? t('join.joinFamily') : t('join.saveAndSignIn')}
         </Button>
-        {!isInvite && <p className="text-center text-sm text-faint">Se cerrarán tus otras sesiones abiertas.</p>}
+        {!isInvite && <p className="text-center text-sm text-faint">{t('join.otherSessions')}</p>}
       </form>
     </Card>
   )

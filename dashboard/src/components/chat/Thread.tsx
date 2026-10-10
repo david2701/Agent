@@ -25,8 +25,9 @@ import { KairoMark } from '@/components/KairoMark'
 import { Markdown } from '@/components/Markdown'
 import type { Turn } from '@/lib/agent'
 import { cn } from '@/lib/cn'
-import { ENTITY_LABEL, entityHref, entityIcon } from '@/lib/entities'
+import { entityHref, entityIcon, entityLabel } from '@/lib/entities'
 import { time } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import type { DeviceAction, EntityRef, FileRef, StoredMessage } from '@/lib/types'
 
 export type ThreadItem =
@@ -39,12 +40,12 @@ export type ThreadItem =
 
 const DEVICE_TOOLS = new Set(['set_timer', 'set_alarm', 'cancel_timer'])
 
-/** El lenguaje de Kairo no usa guiones largos: se presentan como coma o guion normal. */
+/** Kairo's writing style avoids long dashes: they are shown as a comma or a plain hyphen. */
 export function tidyDashes(text: string) {
   return text.replace(/\s+[—–]\s+/g, ', ').replace(/[—–]/g, '-')
 }
 
-/** Convierte el historial guardado en elementos de hilo (oculta los preámbulos previos a herramientas). */
+/** Turns the stored history into thread items (hides the preambles that come before tool calls). */
 export function storedToItems(messages: StoredMessage[]): ThreadItem[] {
   const out: ThreadItem[] = []
   let held: StoredMessage | null = null
@@ -81,14 +82,14 @@ export function storedToItems(messages: StoredMessage[]): ThreadItem[] {
   return out
 }
 
-export function turnToItems(t: Turn): ThreadItem[] {
+export function turnToItems(turn: Turn): ThreadItem[] {
   const out: ThreadItem[] = []
-  if (t.userText !== null) out.push({ kind: 'user', id: `${t.id}-u`, text: t.userText, attachments: [], channel: t.channel })
-  for (const tool of t.tools) {
+  if (turn.userText !== null) out.push({ kind: 'user', id: `${turn.id}-u`, text: turn.userText, attachments: [], channel: turn.channel })
+  for (const tool of turn.tools) {
     if (DEVICE_TOOLS.has(tool.name) && tool.status === 'done' && tool.ok !== false) continue
     out.push({
       kind: 'tool',
-      id: `${t.id}-${tool.callId}`,
+      id: `${turn.id}-${tool.callId}`,
       name: tool.name,
       ok: tool.ok !== false,
       summary: tool.summary ?? tool.label,
@@ -97,10 +98,10 @@ export function turnToItems(t: Turn): ThreadItem[] {
       label: tool.label,
     })
   }
-  t.deviceActions.forEach((a, i) => out.push({ kind: 'device', id: `${t.id}-d${i}`, action: a }))
-  t.attachments.forEach((f) => out.push({ kind: 'image', id: `${t.id}-${f.id}`, file: f }))
-  if (t.text || t.status === 'done') out.push({ kind: 'assistant', id: `${t.id}-a`, text: t.text, streaming: t.status === 'streaming' })
-  if (t.status === 'error' && t.error) out.push({ kind: 'error', id: `${t.id}-e`, message: t.error })
+  turn.deviceActions.forEach((a, i) => out.push({ kind: 'device', id: `${turn.id}-d${i}`, action: a }))
+  turn.attachments.forEach((f) => out.push({ kind: 'image', id: `${turn.id}-${f.id}`, file: f }))
+  if (turn.text || turn.status === 'done') out.push({ kind: 'assistant', id: `${turn.id}-a`, text: turn.text, streaming: turn.status === 'streaming' })
+  if (turn.status === 'error' && turn.error) out.push({ kind: 'error', id: `${turn.id}-e`, message: turn.error })
   return out
 }
 
@@ -137,7 +138,7 @@ export const ThreadItems = memo(function ThreadItems({ items, animateNew = false
                   </div>
                   {it.channel === 'voice' && (
                     <p className="mt-1 flex items-center justify-end gap-1 text-xs text-faint">
-                      <Microphone className="size-3" /> Por voz
+                      <Microphone className="size-3" /> {t('thread.byVoice')}
                     </p>
                   )}
                 </div>
@@ -155,7 +156,7 @@ export const ThreadItems = memo(function ThreadItems({ items, animateNew = false
                   {it.text ? (
                     <Markdown className={cn(it.streaming && 'k-streaming')}>{tidyDashes(it.text)}</Markdown>
                   ) : (
-                    <p className="text-base text-faint">Listo.</p>
+                    <p className="text-base text-faint">{t('thread.done')}</p>
                   )}
                   {it.at && !it.streaming && <p className="mt-1.5 font-mono text-xs text-faint">{time(it.at)}</p>}
                 </div>
@@ -163,7 +164,7 @@ export const ThreadItems = memo(function ThreadItems({ items, animateNew = false
             )
           case 'tool':
             return it.running ? (
-              <ToolRunning key={it.id} label={it.label ?? 'Trabajando'} name={it.name} compact={compact} />
+              <ToolRunning key={it.id} label={it.label ?? t('thread.working')} name={it.name} compact={compact} />
             ) : (
               <Appear key={it.id} animate={animateNew} className={cn(!compact && 'pl-10')}>
                 <ActionCard name={it.name} ok={it.ok} summary={it.summary} entity={it.entity} />
@@ -238,17 +239,17 @@ export function ActionCard({ name, ok, summary, entity }: { name: string; ok: bo
         <Icon className="size-[18px]" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className={cn('text-base leading-snug', ok ? 'text-fg' : 'text-muted')}>{tidyDashes(summary) || (ok ? 'Hecho' : 'No se pudo completar')}</p>
+        <p className={cn('text-base leading-snug', ok ? 'text-fg' : 'text-muted')}>{tidyDashes(summary) || (ok ? t('thread.actionDone') : t('thread.actionFailed'))}</p>
         {entity && (
           <p className="mt-0.5 truncate text-sm text-faint">
-            {ENTITY_LABEL[entity.type] ?? 'Elemento'}
+            {entityLabel(entity.type) ?? t('entity.item')}
             {entity.title && !summary.includes(entity.title) ? `: ${entity.title}` : ''}
           </p>
         )}
       </div>
       {href && (
         <span className="flex shrink-0 items-center gap-1 text-sm text-muted transition-colors group-hover:text-fg">
-          Abrir
+          {t('thread.open')}
           <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
         </span>
       )}
@@ -282,13 +283,13 @@ export function DeviceChip({ action }: { action: DeviceAction }) {
       : action.type === 'alarm' && typeof action.hour === 'number'
         ? `${action.hour}:${String(action.minute ?? 0).padStart(2, '0')}`
         : typeof action.label === 'string'
-          ? action.label.replace(/^(Temporizador|Alarma):\s*/i, '')
+          ? action.label.replace(/^(Temporizador|Alarma|Timer|Alarm):\s*/i, '')
           : ''
   return (
     <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-muted">
       <Icon className="size-4 shrink-0" />
       <span className="truncate">
-        {isAlarm ? 'Alarma en el teléfono' : 'Temporizador en el teléfono'}
+        {isAlarm ? t('thread.alarmOnPhone') : t('thread.timerOnPhone')}
         {detail && <span className="ml-1.5 font-mono text-fg">{detail}</span>}
       </span>
       <DeviceMobile className="size-3.5 shrink-0 text-faint" aria-hidden />
@@ -309,7 +310,7 @@ export function AttachmentImage({ file, large }: { file: FileRef; large?: boolea
   if (file.contentType && !file.contentType.startsWith('image/')) {
     return (
       <a href={file.url} target="_blank" rel="noreferrer" className="text-sm text-accent-strong underline underline-offset-2">
-        Ver archivo adjunto
+        {t('thread.viewAttachment')}
       </a>
     )
   }
@@ -317,7 +318,7 @@ export function AttachmentImage({ file, large }: { file: FileRef; large?: boolea
     <a href={file.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-card border border-line bg-surface-2">
       <img
         src={file.url}
-        alt="Imagen adjunta"
+        alt={t('thread.attachedImage')}
         loading="lazy"
         className={cn('block object-cover', large ? 'max-h-80 w-auto max-w-full' : 'h-28 w-auto max-w-[220px]')}
       />

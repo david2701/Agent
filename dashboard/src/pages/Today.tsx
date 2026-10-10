@@ -38,18 +38,15 @@ import { speak, stopSpeaking, unlockAudio } from '@/lib/audio'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
 import { useFamilyInfo } from '@/lib/family'
-import { capitalize, compactWhen, plainText, shortDate, time, toDate } from '@/lib/format'
+import { capitalize, compactWhen, plainText, time, toDate, weekdayShort } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { useReminderActions, useTaskActions, useToggleItem } from '@/lib/mutations'
 import { keys, useBriefing, useLists, useNotices, useSettings, useToday } from '@/lib/queries'
 import type { CalendarEvent, Task, Today, Weather } from '@/lib/types'
 
-const SUGGESTIONS = [
-  '¿Qué tengo pendiente hoy?',
-  'Recuérdame llamar a mi mamá a las 6 p. m.',
-  'Agrega aguacates a la lista del supermercado',
-]
+const suggestions = () => [t('today.suggestion1'), t('today.suggestion2'), t('today.suggestion3')]
 
-export default function Hoy() {
+export default function TodayPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const today = useToday()
@@ -81,11 +78,11 @@ export default function Hoy() {
         )}
       </motion.header>
 
-      <section aria-label="Pregúntale a Kairo" className="mt-6 max-w-3xl">
+      <section aria-label={t('today.askKairo')} className="mt-6 max-w-3xl">
         <Composer
           size="lg"
-          placeholder="Pregúntale a Kairo"
-          label="Pregúntale a Kairo"
+          placeholder={t('today.askKairo')}
+          label={t('today.askKairo')}
           onSend={ask}
           onMic={() => {
             unlockAudio()
@@ -93,7 +90,7 @@ export default function Hoy() {
           }}
         />
         <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-none max-sm:-mx-4 max-sm:px-4 sm:flex-wrap sm:overflow-visible">
-          {SUGGESTIONS.map((s) => (
+          {suggestions().map((s) => (
             <button
               key={s}
               type="button"
@@ -143,11 +140,11 @@ function AgendaPanel({ data }: { data?: Today }) {
     <Panel className="p-5" aria-labelledby="agenda-title">
       <SectionHeader
         id="agenda-title"
-        title="Agenda de hoy"
+        title={t('today.agenda')}
         count={data ? events.length : undefined}
         action={
-          <Link to="/calendario" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-            Calendario <ArrowRight className="size-3.5" />
+          <Link to="/calendar" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+            {t('nav.calendar')} <ArrowRight className="size-3.5" />
           </Link>
         }
       />
@@ -157,11 +154,11 @@ function AgendaPanel({ data }: { data?: Today }) {
         <EmptyState
           compact
           icon={<CalendarBlank />}
-          title="Nada en el calendario hoy"
-          description="Tienes el día libre de reuniones."
+          title={t('today.agendaEmpty')}
+          description={t('today.agendaEmptyHint')}
           action={
-            <ButtonLink to="/calendario?nuevo=1" size="sm" icon={<CalendarPlus className="size-4" />}>
-              Agregar evento
+            <ButtonLink to="/calendar?new=1" size="sm" icon={<CalendarPlus className="size-4" />}>
+              {t('today.addEvent')}
             </ButtonLink>
           }
         />
@@ -172,10 +169,10 @@ function AgendaPanel({ data }: { data?: Today }) {
               {allDay.map((e) => (
                 <Link
                   key={e.id + e.startAt}
-                  to={`/calendario?evento=${e.id}`}
+                  to={`/calendar?event=${e.id}`}
                   className="inline-flex h-7 items-center gap-2 rounded-full bg-surface-2 px-3 text-sm text-fg"
                 >
-                  <span className="text-faint">Todo el día</span>
+                  <span className="text-faint">{t('today.allDay')}</span>
                   {e.title}
                 </Link>
               ))}
@@ -198,8 +195,8 @@ function AgendaPanel({ data }: { data?: Today }) {
 
 function NowLine() {
   return (
-    <div className="flex items-center gap-3 py-1.5" aria-label="Ahora">
-      <span className="w-14 shrink-0 text-right font-mono text-xs text-accent-strong">{time(new Date())}</span>
+    <div className="flex items-center gap-3 py-1.5" aria-label={t('today.now')}>
+      <span className="w-[4.75rem] shrink-0 text-right font-mono text-xs whitespace-nowrap text-accent-strong">{time(new Date())}</span>
       <span className="h-px flex-1 bg-accent" />
     </div>
   )
@@ -212,13 +209,13 @@ function AgendaRow({ e, now }: { e: CalendarEvent; now: Date }) {
   const ongoing = isWithinInterval(now, { start, end })
   return (
     <Link
-      to={`/calendario?evento=${e.id}`}
+      to={`/calendar?event=${e.id}`}
       className={cn(
         'group -mx-2 flex gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2',
         past && 'opacity-55',
       )}
     >
-      <div className="w-14 shrink-0 pt-px text-right font-mono tnum">
+      <div className="w-[4.75rem] shrink-0 pt-px text-right font-mono whitespace-nowrap tnum">
         <p className="text-base text-fg">{time(start)}</p>
         <p className="text-xs text-faint">{time(end)}</p>
       </div>
@@ -226,9 +223,9 @@ function AgendaRow({ e, now }: { e: CalendarEvent; now: Date }) {
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 text-base font-medium text-fg">
           <span className="truncate">{e.title}</span>
-          {ongoing && <span className="shrink-0 text-xs font-medium text-accent-strong">Ahora</span>}
-          {e.shared && <FamilyIcon label="Evento familiar" />}
-          {e.source === 'google' && <GoogleLogo className="size-3.5 shrink-0 text-faint" aria-label="De Google Calendar" />}
+          {ongoing && <span className="shrink-0 text-xs font-medium text-accent-strong">{t('today.now')}</span>}
+          {e.shared && <FamilyIcon label={t('today.familyEvent')} />}
+          {e.source === 'google' && <GoogleLogo className="size-3.5 shrink-0 text-faint" aria-label={t('today.fromGoogle')} />}
         </p>
         {e.location && (
           <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-muted">
@@ -241,7 +238,7 @@ function AgendaRow({ e, now }: { e: CalendarEvent; now: Date }) {
   )
 }
 
-/* ---------------------------------------------------------------- Tareas */
+/* ---------------------------------------------------------------- Tasks */
 
 function TasksPanel({ data }: { data?: Today }) {
   const { complete } = useTaskActions()
@@ -253,15 +250,15 @@ function TasksPanel({ data }: { data?: Today }) {
     if (!data) return []
     const seen = new Set<string>()
     const take = (list: Task[]) =>
-      list.filter((t) => {
-        if (seen.has(t.id) || hidden.has(t.id)) return false
-        seen.add(t.id)
+      list.filter((task) => {
+        if (seen.has(task.id) || hidden.has(task.id)) return false
+        seen.add(task.id)
         return true
       })
     return [
-      { id: 'overdue', title: 'Vencidas', tasks: take(data.tasksOverdue), danger: true },
-      { id: 'today', title: 'Para hoy', tasks: take(data.tasksDueToday) },
-      { id: 'doing', title: 'En curso', tasks: take(data.tasksInProgress) },
+      { id: 'overdue', title: t('today.overdue'), tasks: take(data.tasksOverdue), danger: true },
+      { id: 'today', title: t('today.dueToday'), tasks: take(data.tasksDueToday) },
+      { id: 'doing', title: t('status.doing'), tasks: take(data.tasksInProgress) },
     ].filter((g) => g.tasks.length > 0)
   }, [data, hidden])
 
@@ -271,11 +268,11 @@ function TasksPanel({ data }: { data?: Today }) {
     <Panel className="p-5" aria-labelledby="tasks-title">
       <SectionHeader
         id="tasks-title"
-        title="Tareas"
+        title={t('nav.tasks')}
         count={data ? total : undefined}
         action={
-          <Link to="/tareas" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-            Todas <ArrowRight className="size-3.5" />
+          <Link to="/tasks" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+            {t('common.allFem')} <ArrowRight className="size-3.5" />
           </Link>
         }
       />
@@ -285,11 +282,11 @@ function TasksPanel({ data }: { data?: Today }) {
         <EmptyState
           compact
           icon={<CheckSquare />}
-          title="Nada urgente por hoy"
-          description="No tienes tareas vencidas, para hoy ni en curso."
+          title={t('today.tasksEmpty')}
+          description={t('today.tasksEmptyHint')}
           action={
-            <ButtonLink to="/tareas?nueva=1" size="sm">
-              Nueva tarea
+            <ButtonLink to="/tasks?new=1" size="sm">
+              {t('today.newTask')}
             </ButtonLink>
           }
         />
@@ -302,14 +299,14 @@ function TasksPanel({ data }: { data?: Today }) {
                 <span className="font-mono font-normal tnum">{g.tasks.length}</span>
               </p>
               <div className="mt-1 divide-y divide-line">
-                {g.tasks.map((t) => (
+                {g.tasks.map((task) => (
                   <TaskRow
-                    key={t.id}
-                    task={t}
-                    onOpen={() => navigate(`/tareas?tarea=${t.id}`)}
+                    key={task.id}
+                    task={task}
+                    onOpen={() => navigate(`/tasks?task=${task.id}`)}
                     onToggle={(done) => {
-                      if (done) setHidden((h) => new Set(h).add(t.id))
-                      complete(t, done)
+                      if (done) setHidden((h) => new Set(h).add(task.id))
+                      complete(task, done)
                       void qc.invalidateQueries({ queryKey: keys.today })
                     }}
                   />
@@ -323,7 +320,7 @@ function TasksPanel({ data }: { data?: Today }) {
   )
 }
 
-/* ---------------------------------------------------------------- Resumen */
+/* ---------------------------------------------------------------- Briefing */
 
 function BriefingPanel() {
   const qc = useQueryClient()
@@ -333,7 +330,7 @@ function BriefingPanel() {
   const gen = useMutation({
     mutationFn: () => api.post<{ text: string }>('/briefing'),
     onSuccess: (r) => qc.setQueryData(keys.briefing, { text: r.text, date: new Date().toISOString().slice(0, 10) }),
-    onError: (e) => toastError(e, 'No se pudo preparar el resumen'),
+    onError: (e) => toastError(e, t('today.err.briefing')),
   })
   const text = briefing.data?.text
 
@@ -350,7 +347,7 @@ function BriefingPanel() {
       const s = await speak(text, { voice: settings.data?.settings.voice, speed: settings.data?.settings.voiceSpeed })
       await s.done
     } catch (e) {
-      toastError(e, 'No se pudo reproducir')
+      toastError(e, t('today.err.play'))
     } finally {
       setPlaying(false)
     }
@@ -358,13 +355,13 @@ function BriefingPanel() {
 
   return (
     <Panel className="p-5" aria-labelledby="brief-title">
-      <SectionHeader id="brief-title" title="Resumen del día" />
+      <SectionHeader id="brief-title" title={t('today.briefing')} />
       {gen.isPending ? (
-        <div className="mt-4 grid gap-2" aria-busy="true" aria-label="Preparando resumen">
+        <div className="mt-4 grid gap-2" aria-busy="true" aria-label={t('today.preparingBriefing')}>
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-11/12" />
           <Skeleton className="h-3.5 w-3/5" />
-          <p className="mt-2 text-sm text-muted">Kairo está repasando tu día…</p>
+          <p className="mt-2 text-sm text-muted">{t('today.reviewing')}</p>
         </div>
       ) : text ? (
         <>
@@ -376,18 +373,18 @@ function BriefingPanel() {
               onClick={() => void play()}
               icon={playing ? <Pause className="size-4" weight="fill" /> : <Play className="size-4" weight="fill" />}
             >
-              {playing ? 'Detener' : 'Escuchar'}
+              {playing ? t('composer.stop') : t('today.listen')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => gen.mutate()}>
-              Actualizar
+              {t('today.refresh')}
             </Button>
           </div>
         </>
       ) : (
         <>
-          <p className="mt-2 text-base text-muted">Kairo te cuenta en un minuto lo importante de hoy: agenda, pendientes y clima.</p>
+          <p className="mt-2 text-base text-muted">{t('today.briefingIntro')}</p>
           <Button className="mt-4" variant="primary" onClick={() => gen.mutate()} icon={<Sparkle className="size-4" />}>
-            Resumen del día
+            {t('today.briefing')}
           </Button>
         </>
       )}
@@ -395,11 +392,11 @@ function BriefingPanel() {
   )
 }
 
-/* ---------------------------------------------------------------- Familia */
+/* ---------------------------------------------------------------- Family */
 
 /**
- * Lo último que pasó en la familia (avisos sin leer). Con una sola persona en el hogar se oculta y,
- * si quien mira administra la familia, queda una línea para invitar.
+ * The latest family activity (unread notices). With a single person in the household it is hidden and,
+ * if the viewer administers the family, a line is left to invite someone.
  */
 function FamilyPanel() {
   const fam = useFamilyInfo()
@@ -407,7 +404,7 @@ function FamilyPanel() {
 
   if (fam.query.isLoading)
     return (
-      <Panel className="p-5" aria-busy="true" aria-label="Cargando familia">
+      <Panel className="p-5" aria-busy="true" aria-label={t('today.loadingFamily')}>
         <Skeleton className="h-5 w-24" />
         <SkeletonRows rows={2} className="mt-5" />
       </Panel>
@@ -417,11 +414,11 @@ function FamilyPanel() {
     if (!fam.isAdmin) return null
     return (
       <Link
-        to="/familia?invitar=1"
+        to="/family?invite=1"
         className="group flex items-center gap-3 rounded-card border border-dashed border-line px-5 py-3.5 text-base text-muted transition-colors hover:border-[color-mix(in_srgb,var(--text-faint)_50%,var(--border))] hover:text-fg"
       >
         <UserPlus className="size-[18px] shrink-0 text-faint group-hover:text-muted" />
-        <span className="min-w-0 flex-1">Invita a tu familia para compartir listas, eventos y tareas.</span>
+        <span className="min-w-0 flex-1">{t('today.inviteFamily')}</span>
         <ArrowRight className="size-3.5 shrink-0" />
       </Link>
     )
@@ -433,7 +430,7 @@ function FamilyPanel() {
     <Panel className="p-5" aria-labelledby="family-title">
       <SectionHeader
         id="family-title"
-        title="Familia"
+        title={t('nav.family')}
         count={notices.data ? count : undefined}
         action={
           <span className="flex items-center gap-3">
@@ -442,8 +439,8 @@ function FamilyPanel() {
                 <Avatar key={m.id} name={m.displayName} size="sm" className="ring-2 ring-surface" />
               ))}
             </span>
-            <Link to="/familia" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-              Abrir <ArrowRight className="size-3.5" />
+            <Link to="/family" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+              {t('common.open')} <ArrowRight className="size-3.5" />
             </Link>
           </span>
         }
@@ -451,15 +448,15 @@ function FamilyPanel() {
       {notices.isLoading ? (
         <SkeletonRows rows={2} className="mt-5" />
       ) : notices.isError ? (
-        <p className="mt-3 text-base text-muted">No pude cargar las novedades de la familia.</p>
+        <p className="mt-3 text-base text-muted">{t('today.familyError')}</p>
       ) : unread.length === 0 ? (
-        <p className="mt-2 text-base text-muted">Estás al día. Nada nuevo de la familia.</p>
+        <p className="mt-2 text-base text-muted">{t('today.familyCaughtUp')}</p>
       ) : (
         <>
           <NoticesFeed notices={unread} loading={false} limit={3} className="mt-2" />
           {count > 3 && (
-            <Link to="/familia#novedades" className="mt-1 inline-block text-sm text-muted hover:text-fg">
-              Ver {count - 3} más
+            <Link to="/family#updates" className="mt-1 inline-block text-sm text-muted hover:text-fg">
+              {t('common.seeMore', { count: count - 3 })}
             </Link>
           )}
         </>
@@ -468,15 +465,16 @@ function FamilyPanel() {
   )
 }
 
-/* ---------------------------------------------------------------- Clima */
+/* ---------------------------------------------------------------- Weather */
 
+/** Picks an icon from the server's weather description (which follows the assistant language: English or Spanish). */
 function weatherIcon(desc: string): Icon {
   const d = desc.toLowerCase()
-  if (d.includes('torment')) return CloudLightning
-  if (d.includes('lluv') || d.includes('llovizn') || d.includes('chubasc')) return CloudRain
-  if (d.includes('niebla') || d.includes('bruma')) return CloudFog
-  if (d.includes('parcial') || d.includes('algo nublado') || d.includes('intervalos')) return CloudSun
-  if (d.includes('nublad') || d.includes('cubierto')) return Cloud
+  if (d.includes('torment') || d.includes('thunder') || d.includes('storm')) return CloudLightning
+  if (d.includes('lluv') || d.includes('llovizn') || d.includes('chubasc') || d.includes('rain') || d.includes('drizzle') || d.includes('shower')) return CloudRain
+  if (d.includes('niebla') || d.includes('bruma') || d.includes('fog') || d.includes('mist') || d.includes('haze')) return CloudFog
+  if (d.includes('parcial') || d.includes('algo nublado') || d.includes('intervalos') || d.includes('partly') || d.includes('mostly sunny') || d.includes('mostly clear')) return CloudSun
+  if (d.includes('nublad') || d.includes('cubierto') || d.includes('cloud') || d.includes('overcast')) return Cloud
   return Sun
 }
 
@@ -484,7 +482,7 @@ function WeatherPanel({ weather }: { weather: Weather }) {
   const Icon = weatherIcon(weather.description)
   const days = weather.days.slice(1, 4)
   return (
-    <Panel className="p-5" aria-label={`Clima en ${weather.place}`}>
+    <Panel className="p-5" aria-label={t('today.weatherIn', { place: weather.place })}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{weather.place}</p>
@@ -492,7 +490,7 @@ function WeatherPanel({ weather }: { weather: Weather }) {
           <p className="mt-2 text-base text-fg">{capitalize(weather.description)}</p>
           {weather.feelsLike !== null && (
             <p className="text-sm text-muted">
-              Sensación de <span className="font-mono tnum">{Math.round(weather.feelsLike)}°</span>
+              {t('today.feelsLike')} <span className="font-mono tnum">{Math.round(weather.feelsLike)}°</span>
             </p>
           )}
         </div>
@@ -504,12 +502,12 @@ function WeatherPanel({ weather }: { weather: Weather }) {
             const DIcon = weatherIcon(d.description)
             return (
               <div key={d.date} className="grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)_auto] items-center gap-2 text-sm">
-                <span className="text-muted">{capitalize(shortDate(d.date).split(' ')[0])}</span>
+                <span className="text-muted">{capitalize(weekdayShort(d.date))}</span>
                 <DIcon className="size-4 text-faint" aria-hidden />
                 <span className="truncate text-muted">
                   {d.rainChance !== null && d.rainChance >= 30 ? (
                     <>
-                      Lluvia <span className="font-mono tnum">{d.rainChance}%</span>
+                      {t('today.rain')} <span className="font-mono tnum">{d.rainChance}%</span>
                     </>
                   ) : (
                     capitalize(d.description)
@@ -527,7 +525,7 @@ function WeatherPanel({ weather }: { weather: Weather }) {
   )
 }
 
-/* ---------------------------------------------------------------- Recordatorios */
+/* ---------------------------------------------------------------- Reminders */
 
 function RemindersPanel({ data }: { data?: Today }) {
   const { done, snooze } = useReminderActions()
@@ -538,18 +536,18 @@ function RemindersPanel({ data }: { data?: Today }) {
     <Panel className="p-5" aria-labelledby="rem-title">
       <SectionHeader
         id="rem-title"
-        title="Recordatorios"
+        title={t('nav.reminders')}
         count={data ? total : undefined}
         action={
-          <Link to="/recordatorios" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-            Todos <ArrowRight className="size-3.5" />
+          <Link to="/reminders" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+            {t('common.all2')} <ArrowRight className="size-3.5" />
           </Link>
         }
       />
       {!data ? (
         <SkeletonRows rows={2} className="mt-5" />
       ) : total === 0 ? (
-        <p className="mt-3 text-base text-muted">No hay recordatorios para lo que queda del día.</p>
+        <p className="mt-3 text-base text-muted">{t('today.remindersEmpty')}</p>
       ) : (
         <div className="mt-1 divide-y divide-line">
           {fired.map((r) => (
@@ -559,10 +557,10 @@ function RemindersPanel({ data }: { data?: Today }) {
               actions={
                 <>
                   <Button size="sm" variant="quiet" onClick={() => done.mutate(r)}>
-                    Hecho
+                    {t('reminders.done')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => snooze.mutate({ r, minutes: 10 })}>
-                    Posponer 10 min
+                    {t('realtime.snooze10')}
                   </Button>
                 </>
               }
@@ -577,12 +575,12 @@ function RemindersPanel({ data }: { data?: Today }) {
   )
 }
 
-/* ---------------------------------------------------------------- Listas */
+/* ---------------------------------------------------------------- Lists */
 
 function ListsPanel({ data }: { data?: Today }) {
   const toggle = useToggleItem()
   const lists = useLists()
-  // Usa la caché de listas (optimista) cuando existe; si no, lo que trae Hoy.
+  // Use the (optimistic) lists cache when it exists; otherwise what Today brings.
   const source = data?.lists.map((l) => lists.data?.find((x) => x.id === l.id) ?? l) ?? []
   const visible = source.filter((l) => l.items.some((i) => !i.checked))
   if (data && visible.length === 0) return null
@@ -590,10 +588,10 @@ function ListsPanel({ data }: { data?: Today }) {
     <Panel className="p-5" aria-labelledby="lists-title">
       <SectionHeader
         id="lists-title"
-        title="Listas"
+        title={t('nav.lists')}
         action={
-          <Link to="/listas" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-            Abrir <ArrowRight className="size-3.5" />
+          <Link to="/lists" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+            {t('common.open')} <ArrowRight className="size-3.5" />
           </Link>
         }
       />
@@ -605,7 +603,7 @@ function ListsPanel({ data }: { data?: Today }) {
             const pending = l.items.filter((i) => !i.checked)
             return (
               <div key={l.id}>
-                <Link to={`/listas/${l.id}`} className="flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+                <Link to={`/lists/${l.id}`} className="flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
                   <ListChecks className="size-4" />
                   {l.name}
                   <span className="font-mono font-normal text-faint tnum">{pending.length}</span>
@@ -615,7 +613,7 @@ function ListsPanel({ data }: { data?: Today }) {
                     <li key={i.id} className="flex items-center gap-3 py-1.5">
                       <Checkbox
                         checked={i.checked}
-                        label={`Marcar ${i.text}`}
+                        label={t('lists.check', { text: i.text })}
                         onChange={(checked) => toggle.mutate({ listId: l.id, itemId: i.id, checked })}
                       />
                       <span className="text-base text-fg">{i.text}</span>
@@ -623,8 +621,8 @@ function ListsPanel({ data }: { data?: Today }) {
                   ))}
                 </ul>
                 {pending.length > 5 && (
-                  <Link to={`/listas/${l.id}`} className="mt-1 inline-block text-sm text-muted hover:text-fg">
-                    {pending.length - 5} más
+                  <Link to={`/lists/${l.id}`} className="mt-1 inline-block text-sm text-muted hover:text-fg">
+                    {t('today.moreCount', { count: pending.length - 5 })}
                   </Link>
                 )}
               </div>
@@ -636,7 +634,7 @@ function ListsPanel({ data }: { data?: Today }) {
   )
 }
 
-/* ---------------------------------------------------------------- Notas */
+/* ---------------------------------------------------------------- Notes */
 
 function NotesPanel({ data }: { data?: Today }) {
   const notes = data?.recentNotes ?? []
@@ -644,24 +642,24 @@ function NotesPanel({ data }: { data?: Today }) {
     <Panel className="p-5" aria-labelledby="notes-title">
       <SectionHeader
         id="notes-title"
-        title="Notas recientes"
+        title={t('today.recentNotes')}
         action={
-          <Link to="/notas" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
-            Todas <ArrowRight className="size-3.5" />
+          <Link to="/notes" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+            {t('common.allFem')} <ArrowRight className="size-3.5" />
           </Link>
         }
       />
       {!data ? (
         <SkeletonRows rows={3} className="mt-5" withIcon={false} />
       ) : notes.length === 0 ? (
-        <EmptyState compact icon={<Notepad />} title="Aún no hay notas" description="Dile a Kairo “anota que…” o crea una desde Notas." />
+        <EmptyState compact icon={<Notepad />} title={t('today.notesEmpty')} description={t('today.notesEmptyHint')} />
       ) : (
         <ul className="mt-2 grid">
           {notes.slice(0, 5).map((n) => (
             <li key={n.id}>
-              <Link to={`/notas/${n.id}`} className="-mx-2 flex items-baseline gap-3 rounded-control px-2 py-2 transition-colors hover:bg-surface-2">
+              <Link to={`/notes/${n.id}`} className="-mx-2 flex items-baseline gap-3 rounded-control px-2 py-2 transition-colors hover:bg-surface-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base text-fg">{n.title || plainText(n.content).slice(0, 60) || 'Sin título'}</span>
+                  <span className="block truncate text-base text-fg">{n.title || plainText(n.content).slice(0, 60) || t('notes.untitled')}</span>
                   <span className="block truncate text-sm text-muted">{plainText(n.content).slice(0, 90)}</span>
                 </span>
                 <span className="shrink-0 font-mono text-xs text-faint">{compactWhen(n.updatedAt)}</span>

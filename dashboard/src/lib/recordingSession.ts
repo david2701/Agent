@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from 'react'
 import { api } from './api'
+import { t } from './i18n'
 import { micErrorMessage, micSupported, SegmentRecorder, unlockAudio } from './audio'
 import type { Recording } from './types'
 
 /**
- * Grabación larga desde el navegador: segmentos de ~5 min que se suben a
- * /recordings/{id}/segments y al final /finish. Vive fuera de React para que
- * siga grabando aunque cambies de página.
+ * Long recording from the browser: ~5 min segments uploaded to
+ * /recordings/{id}/segments and /finish at the end. It lives outside React so
+ * it keeps recording even when you change pages.
  */
 
 export interface SessionState {
@@ -51,7 +52,7 @@ const onBeforeUnload = (e: BeforeUnloadEvent) => {
 async function upload(id: string, blob: Blob, seq: number, duration: number, ext: string) {
   const send = () => {
     const fd = new FormData()
-    fd.append('file', blob, `segmento-${seq}.${ext}`)
+    fd.append('file', blob, `segment-${seq}.${ext}`)
     fd.append('seq', String(seq))
     fd.append('duration', String(duration))
     return api.post(`/recordings/${id}/segments`, fd)
@@ -67,7 +68,7 @@ async function upload(id: string, blob: Blob, seq: number, duration: number, ext
 export async function startRecording(segmentMs = 5 * 60_000): Promise<void> {
   if (state.status === 'recording' || state.status === 'starting') return
   if (!micSupported()) {
-    setState({ status: 'error', error: 'Este navegador no permite grabar audio.' })
+    setState({ status: 'error', error: t('voice.noRecording') })
     return
   }
   unlockAudio()
@@ -76,7 +77,7 @@ export async function startRecording(segmentMs = 5 * 60_000): Promise<void> {
   try {
     rec = await api.post<Recording>('/recordings', { title: '' })
   } catch (e) {
-    setState({ status: 'error', error: e instanceof Error ? e.message : 'No se pudo crear la grabación.' })
+    setState({ status: 'error', error: e instanceof Error ? e.message : t('recSession.createFailed') })
     return
   }
   const id = rec.id
@@ -100,7 +101,7 @@ export async function startRecording(segmentMs = 5 * 60_000): Promise<void> {
   setState({ status: 'recording', recordingId: id })
 }
 
-/** Detiene, sube lo pendiente y pide el procesamiento. Devuelve el id. */
+/** Stops, uploads what is pending and requests processing. Returns the id. */
 export async function finishRecording(title: string): Promise<string | null> {
   const id = state.recordingId
   if (!recorder || !id) return null
@@ -111,7 +112,7 @@ export async function finishRecording(title: string): Promise<string | null> {
   try {
     await api.post(`/recordings/${id}/finish`, title.trim() ? { title: title.trim() } : {})
   } catch (e) {
-    setState({ status: 'error', recordingId: null, error: e instanceof Error ? e.message : 'No se pudo procesar la grabación.' })
+    setState({ status: 'error', recordingId: null, error: e instanceof Error ? e.message : t('recSession.processFailed') })
     return id
   }
   setState({ status: 'idle', recordingId: null })

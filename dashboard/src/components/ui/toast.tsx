@@ -2,6 +2,7 @@ import { CheckCircle, Info, WarningCircle, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
+import { t } from '@/lib/i18n'
 
 export interface ToastAction {
   label: string
@@ -13,7 +14,7 @@ export interface ToastOptions {
   description?: ReactNode
   tone?: 'default' | 'success' | 'danger'
   actions?: ToastAction[]
-  /** ms; 0 = no se cierra solo */
+  /** ms; 0 = does not close on its own */
   duration?: number
   icon?: ReactNode
   id?: string
@@ -43,8 +44,8 @@ export function dismissToast(id: string) {
   publish(items.filter((t) => t.id !== id))
 }
 
-/** Atajo para errores de mutaciones. */
-export function toastError(e: unknown, title = 'Algo salió mal') {
+/** Shortcut for mutation errors. */
+export function toastError(e: unknown, title = t('common.somethingWrong')) {
   const message = e instanceof Error ? e.message : String(e)
   toast({ title, description: message, tone: 'danger' })
 }
@@ -79,7 +80,7 @@ export function Toaster() {
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="pointer-events-auto"
           >
-            <ToastCard t={t} />
+            <ToastCard item={t} />
           </motion.div>
         ))}
       </AnimatePresence>
@@ -87,38 +88,38 @@ export function Toaster() {
   )
 }
 
-function ToastCard({ t }: { t: ToastItem }) {
-  const duration = t.duration ?? (t.actions?.length ? 7000 : 4500)
+function ToastCard({ item }: { item: ToastItem }) {
+  const duration = item.duration ?? (item.actions?.length ? 7000 : 4500)
   useEffect(() => {
     if (!duration) return
-    const timer = setTimeout(() => dismissToast(t.id), duration)
+    const timer = setTimeout(() => dismissToast(item.id), duration)
     return () => clearTimeout(timer)
-  }, [t.id, duration])
+  }, [item.id, duration])
 
   const icon =
-    t.icon ??
-    (t.tone === 'danger' ? (
+    item.icon ??
+    (item.tone === 'danger' ? (
       <WarningCircle className="size-5 text-danger" />
-    ) : t.tone === 'success' ? (
+    ) : item.tone === 'success' ? (
       <CheckCircle className="size-5 text-success" />
     ) : (
       <Info className="size-5 text-muted" />
     ))
 
   return (
-    <div role={t.tone === 'danger' ? 'alert' : 'status'} className="flex items-start gap-3 rounded-card border border-line bg-surface p-3 pr-2 shadow-pop">
+    <div role={item.tone === 'danger' ? 'alert' : 'status'} className="flex items-start gap-3 rounded-card border border-line bg-surface p-3 pr-2 shadow-pop">
       <span className="mt-px shrink-0">{icon}</span>
       <div className="min-w-0 flex-1 py-px">
-        <p className="text-base font-medium text-fg">{t.title}</p>
-        {t.description && <div className="mt-0.5 text-sm break-words text-muted">{t.description}</div>}
-        {t.actions && t.actions.length > 0 && (
+        <p className="text-base font-medium text-fg">{item.title}</p>
+        {item.description && <div className="mt-0.5 text-sm break-words text-muted">{item.description}</div>}
+        {item.actions && item.actions.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {t.actions.map((a, i) => (
+            {item.actions.map((a, i) => (
               <button
                 key={a.label}
                 type="button"
                 onClick={async () => {
-                  dismissToast(t.id)
+                  dismissToast(item.id)
                   await a.onClick()
                 }}
                 className={cn(
@@ -134,8 +135,8 @@ function ToastCard({ t }: { t: ToastItem }) {
       </div>
       <button
         type="button"
-        aria-label="Cerrar aviso"
-        onClick={() => dismissToast(t.id)}
+        aria-label={t('ui.closeNotice')}
+        onClick={() => dismissToast(item.id)}
         className="flex size-7 shrink-0 items-center justify-center rounded-[8px] text-faint transition-colors hover:bg-surface-2 hover:text-fg"
       >
         <X className="size-3.5" />

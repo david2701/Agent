@@ -29,21 +29,22 @@ import { cn } from '@/lib/cn'
 import { sourcePhrase } from '@/lib/entities'
 import { useFamilyInfo } from '@/lib/family'
 import { compactWhen, longDate, plainText, relative, time } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { invalidateEntity, keys, useNote, useNotes, useNoteSearch, useNoteTags } from '@/lib/queries'
 import type { Note } from '@/lib/types'
 import { undoLatest } from '@/lib/undo'
 import { useDebounced } from '@/lib/useStored'
 
-const NEW = 'nueva'
+const NEW = 'new'
 
 type Scope = 'all' | 'mine' | 'family'
-const SCOPES: { id: Scope; label: string }[] = [
-  { id: 'all', label: 'Todas' },
-  { id: 'mine', label: 'Mías' },
-  { id: 'family', label: 'Familiares' },
+const scopes = (): { id: Scope; label: string }[] => [
+  { id: 'all', label: t('notes.scopeAll') },
+  { id: 'mine', label: t('notes.scopeMine') },
+  { id: 'family', label: t('notes.scopeFamily') },
 ]
 
-export default function Notas() {
+export default function NotesPage() {
   const { id } = useParams<{ id?: string }>()
   const [q, setQ] = useState('')
   const [tag, setTag] = useState<string | null>(null)
@@ -72,27 +73,27 @@ export default function Notas() {
     <div className="flex h-[calc(100dvh-56px-68px-env(safe-area-inset-bottom))] md:h-[100dvh]">
       <aside
         className={cn('flex w-full min-w-0 flex-col border-line md:w-[320px] md:shrink-0 md:border-r xl:w-[360px]', id && 'max-md:hidden')}
-        aria-label="Lista de notas"
+        aria-label={t('notes.list')}
       >
         <div className="flex items-center justify-between gap-3 px-4 pt-5 pb-3 md:pt-6">
-          <h1 className="text-lg font-semibold tracking-tight md:text-xl">Notas</h1>
-          <NavLinkButton to={`/notas/${NEW}`} />
+          <h1 className="text-lg font-semibold tracking-tight md:text-xl">{t('nav.notes')}</h1>
+          <NavLinkButton to={`/notes/${NEW}`} />
         </div>
         <div className="px-4">
           <label className="relative block">
-            <span className="sr-only">Buscar notas</span>
+            <span className="sr-only">{t('notes.search')}</span>
             <MagnifyingGlass className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
             <input
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por tema o contenido"
+              placeholder={t('notes.searchPlaceholder')}
               className="h-10 w-full rounded-control border border-line bg-surface pr-9 pl-9 text-base outline-none transition-colors focus:border-accent [&::-webkit-search-cancel-button]:appearance-none"
             />
             {q && (
               <button
                 type="button"
-                aria-label="Borrar búsqueda"
+                aria-label={t('notes.clearSearch')}
                 onClick={() => setQ('')}
                 className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-faint transition-colors hover:bg-surface-2 hover:text-fg"
               >
@@ -103,13 +104,13 @@ export default function Notas() {
           {searching && (
             <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
               <Sparkle className="size-3.5 shrink-0 text-accent-strong" />
-              {search.isFetching ? 'Buscando por significado…' : 'Resultados por significado, no solo por palabras exactas'}
+              {search.isFetching ? t('notes.searchingMeaning') : t('notes.resultsMeaning')}
             </p>
           )}
         </div>
         {showScopes && (
-          <div className="mt-3 flex gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label="Filtrar por dueño">
-            {SCOPES.map((sc) => (
+          <div className="mt-3 flex gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label={t('notes.filterOwner')}>
+            {scopes().map((sc) => (
               <Chip key={sc.id} selected={scope === sc.id} onClick={() => setScope(sc.id)}>
                 {sc.id === 'family' && <House className="size-3.5" />}
                 {sc.label}
@@ -118,20 +119,20 @@ export default function Notas() {
           </div>
         )}
         {(tags.data?.length ?? 0) > 0 && (
-          <div className={cn('flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none', showScopes ? 'mt-2' : 'mt-3')} role="group" aria-label="Filtrar por etiqueta">
+          <div className={cn('flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none', showScopes ? 'mt-2' : 'mt-3')} role="group" aria-label={t('notes.filterTag')}>
             <Chip selected={!tag} onClick={() => setTag(null)}>
-              {showScopes ? 'Cualquier etiqueta' : 'Todas'}
+              {showScopes ? t('notes.anyTag') : t('notes.allTags')}
             </Chip>
-            {tags.data!.map((t) => (
-              <Chip key={t} selected={tag === t} onClick={() => setTag(tag === t ? null : t)}>
-                #{t}
+            {tags.data!.map((tg) => (
+              <Chip key={tg} selected={tag === tg} onClick={() => setTag(tag === tg ? null : tg)}>
+                #{tg}
               </Chip>
             ))}
           </div>
         )}
         <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {loading ? (
-            <div className="grid gap-5 px-3 pt-3" aria-busy="true" aria-label="Cargando notas">
+            <div className="grid gap-5 px-3 pt-3" aria-busy="true" aria-label={t('notes.loading')}>
               {Array.from({ length: 6 }, (_, i) => (
                 <div key={i} className="grid gap-2">
                   <Skeleton className="h-3.5 w-3/5" />
@@ -148,32 +149,32 @@ export default function Notas() {
               icon={<Notepad />}
               title={
                 searching
-                  ? 'Nada parecido'
+                  ? t('notes.emptySearch')
                   : tag
-                    ? `Sin notas con #${tag}`
+                    ? t('notes.emptyTag', { tag })
                     : scope === 'family'
-                      ? 'Sin notas familiares'
+                      ? t('notes.emptyFamily')
                       : scope === 'mine'
-                        ? 'Aún no tienes notas propias'
-                        : 'Aún no tienes notas'
+                        ? t('notes.emptyMine')
+                        : t('notes.emptyAll')
               }
               description={
                 searching
-                  ? 'Prueba con otras palabras o quita el filtro.'
+                  ? t('notes.emptySearchHint')
                   : scope === 'family'
-                    ? 'Abre una nota y activa “Compartir con la familia” para que la vean todos.'
-                    : 'Escribe una aquí o dile a Kairo: “anota que…”.'
+                    ? t('notes.emptyFamilyHint')
+                    : t('notes.emptyHint')
               }
             />
           ) : (
             <>
-              {pinned.length > 0 && <ListLabel>Fijadas</ListLabel>}
+              {pinned.length > 0 && <ListLabel>{t('notes.pinned')}</ListLabel>}
               <ul className="grid gap-0.5">
                 {pinned.map((n) => (
                   <NoteItem key={n.id} note={n} active={n.id === id} />
                 ))}
               </ul>
-              {pinned.length > 0 && rest.length > 0 && <ListLabel>Todas</ListLabel>}
+              {pinned.length > 0 && rest.length > 0 && <ListLabel>{t('notes.all')}</ListLabel>}
               <ul className="grid gap-0.5">
                 {rest.map((n) => (
                   <NoteItem key={n.id} note={n} active={n.id === id} showScore={searching} />
@@ -184,15 +185,15 @@ export default function Notas() {
         </div>
       </aside>
 
-      <section className={cn('min-w-0 flex-1', !id && 'max-md:hidden')} aria-label="Nota">
+      <section className={cn('min-w-0 flex-1', !id && 'max-md:hidden')} aria-label={t('notes.note')}>
         {id ? (
           <NoteEditor key={id} id={id} knownTags={tags.data ?? []} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <EmptyState
               icon={<NotePencil />}
-              title="Elige una nota"
-              description="O empieza una nueva desde el botón de arriba. Puedes escribir en Markdown y verla formateada."
+              title={t('notes.pick')}
+              description={t('notes.pickHint')}
             />
           </div>
         )}
@@ -205,7 +206,7 @@ function NavLinkButton({ to }: { to: string }) {
   const navigate = useNavigate()
   return (
     <Button size="sm" variant="primary" icon={<NotePencil className="size-4" />} onClick={() => navigate(to)}>
-      Nueva nota
+      {t('notes.new')}
     </Button>
   )
 }
@@ -221,15 +222,15 @@ function NoteItem({ note, active, showScore }: { note: Note; active: boolean; sh
   return (
     <li>
       <NavLink
-        to={`/notas/${note.id}`}
+        to={`/notes/${note.id}`}
         className={cn(
           'block rounded-control px-3 py-2.5 transition-colors',
           active ? 'bg-surface-2' : 'hover:bg-surface-2/60',
         )}
       >
         <span className="flex items-baseline gap-2">
-          {note.pinned && <PushPin className="size-3.5 shrink-0 self-center text-faint" aria-label="Fijada" />}
-          <span className="min-w-0 flex-1 truncate text-base font-medium text-fg">{note.title || excerpt.slice(0, 50) || 'Sin título'}</span>
+          {note.pinned && <PushPin className="size-3.5 shrink-0 self-center text-faint" aria-label={t('notes.pinnedLabel')} />}
+          <span className="min-w-0 flex-1 truncate text-base font-medium text-fg">{note.title || excerpt.slice(0, 50) || t('notes.untitled')}</span>
           <span className="shrink-0 font-mono text-xs text-faint">{compactWhen(note.updatedAt)}</span>
         </span>
         {excerpt && <span className="mt-0.5 line-clamp-2 text-sm text-muted">{excerpt}</span>}
@@ -238,11 +239,11 @@ function NoteItem({ note, active, showScore }: { note: Note; active: boolean; sh
             {note.shared && (
               <span className="inline-flex h-5 items-center gap-1 rounded-full bg-surface-2 px-2 font-medium text-muted">
                 <House className="size-3" aria-hidden />
-                {by ? `Familiar, de ${by}` : 'Familiar'}
+                {by ? t('family.tagFrom', { name: by }) : t('family.tag')}
               </span>
             )}
-            {note.tags.slice(0, 4).map((t) => (
-              <span key={t}>#{t}</span>
+            {note.tags.slice(0, 4).map((tg) => (
+              <span key={tg}>#{tg}</span>
             ))}
           </span>
         )}
@@ -256,7 +257,7 @@ interface Draft {
   content: string
   tags: string[]
   pinned: boolean
-  /** Solo se usa al crear: en una nota existente, compartir se guarda al instante. */
+  /** Only used when creating: on an existing note, sharing is saved instantly. */
   shared: boolean
 }
 
@@ -286,7 +287,7 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
   const titleRef = useRef<HTMLInputElement>(null)
   const dirty = !sameDraft(draft, base)
 
-  // Carga inicial y cambios remotos cuando no hay edición en curso
+  // Initial load and remote changes when no edit is in progress
   useEffect(() => {
     if (!note.data) return
     const d: Draft = { title: note.data.title, content: note.data.content, tags: note.data.tags, pinned: note.data.pinned, shared: note.data.shared }
@@ -312,21 +313,21 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
       invalidateEntity(qc, 'note')
       if (isNew) {
         allowNav.current = true
-        navigate(`/notas/${n.id}`, { replace: true })
+        navigate(`/notes/${n.id}`, { replace: true })
         toast({
-          title: 'Nota creada',
+          title: t('notes.created'),
           description: n.title || undefined,
           tone: 'success',
           actions: [
             {
-              label: 'Deshacer',
+              label: t('common.undo'),
               onClick: async () => {
                 try {
-                  navigate('/notas')
+                  navigate('/notes')
                   qc.removeQueries({ queryKey: keys.note(n.id) })
                   await undoLatest(qc, 'note', n.id, 'created')
                 } catch (e) {
-                  toastError(e, 'No se pudo deshacer')
+                  toastError(e, t('common.couldNotUndo'))
                 }
               },
             },
@@ -334,7 +335,7 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
         })
       }
     },
-    onError: (e) => toastError(e, 'No se pudo guardar la nota'),
+    onError: (e) => toastError(e, t('notes.err.save')),
   })
 
   const remove = useMutation({
@@ -344,26 +345,26 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
       setConfirm(false)
       allowNav.current = true
       invalidateEntity(qc, 'note')
-      navigate('/notas')
+      navigate('/notes')
       toast({
-        title: 'Nota eliminada',
+        title: t('notes.deleted'),
         description: title || undefined,
         actions: [
           {
-            label: 'Deshacer',
+            label: t('common.undo'),
             onClick: async () => {
               try {
                 await undoLatest(qc, 'note', id, 'deleted')
-                navigate(`/notas/${id}`)
+                navigate(`/notes/${id}`)
               } catch (e) {
-                toastError(e, 'No se pudo deshacer')
+                toastError(e, t('common.couldNotUndo'))
               }
             },
           },
         ],
       })
     },
-    onError: (e) => toastError(e, 'No se pudo eliminar la nota'),
+    onError: (e) => toastError(e, t('notes.err.delete')),
   })
 
   const togglePin = useMutation({
@@ -372,9 +373,9 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
       setBase((b) => ({ ...b, pinned: n.pinned }))
       setDraft((d) => ({ ...d, pinned: n.pinned }))
       invalidateEntity(qc, 'note')
-      toast({ title: n.pinned ? 'Nota fijada' : 'Nota sin fijar' })
+      toast({ title: n.pinned ? t('notes.pinnedToast') : t('notes.unpinnedToast') })
     },
-    onError: (e) => toastError(e, 'No se pudo cambiar'),
+    onError: (e) => toastError(e, t('common.couldNotChange')),
   })
 
   const toggleShared = useMutation({
@@ -387,14 +388,14 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
       qc.setQueryData(keys.note(n.id), n)
       invalidateEntity(qc, 'note')
       toast({
-        title: n.shared ? 'Nota compartida con la familia' : 'La nota vuelve a ser personal',
-        description: n.shared ? 'Todos en la familia pueden verla y editarla.' : undefined,
+        title: n.shared ? t('notes.sharedToast') : t('notes.personalToast'),
+        description: n.shared ? t('notes.sharedToastBody') : undefined,
       })
     },
     onError: (e, shared) => {
       setBase((b) => ({ ...b, shared: !shared }))
       setDraft((d) => ({ ...d, shared: !shared }))
-      toastError(e, 'No se pudo cambiar')
+      toastError(e, t('common.couldNotChange'))
     },
   })
 
@@ -409,7 +410,7 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
 
   if (!isNew && note.isLoading) {
     return (
-      <div className="mx-auto grid max-w-[72ch] gap-4 px-6 py-10" aria-busy="true" aria-label="Cargando nota">
+      <div className="mx-auto grid max-w-[72ch] gap-4 px-6 py-10" aria-busy="true" aria-label={t('notes.loadingNote')}>
         <Skeleton className="h-8 w-2/3" />
         <Skeleton className="h-3 w-40" />
         <div className="mt-4 grid gap-2.5">
@@ -432,26 +433,26 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
   return (
     <div className="flex h-full flex-col" onKeyDown={onKeyDown}>
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-3 md:h-16 md:px-5">
-        <IconButton label="Volver a la lista" className="md:hidden" onClick={() => navigate('/notas')}>
+        <IconButton label={t('notes.backToList')} className="md:hidden" onClick={() => navigate('/notes')}>
           <ArrowLeft className="size-5" />
         </IconButton>
         <Segmented
-          label="Modo de la nota"
+          label={t('notes.mode')}
           size="sm"
           value={mode}
           onChange={setMode}
           options={[
-            { value: 'edit', label: 'Escribir' },
-            { value: 'preview', label: 'Vista previa' },
+            { value: 'edit', label: t('notes.write') },
+            { value: 'preview', label: t('notes.preview') },
           ]}
         />
         <span className="ml-auto hidden text-sm text-faint sm:inline" aria-live="polite">
-          {save.isPending ? 'Guardando…' : dirty ? 'Cambios sin guardar' : n ? `Guardada ${relative(n.updatedAt)}` : ''}
+          {save.isPending ? t('notes.saving') : dirty ? t('notes.unsaved') : n ? t('notes.savedAgo', { when: relative(n.updatedAt) }) : ''}
         </span>
         <div className="ml-auto flex items-center gap-1 sm:ml-2">
           {!isNew && (
             <IconButton
-              label={draft.pinned ? 'Quitar de fijadas' : 'Fijar nota'}
+              label={draft.pinned ? t('notes.unpin') : t('notes.pin')}
               tone={draft.pinned ? 'accent' : 'default'}
               onClick={() => togglePin.mutate(!draft.pinned)}
             >
@@ -460,16 +461,16 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
           )}
           {!isNew && (
             <Menu
-              items={[{ label: 'Eliminar nota', icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => setConfirm(true) }]}
+              items={[{ label: t('notes.delete'), icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => setConfirm(true) }]}
               trigger={(p) => (
-                <IconButton label="Más opciones" {...p}>
+                <IconButton label={t('chat.moreOptions')} {...p}>
                   <DotsThree className="size-5" weight="bold" />
                 </IconButton>
               )}
             />
           )}
           <Button size="sm" variant={canSave ? 'primary' : 'secondary'} disabled={!canSave} loading={save.isPending} onClick={() => save.mutate(draft)}>
-            Guardar
+            {t('common.save')}
           </Button>
         </div>
       </div>
@@ -481,12 +482,12 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
               ref={titleRef}
               value={draft.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              placeholder="Título"
-              aria-label="Título"
+              placeholder={t('notes.titlePlaceholder')}
+              aria-label={t('notes.titlePlaceholder')}
               className="w-full bg-transparent text-xl font-semibold tracking-tight text-fg outline-none placeholder:text-faint"
             />
           ) : (
-            <h2 className="text-xl font-semibold tracking-tight text-fg">{draft.title || <span className="text-faint">Sin título</span>}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-fg">{draft.title || <span className="text-faint">{t('notes.untitled')}</span>}</h2>
           )}
           {n && (
             <p className="mt-2 text-sm text-faint">
@@ -516,14 +517,14 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
               <Markdown className="text-md leading-relaxed">{draft.content}</Markdown>
             ) : (
               <button type="button" onClick={() => setMode('edit')} className="text-base text-faint hover:text-muted">
-                Esta nota está vacía. Toca para escribir.
+                {t('notes.emptyNote')}
               </button>
             )}
           </div>
 
           {n && n.attachments.length > 0 && (
             <div className="mt-8 border-t border-line pt-5">
-              <p className="mb-3 text-sm font-medium text-muted">Adjuntos</p>
+              <p className="mb-3 text-sm font-medium text-muted">{t('notes.attachments')}</p>
               <div className="flex flex-wrap gap-3">
                 {n.attachments.map((f) => (
                   <AttachmentImage key={f.id} file={f} />
@@ -539,8 +540,8 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
         onClose={() => setConfirm(false)}
         onConfirm={() => remove.mutate()}
         loading={remove.isPending}
-        title="¿Eliminar esta nota?"
-        description="Podrás deshacerlo desde el aviso o desde Actividad."
+        title={t('notes.deleteTitle')}
+        description={t('notes.deleteBody')}
       />
       {dirty && <UnsavedGuard allowRef={allowNav} />}
     </div>
@@ -548,8 +549,8 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
 }
 
 /**
- * "Compartir con la familia": solo quien creó la nota puede cambiarlo; los demás ven quién la compartió.
- * Se oculta si no hay nadie más en el hogar (salvo que la nota ya sea familiar).
+ * "Share with the family": only whoever created the note can change it; everyone else sees who shared it.
+ * Hidden when nobody else is in the household (unless the note is already shared).
  */
 function ShareRow({
   fam,
@@ -570,21 +571,21 @@ function ShareRow({
     return (
       <p className="mt-3 flex items-center gap-1.5 text-sm text-muted">
         <FamilyIcon className="text-muted" />
-        Compartida por {fam.nameOf(note.ownerId) ?? 'otra persona'}. Puedes editarla; solo quien la creó puede dejar de compartirla.
+        {t('notes.sharedBy', { name: fam.nameOf(note.ownerId) ?? t('reminder.someoneElse') })}
       </p>
     )
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
       <label className="flex items-center gap-2.5 text-sm text-fg">
-        <Switch checked={shared} onChange={onChange} disabled={busy} label="Compartir con la familia" />
-        Compartir con la familia
+        <Switch checked={shared} onChange={onChange} disabled={busy} label={t('notes.shareSwitch')} />
+        {t('notes.shareSwitch')}
       </label>
-      <span className="text-sm text-muted">{shared ? `La ven y editan todos en ${fam.household?.name ?? 'la familia'}.` : 'Solo tú la ves.'}</span>
+      <span className="text-sm text-muted">{shared ? t('notes.sharedWith', { household: fam.household?.name ?? t('notes.theFamily') }) : t('notes.onlyYou')}</span>
     </div>
   )
 }
 
-/** Pide confirmación al salir con cambios sin guardar (solo montado mientras hay cambios). */
+/** Asks for confirmation when leaving with unsaved changes (only mounted while there are changes). */
 function UnsavedGuard({ allowRef }: { allowRef: { current: boolean } }) {
   const blocker = useBlocker(({ currentLocation, nextLocation }) => !allowRef.current && currentLocation.pathname !== nextLocation.pathname)
   useEffect(() => {
@@ -597,9 +598,9 @@ function UnsavedGuard({ allowRef }: { allowRef: { current: boolean } }) {
       open={blocker.state === 'blocked'}
       onClose={() => blocker.reset?.()}
       onConfirm={() => blocker.proceed?.()}
-      title="¿Salir sin guardar?"
-      description="Tienes cambios en esta nota que se perderán."
-      confirmLabel="Descartar cambios"
+      title={t('notes.leaveTitle')}
+      description={t('notes.leaveBody')}
+      confirmLabel={t('notes.discardChanges')}
     />
   )
 }
@@ -622,29 +623,29 @@ function AutoTextarea({ value, onChange, autoFocus }: { value: string; onChange:
       value={value}
       autoFocus={autoFocus}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="Escribe aquí. Usa # para títulos, - para listas y - [ ] para pendientes."
-      aria-label="Contenido de la nota"
+      placeholder={t('notes.contentPlaceholder')}
+      aria-label={t('notes.contentLabel')}
       className="w-full resize-none bg-transparent font-sans text-md leading-relaxed text-fg outline-none placeholder:text-faint"
     />
   )
 }
 
-function TagEditor({ tags, onChange, known }: { tags: string[]; onChange: (t: string[]) => void; known: string[] }) {
+function TagEditor({ tags, onChange, known }: { tags: string[]; onChange: (tags: string[]) => void; known: string[] }) {
   const [value, setValue] = useState('')
   const add = (raw: string) => {
-    const t = raw.trim().replace(/^#/, '').toLowerCase()
-    if (t && !tags.includes(t)) onChange([...tags, t])
+    const tag = raw.trim().replace(/^#/, '').toLowerCase()
+    if (tag && !tags.includes(tag)) onChange([...tags, tag])
     setValue('')
   }
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5">
-      {tags.map((t) => (
-        <span key={t} className="inline-flex h-7 items-center gap-1 rounded-full bg-surface-2 pr-1 pl-2.5 text-sm text-muted">
-          #{t}
+      {tags.map((tag) => (
+        <span key={tag} className="inline-flex h-7 items-center gap-1 rounded-full bg-surface-2 pr-1 pl-2.5 text-sm text-muted">
+          #{tag}
           <button
             type="button"
-            aria-label={`Quitar etiqueta ${t}`}
-            onClick={() => onChange(tags.filter((x) => x !== t))}
+            aria-label={t('notes.removeTag', { tag })}
+            onClick={() => onChange(tags.filter((x) => x !== tag))}
             className="flex size-5 items-center justify-center rounded-full text-faint hover:bg-line hover:text-fg"
           >
             <X className="size-3" />
@@ -666,8 +667,8 @@ function TagEditor({ tags, onChange, known }: { tags: string[]; onChange: (t: st
           } else if (e.key === 'Backspace' && !value && tags.length) onChange(tags.slice(0, -1))
         }}
         onBlur={() => value.trim() && add(value)}
-        placeholder={tags.length ? 'Otra etiqueta' : 'Agregar etiqueta'}
-        aria-label="Agregar etiqueta"
+        placeholder={tags.length ? t('notes.anotherTag') : t('notes.addTag')}
+        aria-label={t('notes.addTag')}
         className="h-7 min-w-28 flex-1 bg-transparent px-1 text-sm text-fg outline-none placeholder:text-faint"
       />
       <datalist id="note-tags">

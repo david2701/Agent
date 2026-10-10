@@ -1,7 +1,6 @@
 import { ArrowCounterClockwise, ClockCounterClockwise } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, isToday, isYesterday } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -9,45 +8,43 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
 import { Chip, PageHeader, Panel } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { cn } from '@/lib/cn'
-import { ENTITY_LABEL, entityHref, entityIcon, sourcePhrase } from '@/lib/entities'
-import { capitalize, time } from '@/lib/format'
+import { entityHref, entityIcon, entityLabel, sourcePhrase } from '@/lib/entities'
+import { capitalize, dayHeading, time } from '@/lib/format'
+import { t, type TKey } from '@/lib/i18n'
 import { useActivity } from '@/lib/queries'
 import type { Activity } from '@/lib/types'
 import { undoActivity } from '@/lib/undo'
 
-const KIND_LABEL: Record<string, string> = {
-  created: 'Creado',
-  updated: 'Editado',
-  deleted: 'Eliminado',
-  completed: 'Completado',
-  fired: 'Sonó',
-  restored: 'Restaurado',
+const KINDS = ['created', 'updated', 'deleted', 'completed', 'fired', 'restored']
+
+function kindLabel(kind: string) {
+  return KINDS.includes(kind) ? t(`activity.kind.${kind}` as TKey) : capitalize(kind)
 }
 
-const FILTERS: { id: string; label: string; match: (s: string) => boolean }[] = [
-  { id: 'all', label: 'Todo', match: () => true },
-  { id: 'chat', label: 'Chat', match: (s) => s === 'chat' || s === 'share' },
-  { id: 'voice', label: 'Voz', match: (s) => s === 'voice' || s === 'wear' },
-  { id: 'app', label: 'App', match: (s) => s === 'app' },
-  { id: 'dashboard', label: 'Panel web', match: (s) => s === 'dashboard' || s === 'undo' },
-  { id: 'system', label: 'Sistema', match: (s) => !['chat', 'share', 'voice', 'wear', 'app', 'dashboard', 'undo'].includes(s) },
+const FILTERS: { id: string; labelKey: TKey; match: (s: string) => boolean }[] = [
+  { id: 'all', labelKey: 'common.all', match: () => true },
+  { id: 'chat', labelKey: 'source.chat', match: (s) => s === 'chat' || s === 'share' },
+  { id: 'voice', labelKey: 'source.voice', match: (s) => s === 'voice' || s === 'wear' },
+  { id: 'app', labelKey: 'source.app', match: (s) => s === 'app' },
+  { id: 'dashboard', labelKey: 'source.dashboard', match: (s) => s === 'dashboard' || s === 'undo' },
+  { id: 'system', labelKey: 'source.system', match: (s) => !['chat', 'share', 'voice', 'wear', 'app', 'dashboard', 'undo'].includes(s) },
 ]
 
 function dayTitle(d: Date) {
-  if (isToday(d)) return 'Hoy'
-  if (isYesterday(d)) return 'Ayer'
-  return capitalize(format(d, "EEEE d 'de' MMMM", { locale: es }))
+  if (isToday(d)) return t('time.today')
+  if (isYesterday(d)) return t('time.yesterday')
+  return capitalize(dayHeading(d))
 }
 
-export default function Actividad() {
+export default function ActivityPage() {
   const qc = useQueryClient()
   const activity = useActivity()
   const [filter, setFilter] = useState('all')
 
   const undo = useMutation({
     mutationFn: (a: Activity) => undoActivity(qc, a).then(() => a),
-    onSuccess: (a) => toast({ title: 'Deshecho', description: a.summary, tone: 'success' }),
-    onError: (e) => toastError(e, 'No se pudo deshacer'),
+    onSuccess: (a) => toast({ title: t('activity.undone'), description: a.summary, tone: 'success' }),
+    onError: (e) => toastError(e, t('common.couldNotUndo')),
   })
 
   const groups = useMemo(() => {
@@ -70,19 +67,19 @@ export default function Actividad() {
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
       <div className="max-w-[920px]">
-      <PageHeader title="Actividad" description="Todo lo que cambió, desde dónde y cuándo. Puedes deshacer lo que se creó o se borró." />
+      <PageHeader title={t('activity.title')} description={t('activity.subtitle')} />
 
-      <div className="mt-6 flex gap-1.5 overflow-x-auto scrollbar-none max-sm:-mx-4 max-sm:px-4" role="group" aria-label="Filtrar por origen">
+      <div className="mt-6 flex gap-1.5 overflow-x-auto scrollbar-none max-sm:-mx-4 max-sm:px-4" role="group" aria-label={t('activity.filterBySource')}>
         {FILTERS.map((f) => (
           <Chip key={f.id} selected={filter === f.id} onClick={() => setFilter(f.id)}>
-            {f.label}
+            {t(f.labelKey)}
           </Chip>
         ))}
       </div>
 
       <div className="mt-5 grid gap-5">
         {activity.isLoading ? (
-          <Panel className="grid gap-5 p-5" aria-busy="true" aria-label="Cargando actividad">
+          <Panel className="grid gap-5 p-5" aria-busy="true" aria-label={t('activity.loading')}>
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="flex items-center gap-3">
                 <Skeleton className="h-3 w-10" />
@@ -102,8 +99,8 @@ export default function Actividad() {
           <Panel>
             <EmptyState
               icon={<ClockCounterClockwise />}
-              title={filter === 'all' ? 'Sin actividad todavía' : 'Nada desde este origen'}
-              description="Cada nota, tarea o recordatorio que se cree o cambie aparecerá aquí."
+              title={filter === 'all' ? t('activity.emptyAll') : t('activity.emptySource')}
+              description={t('activity.emptyHint')}
             />
           </Panel>
         ) : (
@@ -121,7 +118,7 @@ export default function Actividad() {
         {activity.hasNextPage && (
           <div className="flex justify-center">
             <Button onClick={() => void activity.fetchNextPage()} loading={activity.isFetchingNextPage}>
-              Cargar más
+              {t('common.loadMore')}
             </Button>
           </div>
         )}
@@ -155,15 +152,15 @@ function ActivityRow({ a, onUndo, undoing }: { a: Activity; onUndo: () => void; 
       <div className="min-w-0 flex-1">
         <p className={cn('text-base leading-snug break-words', a.undoneAt ? 'text-faint line-through' : 'text-fg')}>{summary}</p>
         <p className="mt-0.5 text-sm text-muted">
-          <span className="sr-only">{ENTITY_LABEL[a.entityType] ?? a.entityType}. </span>
-          {KIND_LABEL[a.kind] ?? capitalize(a.kind)} {sourcePhrase(a.source)}
+          <span className="sr-only">{entityLabel(a.entityType) ?? a.entityType}. </span>
+          {kindLabel(a.kind)} {sourcePhrase(a.source)}
         </p>
       </div>
       {a.undoneAt ? (
-        <span className="shrink-0 pt-1 text-sm text-faint">Deshecho</span>
+        <span className="shrink-0 pt-1 text-sm text-faint">{t('activity.undone')}</span>
       ) : a.undoable ? (
         <Button size="sm" variant="ghost" icon={<ArrowCounterClockwise className="size-4" />} onClick={onUndo} loading={undoing} className="shrink-0">
-          Deshacer
+          {t('common.undo')}
         </Button>
       ) : null}
     </li>

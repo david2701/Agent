@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const off = client.onSessionChange((session) => {
-      // Otra cuenta en el mismo navegador (por ejemplo, al unirse con un código): nada de la anterior debe quedar en caché.
+      // Another account in the same browser (e.g. when joining with a code): nothing from the previous one may stay cached.
       if (session && lastUser.current && lastUser.current !== session.user.id) qc.clear()
       lastUser.current = session?.user.id ?? null
       if (session) {
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         qc.clear()
       }
     })
-    // Restaura la sesión con la cookie httpOnly.
+    // Restore the session from the httpOnly cookie.
     void client.refreshSession()
     return off
   }, [qc])
@@ -62,6 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth fuera de AuthProvider')
+  if (!ctx) throw new Error('useAuth outside AuthProvider')
   return ctx
 }

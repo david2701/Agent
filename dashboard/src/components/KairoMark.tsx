@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn'
 
-/** Marca de Kairo: anillo abierto + punto ámbar en el hueco (design/icon). */
+/** Kairo mark: an open ring + an amber dot in the gap (design/icon). */
 export function KairoMark({ className, title }: { className?: string; title?: string }) {
   return (
     <svg

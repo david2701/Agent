@@ -16,13 +16,14 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useFamilyInfo } from '@/lib/family'
 import { fromLocalInput, toLocalInput } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { useReminderActions } from '@/lib/mutations'
 import { invalidateEntity, usePlaces, useReminders } from '@/lib/queries'
 import { presetLabel, presetToRrule, rruleToPreset, type RecurrencePreset } from '@/lib/rrule'
 import type { Reminder } from '@/lib/types'
 import { undoLatest } from '@/lib/undo'
 
-export default function Recordatorios() {
+export default function RemindersPage() {
   const reminders = useReminders()
   const [params, setParams] = useSearchParams()
   const location = useLocation()
@@ -32,9 +33,9 @@ export default function Recordatorios() {
   const actions = useReminderActions()
 
   useEffect(() => {
-    if (params.get('nuevo')) {
+    if (params.get('new')) {
       setEditing('new')
-      params.delete('nuevo')
+      params.delete('new')
       setParams(params, { replace: true })
     }
     const rid = params.get('r')
@@ -48,7 +49,7 @@ export default function Recordatorios() {
   }, [params, setParams, reminders.data])
 
   useEffect(() => {
-    if (location.hash === '#lugares') document.getElementById('lugares')?.scrollIntoView({ behavior: 'smooth' })
+    if (location.hash === '#places') document.getElementById('places')?.scrollIntoView({ behavior: 'smooth' })
   }, [location.hash])
 
   const groups = useMemo(() => {
@@ -69,15 +70,15 @@ export default function Recordatorios() {
   const menu = (r: Reminder) => (
     <Menu
       items={[
-        r.status !== 'done' && r.status !== 'cancelled' && { label: 'Editar', icon: <PencilSimple className="size-4" />, onSelect: () => setEditing(r) },
-        r.status === 'scheduled' && { label: 'Marcar como hecho', icon: <Check className="size-4" />, onSelect: () => actions.done.mutate(r) },
-        (r.status === 'scheduled' || r.status === 'fired') && !r.placeId && { label: 'Posponer 10 min', icon: <Clock className="size-4" />, onSelect: () => actions.snooze.mutate({ r, minutes: 10 }) },
-        r.status === 'fired' && { label: 'Posponer 1 hora', icon: <Clock className="size-4" />, onSelect: () => actions.snooze.mutate({ r, minutes: 60 }) },
-        (r.status === 'scheduled' || r.status === 'fired') && { label: 'Cancelar', icon: <Prohibit className="size-4" />, onSelect: () => actions.cancel.mutate(r) },
-        { label: 'Eliminar', icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => actions.remove.mutate(r) },
+        r.status !== 'done' && r.status !== 'cancelled' && { label: t('common.edit'), icon: <PencilSimple className="size-4" />, onSelect: () => setEditing(r) },
+        r.status === 'scheduled' && { label: t('reminders.markDone'), icon: <Check className="size-4" />, onSelect: () => actions.done.mutate(r) },
+        (r.status === 'scheduled' || r.status === 'fired') && !r.placeId && { label: t('realtime.snooze10'), icon: <Clock className="size-4" />, onSelect: () => actions.snooze.mutate({ r, minutes: 10 }) },
+        r.status === 'fired' && { label: t('reminders.snooze1h'), icon: <Clock className="size-4" />, onSelect: () => actions.snooze.mutate({ r, minutes: 60 }) },
+        (r.status === 'scheduled' || r.status === 'fired') && { label: t('reminders.cancel'), icon: <Prohibit className="size-4" />, onSelect: () => actions.cancel.mutate(r) },
+        { label: t('common.delete'), icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => actions.remove.mutate(r) },
       ]}
       trigger={(p) => (
-        <IconButton label={`Opciones de ${r.text}`} size="sm" {...p}>
+        <IconButton label={t('reminders.optionsFor', { text: r.text })} size="sm" {...p}>
           <DotsThree className="size-5" weight="bold" />
         </IconButton>
       )}
@@ -106,32 +107,32 @@ export default function Recordatorios() {
   const sections: { id: string; title: string; items: Reminder[]; extra?: (r: Reminder) => ReactNode; empty?: string }[] = [
     {
       id: 'fired',
-      title: 'Sonaron',
+      title: t('reminders.sectionFired'),
       items: groups.fired,
       extra: (r) => (
         <>
           <Button size="sm" variant="quiet" onClick={() => actions.done.mutate(r)}>
-            Hecho
+            {t('reminders.done')}
           </Button>
           <Button size="sm" variant="ghost" className="max-sm:hidden" onClick={() => actions.snooze.mutate({ r, minutes: 10 })}>
-            Posponer 10 min
+            {t('realtime.snooze10')}
           </Button>
         </>
       ),
     },
-    { id: 'upcoming', title: 'Próximos', items: groups.upcoming, empty: 'No hay recordatorios con fecha.' },
-    { id: 'recurring', title: 'Recurrentes', items: groups.recurring },
-    { id: 'place', title: 'Por lugar', items: groups.place },
+    { id: 'upcoming', title: t('reminders.sectionUpcoming'), items: groups.upcoming, empty: t('reminders.noDated') },
+    { id: 'recurring', title: t('reminders.sectionRecurring'), items: groups.recurring },
+    { id: 'place', title: t('reminders.sectionPlace'), items: groups.place },
   ]
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
       <PageHeader
-        title="Recordatorios"
-        description="Kairo te avisa aquí, en tu teléfono y en el reloj."
+        title={t('nav.reminders')}
+        description={t('reminders.subtitle')}
         actions={
           <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
-            Nuevo recordatorio
+            {t('reminders.new')}
           </Button>
         }
       />
@@ -150,8 +151,8 @@ export default function Recordatorios() {
             <Panel>
               <EmptyState
                 icon={<Bell />}
-                title="Sin recordatorios"
-                description="Crea uno aquí o dile a Kairo: “recuérdame sacar la basura los martes a las 8 p. m.”."
+                title={t('reminders.empty')}
+                description={t('reminders.emptyHint')}
               />
             </Panel>
           ) : (
@@ -170,11 +171,11 @@ export default function Recordatorios() {
                 ))}
               {groups.done.length > 0 && (
                 <Panel className="px-5 pt-4 pb-2" aria-labelledby="sec-done">
-                  <SectionHeader id="sec-done" title="Hechos" count={groups.done.length} />
+                  <SectionHeader id="sec-done" title={t('reminders.sectionDone')} count={groups.done.length} />
                   <div className="divide-y divide-line">{(showAllDone ? groups.done : groups.done.slice(0, 6)).map((r) => row(r))}</div>
                   {groups.done.length > 6 && !showAllDone && (
                     <button type="button" onClick={() => setShowAllDone(true)} className="py-3 text-sm text-muted hover:text-fg">
-                      Ver {groups.done.length - 6} más
+                      {t('reminders.showMore', { count: groups.done.length - 6 })}
                     </button>
                   )}
                 </Panel>
@@ -183,8 +184,8 @@ export default function Recordatorios() {
           )}
         </div>
 
-        <Panel className="p-5 lg:sticky lg:top-6" aria-labelledby="lugares">
-          <SectionHeader id="lugares" title="Lugares" />
+        <Panel className="p-5 lg:sticky lg:top-6" aria-labelledby="places">
+          <SectionHeader id="places" title={t('reminders.places')} />
           <div className="mt-2">
             <PlacesManager />
           </div>
@@ -228,7 +229,7 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
     setError(null)
   }, [reminder])
 
-  // Para otra persona solo sirven los lugares familiares (los personales no los ve).
+  // Only family places work for someone else (they can't see personal ones).
   const forOther = !editing && !!forUser && forUser !== fam.me
   const forName = forOther ? fam.nameOf(forUser) : null
   const usablePlaces = (places.data ?? []).filter((p) => !forOther || p.shared)
@@ -252,57 +253,57 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
     onSuccess: (r) => {
       invalidateEntity(qc, 'reminder')
       onClose()
-      if (editing) toast({ title: 'Recordatorio guardado', description: r.text })
+      if (editing) toast({ title: t('reminders.saved'), description: r.text })
       else
         toast({
-          title: forName ? `Recordatorio para ${forName}` : 'Recordatorio creado',
+          title: forName ? t('reminders.forName', { name: forName }) : t('reminders.created'),
           description: r.text,
           tone: 'success',
-          actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'reminder', r.id, 'created').catch((e) => toastError(e, 'No se pudo deshacer')) }],
+          actions: [{ label: t('common.undo'), onClick: () => undoLatest(qc, 'reminder', r.id, 'created').catch((e) => toastError(e, t('common.couldNotUndo'))) }],
         })
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo guardar'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('places.err.save')),
   })
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!text.trim()) return setError(forOther ? `Escribe qué le recuerdo a ${forName ?? 'esa persona'}.` : 'Escribe qué te recuerdo.')
-    if (kind === 'time' && (!whenDate || Number.isNaN(whenDate.getTime()))) return setError('Elige una fecha y hora.')
-    if (kind === 'time' && preset === 'none' && whenDate!.getTime() < Date.now() - 60_000) return setError('Esa hora ya pasó.')
-    if (kind === 'place' && !placeId) return setError('Elige un lugar.')
-    if (kind === 'place' && forOther && !usablePlaces.some((p) => p.id === placeId)) return setError('Ese lugar es personal: compártelo con la familia o elige otro.')
+    if (!text.trim()) return setError(forOther ? t('reminders.err.textFor', { name: forName ?? t('reminders.thatPerson') }) : t('reminders.err.text'))
+    if (kind === 'time' && (!whenDate || Number.isNaN(whenDate.getTime()))) return setError(t('reminders.err.date'))
+    if (kind === 'time' && preset === 'none' && whenDate!.getTime() < Date.now() - 60_000) return setError(t('reminders.err.past'))
+    if (kind === 'place' && !placeId) return setError(t('reminders.err.place'))
+    if (kind === 'place' && forOther && !usablePlaces.some((p) => p.id === placeId)) return setError(t('reminders.err.personalPlace'))
     setError(null)
     save.mutate()
   }
 
   const quick = [
-    { label: 'En 1 hora', date: addHours(new Date(), 1) },
-    { label: 'Esta tarde', date: set(new Date(), { hours: 18, minutes: 0, seconds: 0 }) },
-    { label: 'Mañana 9:00', date: set(addDays(new Date(), 1), { hours: 9, minutes: 0, seconds: 0 }) },
+    { label: t('reminders.quickHour'), date: addHours(new Date(), 1) },
+    { label: t('reminders.quickEvening'), date: set(new Date(), { hours: 18, minutes: 0, seconds: 0 }) },
+    { label: t('reminders.quickTomorrow'), date: set(addDays(new Date(), 1), { hours: 9, minutes: 0, seconds: 0 }) },
   ].filter((q) => q.date.getTime() > Date.now())
 
   return (
     <Dialog
       open={!!reminder}
       onClose={onClose}
-      title={editing ? 'Editar recordatorio' : 'Nuevo recordatorio'}
+      title={editing ? t('reminders.editTitle') : t('reminders.new')}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="submit" form="rem-form" loading={save.isPending}>
-            Guardar
+            {t('common.save')}
           </Button>
         </>
       }
     >
       <form id="rem-form" onSubmit={submit} className="grid gap-4">
         {!editing && fam.hasOthers && (
-          <Field label="Para" hint={forOther ? `Suena en el teléfono de ${forName} y le llega un aviso.` : undefined}>
+          <Field label={t('reminders.for')} hint={forOther ? t('reminders.forHint', { name: forName ?? '' }) : undefined}>
             {(id, d) => (
               <Select id={id} value={forOther ? forUser : ''} onChange={(e) => setForUser(e.target.value)} aria-describedby={d}>
-                <option value="">Yo</option>
+                <option value="">{t('reminders.me')}</option>
                 {fam.others.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.displayName}
@@ -312,22 +313,22 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
             )}
           </Field>
         )}
-        <Field label={forOther ? `¿Qué le recuerdo a ${forName ?? 'esa persona'}?` : '¿Qué te recuerdo?'}>
-          {(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="Llamar a la EPS para la cita" />}
+        <Field label={forOther ? t('reminders.whatFor', { name: forName ?? t('reminders.thatPerson') }) : t('reminders.what')}>
+          {(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder={t('reminders.textPlaceholder')} />}
         </Field>
         <Segmented
-          label="Tipo de aviso"
+          label={t('reminders.kind')}
           value={kind}
           onChange={setKind}
           options={[
-            { value: 'time', label: 'Fecha y hora' },
-            { value: 'place', label: 'Al llegar o salir de un lugar' },
+            { value: 'time', label: t('reminders.kindTime') },
+            { value: 'place', label: t('reminders.kindPlace') },
           ]}
           className="w-fit max-w-full"
         />
         {kind === 'time' ? (
           <>
-            <Field label="Cuándo">
+            <Field label={t('reminders.when')}>
               {(id) => <Input id={id} type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="font-mono" />}
             </Field>
             {quick.length > 0 && (
@@ -339,7 +340,7 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
                 ))}
               </div>
             )}
-            <Field label="Repetir">
+            <Field label={t('reminders.repeat')}>
               {(id) => (
                 <Select id={id} value={preset} onChange={(e) => setPreset(e.target.value as RecurrencePreset)}>
                   {(['none', 'daily', 'weekdays', 'weekly', 'monthly'] as RecurrencePreset[]).map((p) => (
@@ -354,15 +355,15 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
         ) : usablePlaces.length === 0 ? (
           <p className="rounded-control border border-dashed border-line px-3 py-4 text-base text-muted">
             {forOther
-              ? `No hay lugares familiares. Comparte uno con la familia en la sección Lugares para recordarle algo a ${forName} al llegar o salir.`
-              : 'Aún no tienes lugares guardados. Agrega uno en la sección Lugares de esta página.'}
+              ? t('reminders.noFamilyPlaces', { name: forName ?? '' })
+              : t('reminders.noPlaces')}
           </p>
         ) : (
           <>
-            <Field label="Lugar">
+            <Field label={t('reminders.place')}>
               {(id) => (
                 <Select id={id} value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
-                  <option value="">Elige un lugar</option>
+                  <option value="">{t('reminders.pickPlace')}</option>
                   {usablePlaces.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -372,12 +373,12 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
               )}
             </Field>
             <Segmented
-              label="Momento"
+              label={t('reminders.moment')}
               value={trigger}
               onChange={setTrigger}
               options={[
-                { value: 'arrive', label: 'Al llegar' },
-                { value: 'leave', label: 'Al salir' },
+                { value: 'arrive', label: t('reminders.onArrive') },
+                { value: 'leave', label: t('reminders.onLeave') },
               ]}
               className="w-fit"
             />

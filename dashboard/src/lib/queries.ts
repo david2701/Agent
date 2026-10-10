@@ -61,7 +61,7 @@ export const keys = {
   push: ['push'] as const,
 }
 
-/** Qué cachés recargar cuando cambia una entidad (WebSocket o mutación propia). */
+/** Which caches to reload when an entity changes (WebSocket or own mutation). */
 export function invalidateEntity(qc: QueryClient, entity: string) {
   const map: Record<string, readonly (readonly unknown[])[]> = {
     note: [['notes'], keys.today],
@@ -74,7 +74,7 @@ export function invalidateEntity(qc: QueryClient, entity: string) {
     memory: [keys.memories],
     recording: [keys.recordings, ['notes']],
     conversation: [keys.conversations],
-    // Alguien entró o salió de la familia: cambian nombres y dueños de lo compartido.
+    // Someone joined or left the family: names and owners of shared items change.
     family: [keys.family, keys.notices, ['notes'], keys.tasks, keys.lists, ['events'], keys.places, keys.reminders, keys.today],
     notice: [keys.notices],
   }
@@ -117,7 +117,7 @@ export const useNote = (id: string | undefined) =>
 export const useTasks = () =>
   useQuery({ queryKey: keys.tasks, queryFn: ({ signal }) => api.get<Task[]>('/tasks?includeDone=true', signal) })
 
-/** Tareas cuyo responsable soy yo (propias o de la familia). */
+/** Tasks assigned to me (my own or the family's). */
 export const useTasksAssignedToMe = (enabled: boolean) =>
   useQuery({
     queryKey: keys.tasksMine,
@@ -215,7 +215,7 @@ export const useGoogleCalendars = (enabled: boolean) =>
 
 export const useMcpServers = () => useQuery({ queryKey: keys.mcp, queryFn: ({ signal }) => api.get<McpServer[]>('/mcp-servers', signal) })
 
-/** Hogar y miembros: cambia poco, se recarga con entity.changed "family". */
+/** Household and members: rarely changes, reloaded on entity.changed "family". */
 export const useFamily = () =>
   useQuery({ queryKey: keys.family, queryFn: ({ signal }) => api.get<FamilyInfo>('/family', signal), staleTime: 10 * 60_000 })
 
@@ -224,7 +224,7 @@ export const useInvites = (enabled: boolean) =>
     queryKey: keys.invites,
     queryFn: ({ signal }) => api.get<Invitation[]>('/family/invites', signal),
     enabled,
-    // Usar un código no avisa por WebSocket (salvo cuando entra alguien nuevo): se revisa cada minuto.
+    // Using a code does not notify over WebSocket (except when someone new joins): check every minute.
     refetchInterval: 60_000,
   })
 

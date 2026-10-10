@@ -22,8 +22,9 @@ import { PageHeader, Panel } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { MEMORY_CATEGORIES } from '@/lib/entities'
+import { memoryCategories } from '@/lib/entities'
 import { relative } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { invalidateEntity, useMemories } from '@/lib/queries'
 import type { Memory } from '@/lib/types'
 import { undoLatest } from '@/lib/undo'
@@ -38,7 +39,7 @@ const CAT_ICON: Record<string, Icon> = {
   general: Brain,
 }
 
-export default function Memoria() {
+export default function MemoryPage() {
   const qc = useQueryClient()
   const memories = useMemories()
   const [params, setParams] = useSearchParams()
@@ -57,8 +58,9 @@ export default function Memoria() {
   }, [params, setParams, memories.data])
 
   const grouped = useMemo(() => {
-    const out = MEMORY_CATEGORIES.map((c) => ({ ...c, items: (memories.data ?? []).filter((m) => m.category === c.id) }))
-    const known = new Set<string>(MEMORY_CATEGORIES.map((c) => c.id))
+    const categories = memoryCategories()
+    const out = categories.map((c) => ({ ...c, items: (memories.data ?? []).filter((m) => m.category === c.id) }))
+    const known = new Set<string>(categories.map((c) => c.id))
     const other = (memories.data ?? []).filter((m) => !known.has(m.category))
     if (other.length) out.find((g) => g.id === 'general')!.items.push(...other)
     return out.filter((g) => g.items.length > 0)
@@ -69,12 +71,12 @@ export default function Memoria() {
     onSuccess: (m) => {
       invalidateEntity(qc, 'memory')
       toast({
-        title: 'Kairo olvidó esto',
+        title: t('memory.forgot'),
         description: m.content,
-        actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'memory', m.id, 'deleted').catch((e) => toastError(e, 'No se pudo deshacer')) }],
+        actions: [{ label: t('common.undo'), onClick: () => undoLatest(qc, 'memory', m.id, 'deleted').catch((e) => toastError(e, t('common.couldNotUndo'))) }],
       })
     },
-    onError: (e) => toastError(e, 'No se pudo borrar'),
+    onError: (e) => toastError(e, t('memory.err.delete')),
   })
 
   const total = memories.data?.length ?? 0
@@ -82,8 +84,8 @@ export default function Memoria() {
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-6 md:px-8 md:py-9">
       <PageHeader
-        title="Memoria"
-        description="Lo que Kairo sabe de ti y usa para responderte mejor. Puedes corregirlo o borrarlo cuando quieras."
+        title={t('memory.title')}
+        description={t('memory.subtitle')}
       />
 
       <div className="mt-7 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
@@ -100,8 +102,8 @@ export default function Memoria() {
             <Panel>
               <EmptyState
                 icon={<Brain />}
-                title="Kairo aún no recuerda nada de ti"
-                description="Cuando le cuentes algo importante (“mi hija se llama Sofía”), lo guardará aquí. También puedes agregarlo tú."
+                title={t('memory.emptyTitle')}
+                description={t('memory.emptyHint')}
               />
             </Panel>
           ) : (
@@ -127,13 +129,13 @@ export default function Memoria() {
                           <div className="group flex items-start gap-3 py-3">
                             <div className="min-w-0 flex-1">
                               <p className="text-base leading-relaxed break-words text-fg">{m.content}</p>
-                              <p className="mt-0.5 text-xs text-faint">Actualizado {relative(m.updatedAt)}</p>
+                              <p className="mt-0.5 text-xs text-faint">{t('memory.updated', { when: relative(m.updatedAt) })}</p>
                             </div>
                             <div className="flex shrink-0 gap-0.5 md:opacity-0 md:transition-opacity md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-                              <IconButton label="Editar" size="sm" onClick={() => setEditing(m.id)}>
+                              <IconButton label={t('common.edit')} size="sm" onClick={() => setEditing(m.id)}>
                                 <PencilSimple className="size-4" />
                               </IconButton>
-                              <IconButton label="Olvidar" size="sm" tone="danger" onClick={() => remove.mutate(m)}>
+                              <IconButton label={t('memory.forget')} size="sm" tone="danger" onClick={() => remove.mutate(m)}>
                                 <Trash className="size-4" />
                               </IconButton>
                             </div>
@@ -151,7 +153,7 @@ export default function Memoria() {
         <div className="grid gap-5 lg:sticky lg:top-6">
           <Panel className="p-5" aria-labelledby="mem-new">
             <h2 id="mem-new" className="text-md font-semibold tracking-tight">
-              Enseñarle algo a Kairo
+              {t('memory.teach')}
             </h2>
             <MemoryForm />
           </Panel>
@@ -159,11 +161,11 @@ export default function Memoria() {
             <div className="flex gap-3">
               <Info className="mt-0.5 size-[18px] shrink-0 text-muted" />
               <div className="grid gap-2 text-sm text-muted">
-                <p>Estos datos viven en tu servidor y solo los usa tu asistente. Kairo los consulta cuando son relevantes para lo que le pides.</p>
-                <p>Borrar un recuerdo hace que Kairo deje de usarlo de inmediato.</p>
-                <Link to="/ajustes#datos" className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
+                <p>{t('memory.privacy1')}</p>
+                <p>{t('memory.privacy2')}</p>
+                <Link to="/settings#data" className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
                   <DownloadSimple className="size-4" />
-                  Exportar todos mis datos
+                  {t('memory.exportAll')}
                 </Link>
               </div>
             </div>
@@ -189,25 +191,25 @@ function MemoryForm({ memory, onDone }: { memory?: Memory; onDone?: () => void }
       if (!memory) {
         setContent('')
         toast({
-          title: 'Kairo lo recordará',
+          title: t('memory.willRemember'),
           description: m.content,
           tone: 'success',
-          actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'memory', m.id, 'created').catch((e) => toastError(e, 'No se pudo deshacer')) }],
+          actions: [{ label: t('common.undo'), onClick: () => undoLatest(qc, 'memory', m.id, 'created').catch((e) => toastError(e, t('common.couldNotUndo'))) }],
         })
       }
       onDone?.()
     },
-    onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo guardar'),
+    onError: (e) => setError(e instanceof Error ? e.message : t('places.err.save')),
   })
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!content.trim()) return setError('Escribe lo que Kairo debe recordar.')
+    if (!content.trim()) return setError(t('memory.err.empty'))
     setError(null)
     save.mutate()
   }
   return (
     <form onSubmit={submit} className={cn('grid gap-3', memory ? 'py-3' : 'mt-4')}>
-      <Field label={memory ? 'Recuerdo' : 'Qué debe saber'} error={error}>
+      <Field label={memory ? t('memory.fieldEdit') : t('memory.fieldNew')} error={error}>
         {(id, d) => (
           <Textarea
             id={id}
@@ -215,17 +217,17 @@ function MemoryForm({ memory, onDone }: { memory?: Memory; onDone?: () => void }
             onChange={(e) => setContent(e.target.value)}
             rows={3}
             autoFocus={!!memory}
-            placeholder={memory ? undefined : 'Prefiero que las reuniones sean después de las 9 a. m.'}
+            placeholder={memory ? undefined : t('memory.placeholder')}
             aria-describedby={d}
             aria-invalid={!!error}
           />
         )}
       </Field>
       <div className="flex flex-wrap items-end gap-2">
-        <Field label="Categoría" className="min-w-40 flex-1">
+        <Field label={t('memory.category')} className="min-w-40 flex-1">
           {(id) => (
             <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {MEMORY_CATEGORIES.map((c) => (
+              {memoryCategories().map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
@@ -235,11 +237,11 @@ function MemoryForm({ memory, onDone }: { memory?: Memory; onDone?: () => void }
         </Field>
         {memory && (
           <Button variant="ghost" onClick={onDone}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
         )}
         <Button type="submit" variant="primary" loading={save.isPending}>
-          Guardar
+          {t('common.save')}
         </Button>
       </div>
     </form>

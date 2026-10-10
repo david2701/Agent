@@ -5,14 +5,15 @@ import { Checkbox } from '@/components/ui/form'
 import { Tag } from '@/components/ui/misc'
 import { cn } from '@/lib/cn'
 import { useFamilyInfo } from '@/lib/family'
-import { dayTime, dueLabel, relative } from '@/lib/format'
+import { dayTime, dueLabel, midSentence, relative } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { describeRrule } from '@/lib/rrule'
 import type { Reminder, Task } from '@/lib/types'
 
 export function PriorityTag({ priority }: { priority: Task['priority'] }) {
-  if (priority === 'urgent') return <Tag tone="danger">Urgente</Tag>
-  if (priority === 'high') return <Tag>Alta</Tag>
-  if (priority === 'low') return <span className="text-sm text-faint">Baja</span>
+  if (priority === 'urgent') return <Tag tone="danger">{t('priority.urgent')}</Tag>
+  if (priority === 'high') return <Tag>{t('priority.high')}</Tag>
+  if (priority === 'low') return <span className="text-sm text-faint">{t('priority.low')}</span>
   return null
 }
 
@@ -23,12 +24,12 @@ export function DueText({ task, className }: { task: Pick<Task, 'dueDate' | 'due
   return (
     <span className={cn('inline-flex items-center gap-1', overdue ? 'text-danger' : due.today ? 'text-fg' : 'text-muted', className)}>
       <CalendarBlank className="size-3.5" />
-      {overdue ? `Vencida, ${due.text.toLowerCase()}` : due.text}
+      {overdue ? t('task.overdue', { when: midSentence(due.text) }) : due.text}
     </span>
   )
 }
 
-/** Marca familiar y responsable (iniciales) de una tarea, para tarjetas y filas. */
+/** Family mark and assignee (initials) of a task, for cards and rows. */
 export function TaskPeople({ task, className }: { task: Pick<Task, 'shared' | 'assigneeId' | 'ownerId'>; className?: string }) {
   const fam = useFamilyInfo()
   if (!task.shared && !task.assigneeId) return null
@@ -36,12 +37,12 @@ export function TaskPeople({ task, className }: { task: Pick<Task, 'shared' | 'a
   const owner = fam.isMine(task.ownerId) ? null : fam.nameOf(task.ownerId)
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1.5', className)}>
-      {task.shared && <FamilyIcon label={owner ? `Familiar, de ${owner}` : 'Familiar'} />}
+      {task.shared && <FamilyIcon label={owner ? t('family.tagFrom', { name: owner }) : t('family.tag')} />}
       {assignee && (
         <Avatar
           name={assignee.displayName}
           size="xs"
-          title={assignee.id === fam.me ? 'Responsable: tú' : `Responsable: ${assignee.displayName}`}
+          title={assignee.id === fam.me ? t('task.assignedToYou') : t('task.assignedTo', { name: assignee.displayName })}
         />
       )}
     </span>
@@ -81,7 +82,7 @@ export function TaskRow({
   return (
     <div className={cn('group flex items-start gap-3 py-2.5', className)}>
       <span className="pt-0.5">
-        <Checkbox checked={done} onChange={onToggle} label={done ? `Reabrir ${task.title}` : `Completar ${task.title}`} />
+        <Checkbox checked={done} onChange={onToggle} label={done ? t('task.reopen', { title: task.title }) : t('task.complete', { title: task.title })} />
       </span>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 rounded-[6px] text-left" disabled={!onOpen}>
         <p className={cn('text-base leading-snug break-words', done ? 'text-faint line-through decoration-faint' : 'text-fg')}>{task.title}</p>
@@ -93,11 +94,11 @@ export function TaskRow({
 }
 
 export function reminderWhen(r: Reminder): string {
-  if (r.status === 'fired') return r.lastFiredAt ? `Sonó ${relative(r.lastFiredAt)}` : 'Sonó'
-  if (r.placeId) return `${r.placeTrigger === 'leave' ? 'Al salir de' : 'Al llegar a'} ${r.placeName ?? 'un lugar'}`
+  if (r.status === 'fired') return r.lastFiredAt ? t('reminder.wentOffAgo', { when: relative(r.lastFiredAt) }) : t('reminder.wentOff')
+  if (r.placeId) return t(r.placeTrigger === 'leave' ? 'reminder.whenLeaving' : 'reminder.whenArriving', { place: r.placeName ?? t('reminder.aPlace') })
   const when = r.nextFireAt ?? r.dueAt
   const rec = describeRrule(r.rrule)
-  if (when && rec) return `${rec}, próximo ${dayTime(when).replace(/^Hoy/, 'hoy').replace(/^Mañana/, 'mañana')}`
+  if (when && rec) return t('reminder.recNext', { rec, when: midSentence(dayTime(when)) })
   if (when) return dayTime(when)
   return rec
 }
@@ -107,18 +108,18 @@ export function ReminderIcon({ r, className }: { r: Reminder; className?: string
   return <Icon className={cn('size-[18px]', r.status === 'fired' ? 'text-accent-strong' : 'text-faint', className)} />
 }
 
-/** "Para Valentina" (lo programé para otra persona) o "De Valentina" (alguien me lo programó). */
+/** "For Valentina" (I scheduled it for someone else) or "From Valentina" (someone scheduled it for me). */
 export function ReminderPerson({ r }: { r: Reminder }) {
   const fam = useFamilyInfo()
   const forOther = r.ownerId && fam.me && r.ownerId !== fam.me
   const fromOther = !forOther && r.createdBy && fam.me && r.createdBy !== fam.me
   if (!forOther && !fromOther) return null
   const person = fam.member(forOther ? r.ownerId : r.createdBy)
-  const name = fam.nameOf(forOther ? r.ownerId : r.createdBy) ?? 'otra persona'
+  const name = fam.nameOf(forOther ? r.ownerId : r.createdBy) ?? t('reminder.someoneElse')
   return (
     <span className="inline-flex items-center gap-1.5 text-muted">
       <Avatar name={person?.displayName ?? name} size="xs" />
-      {forOther ? `Para ${name}` : `De ${name}`}
+      {forOther ? t('reminder.forName', { name }) : t('reminder.fromName', { name })}
     </span>
   )
 }
@@ -134,7 +135,7 @@ export function ReminderRow({ r, actions, className }: { r: Reminder; actions?: 
         <p className={cn('text-base leading-snug break-words', done ? 'text-faint line-through' : 'text-fg')}>{r.text}</p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className={r.status === 'fired' ? 'text-accent-strong' : 'text-muted'}>
-            {done ? (r.status === 'cancelled' ? 'Cancelado' : 'Hecho') : reminderWhen(r)}
+            {done ? (r.status === 'cancelled' ? t('reminder.canceled') : t('reminder.done')) : reminderWhen(r)}
           </span>
           <ReminderPerson r={r} />
         </p>

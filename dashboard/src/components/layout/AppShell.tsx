@@ -25,6 +25,7 @@ import { setClientLocation } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
 import { useFamilyInfo } from '@/lib/family'
+import { t } from '@/lib/i18n'
 import { useMarkNoticesRead } from '@/lib/mutations'
 import { useNotices } from '@/lib/queries'
 import { useRealtime, useRealtimeState } from '@/lib/realtime'
@@ -49,7 +50,7 @@ function initialCollapsed() {
     if (v === 'collapsed') return true
     if (v === 'expanded') return false
   } catch {
-    /* nada */
+    /* no storage */
   }
   return window.matchMedia('(max-width: 1023px)').matches
 }
@@ -66,11 +67,11 @@ export function AppShell() {
   const [paletteLoaded, setPaletteLoaded] = useState(false)
   const location = useLocation()
 
-  const goHome = useCallback(() => navigate('/'), [navigate])
+  const goHome = useCallback(() => navigate('/today'), [navigate])
   const goTo = useCallback((to: string) => navigate(to), [navigate])
   useRealtime(true, goHome, goTo)
 
-  // Ubicación aproximada para clima y lugares, solo si ya fue concedida.
+  // Approximate location for weather and places, only if it was already granted.
   useEffect(() => {
     if (!navigator.permissions || !navigator.geolocation) return
     navigator.permissions
@@ -108,7 +109,7 @@ export function AppShell() {
       try {
         localStorage.setItem(SIDEBAR_KEY, c ? 'expanded' : 'collapsed')
       } catch {
-        /* nada */
+        /* no storage */
       }
       return !c
     })
@@ -129,7 +130,7 @@ export function AppShell() {
         href="#main"
         className="sr-only z-50 rounded-control bg-surface px-3 py-2 text-base focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
-        Saltar al contenido
+        {t('app.skipToContent')}
       </a>
       <div className="flex min-h-[100dvh]">
         <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onAsk={() => shell.openPalette()} onNotices={shell.openNotices} />
@@ -162,7 +163,7 @@ export function AppShell() {
 
 function PageFallback() {
   return (
-    <div className="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8 md:py-8" aria-busy="true" aria-label="Cargando">
+    <div className="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8 md:py-8" aria-busy="true" aria-label={t('common.loading')}>
       <Skeleton className="h-8 w-48" />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Skeleton className="h-64 rounded-card" />
@@ -177,9 +178,8 @@ function NavEntry({ item, collapsed, onNavigate }: { item: NavItem; collapsed: b
   return (
     <NavLink
       to={item.to}
-      end={item.to === '/'}
       onClick={onNavigate}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? t(item.labelKey) : undefined}
       className={({ isActive }) =>
         cn(
           'group relative flex h-9 items-center gap-3 rounded-control text-base transition-colors duration-200',
@@ -191,23 +191,23 @@ function NavEntry({ item, collapsed, onNavigate }: { item: NavItem; collapsed: b
       {({ isActive }) => (
         <>
           <Icon className={cn('size-[18px] shrink-0', isActive ? 'text-accent-strong' : 'text-faint group-hover:text-muted')} />
-          <span className={cn(collapsed && 'sr-only')}>{item.label}</span>
+          <span className={cn(collapsed && 'sr-only')}>{t(item.labelKey)}</span>
         </>
       )}
     </NavLink>
   )
 }
 
-/** Indicador de avisos de la familia: campana con la cuenta sin leer; abre Novedades. */
+/** Family notices indicator: a bell with the unread count; opens Updates. */
 function NoticesBell({ onOpen, size = 'md' }: { onOpen: () => void; size?: 'sm' | 'md' }) {
   const notices = useNotices()
   const fam = useFamilyInfo()
   const unread = notices.data?.unread ?? 0
-  // Sin nadie más en el hogar y sin avisos, la campana solo sería ruido.
+  // With nobody else in the household and no notices, the bell would just be noise.
   if (!fam.hasOthers && unread === 0) return null
   return (
     <IconButton
-      label={unread > 0 ? `Novedades de la familia, ${unread} sin leer` : 'Novedades de la familia'}
+      label={unread > 0 ? t('app.updatesFamilyUnread', { count: unread }) : t('app.updatesFamily')}
       size={size}
       onClick={onOpen}
       className="relative"
@@ -238,22 +238,22 @@ function NoticesDialog({ open, onClose }: { open: boolean; onClose: () => void }
     <Dialog
       open={open}
       onClose={onClose}
-      title="Novedades"
-      description={notices.data ? (unread > 0 ? `${unread} sin leer` : 'Estás al día con tu familia.') : undefined}
+      title={t('app.updates')}
+      description={notices.data ? (unread > 0 ? t('app.unread', { count: unread }) : t('app.caughtUp')) : undefined}
       footer={
         <>
           {unread > 0 && (
             <Button variant="ghost" className="mr-auto" icon={<Checks className="size-4" />} onClick={() => markAll.mutate(undefined)}>
-              Marcar todo como leído
+              {t('app.markAllRead')}
             </Button>
           )}
           <Button
             onClick={() => {
               onClose()
-              navigate('/familia#novedades')
+              navigate('/family#updates')
             }}
           >
-            Abrir Familia
+            {t('app.openFamily')}
           </Button>
         </>
       }
@@ -278,17 +278,17 @@ function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean
         'sticky top-0 hidden h-[100dvh] shrink-0 flex-col border-r border-line bg-bg md:flex',
         collapsed ? 'w-[68px]' : 'w-[244px]',
       )}
-      aria-label="Navegación principal"
+      aria-label={t('app.mainNav')}
     >
       <div className={cn('flex h-16 items-center', collapsed ? 'justify-center' : 'justify-between pr-2 pl-4')}>
-        <NavLink to="/" className="flex items-center gap-2.5 rounded-control" aria-label="Kairo, ir a Hoy">
+        <NavLink to="/today" className="flex items-center gap-2.5 rounded-control" aria-label={t('app.goToday')}>
           <KairoMark className="size-7" />
           {!collapsed && <span className="text-md font-semibold tracking-tight">Kairo</span>}
         </NavLink>
         {!collapsed && (
           <div className="flex items-center gap-0.5">
             <NoticesBell onOpen={onNotices} size="sm" />
-            <IconButton label="Contraer barra lateral" size="sm" onClick={onToggle}>
+            <IconButton label={t('app.collapseSidebar')} size="sm" onClick={onToggle}>
               <CaretLineLeft className="size-4" />
             </IconButton>
           </div>
@@ -298,10 +298,10 @@ function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean
       <div className={cn('px-3 pb-2', collapsed && 'flex flex-col items-center gap-1 px-0')}>
         {collapsed ? (
           <>
-            <IconButton label="Expandir barra lateral" size="sm" onClick={onToggle}>
+            <IconButton label={t('app.expandSidebar')} size="sm" onClick={onToggle}>
               <CaretLineRight className="size-4" />
             </IconButton>
-            <IconButton label={`Preguntar o buscar (${MOD_KEY} K)`} onClick={onAsk}>
+            <IconButton label={`${t('app.askOrSearch')} (${MOD_KEY} K)`} onClick={onAsk}>
               <MagnifyingGlass className="size-[18px]" />
             </IconButton>
             <NoticesBell onOpen={onNotices} />
@@ -313,7 +313,7 @@ function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean
             className="flex h-9 w-full items-center gap-2 rounded-control border border-line bg-surface px-2 text-base text-muted transition-colors hover:border-[color-mix(in_srgb,var(--text-faint)_45%,var(--border))] hover:text-fg active:scale-[0.99]"
           >
             <MagnifyingGlass className="size-4 text-faint" />
-            <span className="min-w-0 flex-1 truncate text-left text-sm">Preguntar o buscar</span>
+            <span className="min-w-0 flex-1 truncate text-left text-sm">{t('app.askOrSearch')}</span>
             <Kbd className="shrink-0 px-1">{MOD_KEY} K</Kbd>
           </button>
         )}
@@ -332,7 +332,7 @@ function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean
       <div className={cn('grid grid-cols-1 gap-1 border-t border-line py-3', collapsed ? 'px-2.5' : 'px-3')}>
         {live === 'offline' && !collapsed && (
           <p className="px-2.5 pb-1 text-xs text-faint" role="status">
-            Reconectando con el servidor…
+            {t('app.reconnecting')}
           </p>
         )}
         <NavEntry item={SETTINGS_ITEM} collapsed={collapsed} />
@@ -342,10 +342,10 @@ function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean
   )
 }
 
-const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: ReactNode }[] = [
-  { mode: 'light', label: 'Tema claro', icon: <Sun className="size-4" /> },
-  { mode: 'dark', label: 'Tema oscuro', icon: <Moon className="size-4" /> },
-  { mode: 'system', label: 'Según el sistema', icon: <Monitor className="size-4" /> },
+const themeOptions = (): { mode: ThemeMode; label: string; icon: ReactNode }[] => [
+  { mode: 'light', label: t('app.themeLight'), icon: <Sun className="size-4" /> },
+  { mode: 'dark', label: t('app.themeDark'), icon: <Moon className="size-4" /> },
+  { mode: 'system', label: t('app.themeSystem'), icon: <Monitor className="size-4" /> },
 ]
 
 function ThemeIcon() {
@@ -357,8 +357,8 @@ function ThemeIcon() {
 function UserRow({ collapsed }: { collapsed: boolean }) {
   const { user, logout } = useAuth()
   const { setMode } = useTheme()
-  const name = user?.displayName || 'Tú'
-  const themeItems = THEME_OPTIONS.map((o) => ({ label: o.label, icon: o.icon, onSelect: () => setMode(o.mode) }))
+  const name = user?.displayName || t('app.you')
+  const themeItems = themeOptions().map((o) => ({ label: o.label, icon: o.icon, onSelect: () => setMode(o.mode) }))
   return (
     <div className={cn('flex min-w-0 items-center gap-0.5', collapsed ? 'flex-col' : 'pl-1')}>
       {!collapsed && (
@@ -376,12 +376,12 @@ function UserRow({ collapsed }: { collapsed: boolean }) {
         align={collapsed ? 'start' : 'end'}
         items={themeItems}
         trigger={(p) => (
-          <IconButton label="Cambiar tema" size="sm" {...p}>
+          <IconButton label={t('app.changeTheme')} size="sm" {...p}>
             <ThemeIcon />
           </IconButton>
         )}
       />
-      <IconButton label="Cerrar sesión" size="sm" tone="danger" onClick={() => void logout()}>
+      <IconButton label={t('app.signOut')} size="sm" tone="danger" onClick={() => void logout()}>
         <SignOut className="size-[18px]" />
       </IconButton>
     </div>
@@ -391,13 +391,13 @@ function UserRow({ collapsed }: { collapsed: boolean }) {
 function MobileTopBar({ onAsk, onNotices }: { onAsk: () => void; onNotices: () => void }) {
   return (
     <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-bg px-4 md:hidden">
-      <NavLink to="/" className="flex items-center gap-2" aria-label="Kairo, ir a Hoy">
+      <NavLink to="/today" className="flex items-center gap-2" aria-label={t('app.goToday')}>
         <KairoMark className="size-6" />
         <span className="text-md font-semibold tracking-tight">Kairo</span>
       </NavLink>
       <div className="flex items-center gap-1">
         <NoticesBell onOpen={onNotices} />
-        <IconButton label="Preguntar o buscar" onClick={onAsk}>
+        <IconButton label={t('app.askOrSearch')} onClick={onAsk}>
           <MagnifyingGlass className="size-5" />
         </IconButton>
       </div>
@@ -408,21 +408,20 @@ function MobileTopBar({ onAsk, onNotices }: { onAsk: () => void; onNotices: () =
 function BottomNav({ onMore }: { onMore: () => void }) {
   const location = useLocation()
   const items = MOBILE_PRIMARY.map((to) => ALL_NAV.find((n) => n.to === to)!)
-  const inPrimary = items.some((i) => (i.to === '/' ? location.pathname === '/' : location.pathname.startsWith(i.to)))
+  const inPrimary = items.some((i) => location.pathname.startsWith(i.to))
   return (
     <nav
-      aria-label="Navegación"
+      aria-label={t('app.nav')}
       className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="grid h-16 grid-cols-5">
         {items.map((item) => {
           const Icon = item.icon
-          const label = item.to === '/chat' ? 'Chat' : item.label
+          const label = t(item.labelKey)
           return (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
               className={({ isActive }) =>
                 cn(
                   'flex flex-col items-center justify-center gap-1 text-xs transition-colors active:scale-95',
@@ -445,7 +444,7 @@ function BottomNav({ onMore }: { onMore: () => void }) {
           className={cn('flex flex-col items-center justify-center gap-1 text-xs active:scale-95', inPrimary ? 'text-faint' : 'font-medium text-fg')}
         >
           <DotsThreeOutline className={cn('size-[22px]', !inPrimary && 'text-accent-strong')} weight={inPrimary ? 'regular' : 'fill'} />
-          Más
+          {t('app.more')}
         </button>
       </div>
     </nav>
@@ -457,7 +456,7 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { logout } = useAuth()
   const rest = ALL_NAV.filter((n) => !MOBILE_PRIMARY.includes(n.to))
   return (
-    <Dialog open={open} onClose={onClose} title="Más secciones" size="sm">
+    <Dialog open={open} onClose={onClose} title={t('app.moreSections')} size="sm">
       <div className="grid grid-cols-2 gap-2">
         {rest.map((item) => {
           const Icon = item.icon
@@ -473,15 +472,15 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
               }
             >
               <Icon className="size-5 text-muted" />
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           )
         })}
       </div>
       <div className="mt-5 grid gap-2">
-        <p className="text-sm font-medium text-muted">Tema</p>
+        <p className="text-sm font-medium text-muted">{t('app.theme')}</p>
         <div className="grid grid-cols-3 gap-2">
-          {THEME_OPTIONS.map((o) => (
+          {themeOptions().map((o) => (
             <button
               key={o.mode}
               type="button"
@@ -493,7 +492,7 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
               )}
             >
               {o.icon}
-              {o.mode === 'light' ? 'Claro' : o.mode === 'dark' ? 'Oscuro' : 'Sistema'}
+              {o.mode === 'light' ? t('app.themeLightShort') : o.mode === 'dark' ? t('app.themeDarkShort') : t('app.themeSystemShort')}
             </button>
           ))}
         </div>
@@ -504,7 +503,7 @@ function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
         className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-control border border-line text-base text-danger active:scale-[0.98]"
       >
         <SignOut className="size-4" />
-        Cerrar sesión
+        {t('app.signOut')}
       </button>
     </Dialog>
   )

@@ -1,15 +1,16 @@
 import { useMemo } from 'react'
 import { useAuth } from './auth'
+import { t, type TKey } from './i18n'
 import { useFamily } from './queries'
 import type { Member } from './types'
 
-/** "Valentina Gómez" -> "Valentina" (para frases como "Compartida por Valentina"). */
+/** "Valentina Gomez" -> "Valentina" (for phrases like "Shared by Valentina"). */
 export function firstName(name: string | null | undefined) {
   const n = (name ?? '').trim()
   return n.split(/\s+/)[0] || n
 }
 
-/** Iniciales para el avatar: "Valentina Gómez" -> "VG", "David" -> "D". */
+/** Initials for the avatar: "Valentina Gomez" -> "VG", "Sam" -> "S". */
 export function initials(name: string | null | undefined) {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'
@@ -18,10 +19,10 @@ export function initials(name: string | null | undefined) {
   return (first + last).toUpperCase()
 }
 
-/** Normaliza un código de familia a XXXX-XXXX (acepta minúsculas, espacios, sin guion o el enlace completo). */
+/** Normalizes a family code to XXXX-XXXX (accepts lowercase, spaces, no dash, or the whole link: `?code=` or the legacy `?codigo=`). */
 export function normalizeCode(raw: string) {
   let v = raw.trim()
-  const fromLink = /codigo=([^&\s#]+)/i.exec(v)
+  const fromLink = /(?:code|codigo)=([^&\s#]+)/i.exec(v)
   if (fromLink) v = decodeURIComponent(fromLink[1])
   const clean = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
   return clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean
@@ -31,11 +32,18 @@ export function isCompleteCode(code: string) {
   return /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)
 }
 
-export const ROLE_LABEL: Record<string, string> = { admin: 'Administrador', member: 'Miembro' }
+/** True when the text looks like an invite link or contains a `code=` parameter. */
+export function looksLikeInviteLink(raw: string) {
+  return /(?:code|codigo)=/i.test(raw)
+}
+
+export function roleLabel(role: string) {
+  return role === 'admin' || role === 'member' ? t(`role.${role}` as TKey) : role
+}
 
 /**
- * Datos de la familia ya resueltos para la interfaz: quién soy, los demás miembros y nombres por id.
- * Usa una sola consulta en caché (GET /family) compartida por toda la app.
+ * Family data already resolved for the UI: who I am, the other members and names by id.
+ * Uses a single cached query (GET /family) shared by the whole app.
  */
 export function useFamilyInfo() {
   const { user } = useAuth()
@@ -52,16 +60,16 @@ export function useFamilyInfo() {
       others,
       me,
       isAdmin: data?.isAdmin ?? false,
-      /** Hay más de una persona en el hogar (si no, compartir no tiene sentido y se oculta). */
+      /** There is more than one person in the household (otherwise sharing makes no sense and is hidden). */
       hasOthers: others.length > 0,
       member: (id: string | null | undefined) => (id ? byId.get(id) ?? null : null),
-      /** Nombre corto de un miembro, o null si no se conoce. */
+      /** Short name of a member, or null if unknown. */
       nameOf: (id: string | null | undefined) => {
         if (!id) return null
         const m = byId.get(id)
         return m ? firstName(m.displayName) : null
       },
-      /** Lo creé yo (o no tiene dueño conocido). */
+      /** I created it (or it has no known owner). */
       isMine: (ownerId: string | null | undefined) => !ownerId || ownerId === me,
     }
   }, [data, user?.id])

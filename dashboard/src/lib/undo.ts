@@ -1,11 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { api, ApiError } from './api'
+import { t } from './i18n'
 import { invalidateEntity } from './queries'
 import type { Activity } from './types'
 
 /**
- * Deshace la acción más reciente sobre una entidad buscando su registro en Actividad.
- * El servidor solo permite deshacer creaciones y borrados.
+ * Undoes the latest action on an entity by finding its record in Activity.
+ * The server only allows undoing creations and deletions.
  */
 export async function undoLatest(
   qc: QueryClient,
@@ -13,7 +14,7 @@ export async function undoLatest(
   entityId: string,
   kind: 'created' | 'deleted',
 ): Promise<void> {
-  // El registro se escribe en la misma transacción, pero damos margen por si llega tarde.
+  // The record is written in the same transaction, but leave some slack in case it shows up late.
   for (let attempt = 0; attempt < 3; attempt++) {
     const items = await api.get<Activity[]>('/activity?limit=30')
     const match = items.find(
@@ -26,7 +27,7 @@ export async function undoLatest(
     }
     await new Promise((r) => setTimeout(r, 350))
   }
-  throw new ApiError(404, 'No encontré esa acción para deshacerla.')
+  throw new ApiError(404, t('undo.notFound'))
 }
 
 export async function undoActivity(qc: QueryClient, a: Activity) {

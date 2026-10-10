@@ -1,10 +1,11 @@
+import { t } from './i18n'
 import type { AgentEvent, AuthResponse, InvitePreview } from './types'
 
 /**
- * Cliente HTTP de Kairo.
- * - El access token vive solo en memoria.
- * - El refresh token es una cookie httpOnly (path /api/auth): se renueva con POST /api/auth/refresh.
- * - Un 401 dispara un único refresh compartido y reintenta una vez; si falla, se cierra la sesión.
+ * Kairo HTTP client.
+ * - The access token lives in memory only.
+ * - The refresh token is an httpOnly cookie (path /api/auth): renewed with POST /api/auth/refresh.
+ * - A 401 triggers a single shared refresh and retries once; if that fails, the session is closed.
  */
 
 export class ApiError extends Error {
@@ -50,7 +51,7 @@ function applySession(session: AuthResponse | null) {
   if (refreshTimer) clearTimeout(refreshTimer)
   refreshTimer = null
   if (session) {
-    // Renueva dos minutos antes de que expire.
+    // Renew two minutes before it expires.
     const ms = Math.max(30, session.expiresIn - 120) * 1000
     refreshTimer = setTimeout(() => {
       void refreshSession()
@@ -73,15 +74,15 @@ async function readError(res: Response): Promise<ApiError> {
     const data = (await res.json()) as { error?: string }
     message = data?.error ?? ''
   } catch {
-    /* sin cuerpo */
+    /* no body */
   }
   if (!message) {
-    if (res.status === 401) message = 'Tu sesión expiró. Vuelve a entrar.'
-    else if (res.status === 403) message = 'No tienes permiso para esto.'
-    else if (res.status === 404) message = 'No lo encontré.'
-    else if (res.status === 429) message = 'Demasiados intentos. Espera un momento.'
-    else if (res.status >= 500) message = 'El servidor tuvo un problema. Intenta de nuevo.'
-    else message = 'No se pudo completar la solicitud.'
+    if (res.status === 401) message = t('error.sessionExpired')
+    else if (res.status === 403) message = t('error.forbidden')
+    else if (res.status === 404) message = t('error.notFound')
+    else if (res.status === 429) message = t('error.tooMany')
+    else if (res.status >= 500) message = t('error.server')
+    else message = t('error.generic')
   }
   return new ApiError(res.status, message)
 }
@@ -101,15 +102,15 @@ async function doRefresh(): Promise<AuthResponse | null> {
       return null
     }
   }
-  // Serializa la rotación del refresh token entre pestañas: dos refresh simultáneos
-  // con la misma cookie hacen que el servidor invalide la sesión.
+  // Serialize refresh token rotation across tabs: two simultaneous refreshes
+  // with the same cookie make the server invalidate the session.
   if (typeof navigator !== 'undefined' && 'locks' in navigator && navigator.locks) {
     return navigator.locks.request('kairo-refresh', run)
   }
   return run()
 }
 
-/** Renueva la sesión (una sola petición en vuelo a la vez). */
+/** Renews the session (a single request in flight at a time). */
 export function refreshSession(): Promise<AuthResponse | null> {
   if (!refreshPromise) {
     refreshPromise = doRefresh()
@@ -139,7 +140,8 @@ export async function login(email: string, password: string): Promise<AuthRespon
   })
   if (!res.ok) {
     const err = await readError(res)
-    if (res.status === 401) throw new ApiError(401, err.message.includes('ontraseña') ? err.message : 'Correo o contraseña incorrectos.')
+    // A 401 on login always means wrong credentials.
+    if (res.status === 401) throw new ApiError(401, t('error.badCredentials'))
     throw err
   }
   const session = (await res.json()) as AuthResponse
@@ -147,7 +149,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return session
 }
 
-/** Qué abre un código de familia (público, sin sesión). null si no vale o ya venció. */
+/** What a family code opens (public, no session). null if it is invalid or has expired. */
 export async function previewInvite(code: string, signal?: AbortSignal): Promise<InvitePreview | null> {
   const res = await fetch(`${BASE}/auth/invite/${encodeURIComponent(code)}`, {
     headers: { 'X-Kairo-Client': 'web' },
@@ -159,8 +161,8 @@ export async function previewInvite(code: string, signal?: AbortSignal): Promise
 }
 
 /**
- * Usa un código de familia: con una invitación crea la cuenta; con un código de acceso define una contraseña nueva.
- * Igual que login: el refresh token llega en la cookie httpOnly y la sesión queda abierta en este navegador.
+ * Uses a family code: an invitation creates the account; an access code sets a new password.
+ * Like login: the refresh token arrives in the httpOnly cookie and the session stays open in this browser.
  */
 export async function join(body: { code: string; password: string; email?: string; displayName?: string }): Promise<AuthResponse> {
   const res = await fetch(`${BASE}/auth/join`, {
@@ -184,7 +186,7 @@ export async function logout() {
   try {
     await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include', headers: baseHeaders() })
   } catch {
-    /* sin red: igual cerramos localmente */
+    /* offline: close locally anyway */
   }
   applySession(null)
 }
@@ -193,7 +195,7 @@ export function endSessionLocally() {
   applySession(null)
 }
 
-/** fetch autenticado con reintento tras refresh. Devuelve la Response cruda. */
+/** Authenticated fetch with a retry after refresh. Returns the raw Response. */
 export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const exec = () =>
     fetch(`${BASE}${path}`, {
@@ -204,11 +206,11 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
   let res = await exec()
   if (res.status === 401 && !path.startsWith('/auth/')) {
     const session = await refreshSession()
-    if (!session) throw new ApiError(401, 'Tu sesión expiró. Vuelve a entrar.')
+    if (!session) throw new ApiError(401, t('error.sessionExpired'))
     res = await exec()
     if (res.status === 401) {
       applySession(null)
-      throw new ApiError(401, 'Tu sesión expiró. Vuelve a entrar.')
+      throw new ApiError(401, t('error.sessionExpired'))
     }
   }
   return res
@@ -237,7 +239,7 @@ export const api = {
   post: <T>(path: string, body?: Body) => request<T>('POST', path, body ?? {}),
   patch: <T>(path: string, body: Body) => request<T>('PATCH', path, body),
   del: <T = { ok: boolean }>(path: string) => request<T>('DELETE', path),
-  /** Respuesta binaria (audio, exportación). */
+  /** Binary response (audio, export). */
   blob: async (path: string, init: RequestInit = {}) => {
     const res = await authFetch(path, init)
     if (!res.ok) throw await readError(res)
@@ -255,8 +257,8 @@ export function qs(params: Record<string, string | number | boolean | null | und
 }
 
 /**
- * Lee un stream SSE de un POST (`data: {json}` por evento).
- * Resuelve cuando el servidor cierra el stream.
+ * Reads an SSE stream from a POST (`data: {json}` per event).
+ * Resolves when the server closes the stream.
  */
 export async function streamAgent(
   path: string,
@@ -273,7 +275,7 @@ export async function streamAgent(
   }
   const res = await authFetch(path, init)
   if (!res.ok) throw await readError(res)
-  if (!res.body) throw new ApiError(0, 'El navegador no pudo leer la respuesta.')
+  if (!res.body) throw new ApiError(0, t('error.cantReadResponse'))
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -289,7 +291,7 @@ export async function streamAgent(
     try {
       onEvent(JSON.parse(data) as AgentEvent)
     } catch {
-      /* evento corrupto: se ignora */
+      /* corrupt event: ignored */
     }
   }
 
@@ -317,7 +319,7 @@ function describeBrowser(): string {
         ? 'Chrome'
         : /Safari\//.test(ua)
           ? 'Safari'
-          : 'Navegador'
+          : t('browser.fallback')
   const os = /Android/.test(ua)
     ? 'Android'
     : /iPhone|iPad/.test(ua)
@@ -329,5 +331,5 @@ function describeBrowser(): string {
           : /Linux/.test(ua)
             ? 'Linux'
             : ''
-  return os ? `${browser} en ${os}` : browser
+  return os ? t('browser.onOs', { browser, os }) : browser
 }
