@@ -4,7 +4,6 @@ import app.kairo.domain.EntityRef
 import app.kairo.domain.EntityTypes
 import app.kairo.domain.EventPatch
 import app.kairo.domain.EventsRepo
-import app.kairo.domain.FamilyRepo
 import app.kairo.domain.FilesRepo
 import app.kairo.domain.ListsRepo
 import app.kairo.domain.MemoriesRepo
@@ -56,7 +55,6 @@ class BuiltinTools(
     private val weather: WeatherService,
     private val files: FilesRepo,
     private val nan: NanClient,
-    private val family: FamilyRepo,
     private val users: UsersRepo,
     private val notifier: Notifier,
 ) {

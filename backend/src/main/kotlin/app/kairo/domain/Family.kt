@@ -117,18 +117,6 @@ class FamilyRepo(private val db: Db) {
         return household(userId)
     }
 
-    /** Busca a un miembro por nombre ("Vale", "valentina", "mi esposa" no). Devuelve null si no hay uno claro. */
-    suspend fun resolve(userId: UUID, name: String): Member? {
-        val n = Text.normalize(name)
-        if (n.isEmpty()) return null
-        val all = members(userId)
-        all.firstOrNull { Text.normalize(it.displayName) == n }?.let { return it }
-        val byFirst = all.filter { Text.normalize(it.displayName).split(' ').firstOrNull() == n.split(' ').first() }
-        if (byFirst.size == 1) return byFirst[0]
-        val partial = all.filter { Text.normalize(it.displayName).startsWith(n) || n.startsWith(Text.normalize(it.displayName)) }
-        return partial.singleOrNull()
-    }
-
     // --- Invitaciones y códigos de acceso ---
 
     /**

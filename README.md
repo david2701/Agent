@@ -30,11 +30,15 @@ Le hablas ("Oye Kairo...") o le escribes, y actúa:
 | **Compartir con Kairo** | textos, enlaces o fotos desde cualquier app (una factura se convierte en nota + recordatorio) |
 | **Herramientas externas (MCP)** | conecta servidores MCP y Kairo usa sus herramientas |
 | **Deshacer** | todo lo que hace Kairo queda en *Actividad* y se puede deshacer |
+| **Familia** | cada persona con su cuenta en el mismo servidor; lo familiar lo ven todos: "agenda una cita compartida", "nuestra lista del súper", "recuérdale a Valentina...", "avísale a todos que..." |
+
+Lo personal es privado (incluso para quien administra) y lo familiar se comparte con todos en casa.
+Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).
 
 ## Arquitectura
 
 ```
- Teléfono / Fold (Kotlin, Compose)      Reloj (Wear OS)        Navegador
+ Teléfonos de la familia (Kotlin)        Reloj (Wear OS)        Navegador
    "Oye Kairo" offline (Vosk)              voz + tarjetas        Dashboard (React)
    alarmas locales exactas                     │                    │
           │  HTTPS + WebSocket                 │                    │
@@ -44,11 +48,12 @@ Le hablas ("Oye Kairo...") o le escribes, y actúa:
                                  ▼
           ┌──────────── contenedor kairo (Kotlin + Ktor) ─────────────┐
           │  API REST · SSE (streaming) · WebSocket · Dashboard web   │
-          │  Agente con herramientas · planificadores · Google sync   │
-          └───────────────┬──────────────────────────────┬────────────┘
-                          ▼                              ▼
-           PostgreSQL 18 + pgvector              Nan (api.nan.builders)
-           (notas, tareas, embeddings...)        chat, voz, visión, embeddings
+          │  Agente · familia · planificadores · Google sync · push   │
+          └──────┬────────────────────────┬─────────────────────┬─────┘
+                 ▼                        ▼                     ▼
+   PostgreSQL 18 + pgvector     Nan (api.nan.builders)    ntfy (opcional)
+   notas, tareas, embeddings    chat, voz, visión,        push cifrado a los
+                                embeddings                teléfonos, sin Firebase
 ```
 
 | Carpeta | Contenido |
@@ -59,7 +64,7 @@ Le hablas ("Oye Kairo...") o le escribes, y actúa:
 | `android/wear` | App de Wear OS (independiente, se vincula con un código de 6 dígitos). |
 | `android/core` | Cliente de la API y modelos compartidos entre teléfono y reloj. |
 | `design/` | Sistema de diseño (`DESIGN.md`), ícono en SVG y fuentes Geist. |
-| `docs/` | API, Android, Google Calendar y capturas. |
+| `docs/` | API, Android, familia, push sin Firebase, Google Calendar y capturas. |
 | `.claude/skills/` | Skill de diseño Taste usada para la UI. |
 
 ### Modelos de Nan elegidos
@@ -101,6 +106,8 @@ kairo.tudominio.com {
 Abre `https://kairo.tudominio.com`, entra con tu correo y la contraseña inicial y cámbiala en *Ajustes > Seguridad*.
 
 - El contenedor sólo escucha en `127.0.0.1:8080`; el acceso público pasa por Caddy. Cambia el puerto con `KAIRO_HOST_PORT`.
+- Push para los teléfonos (opcional): `docker compose --profile push up -d` levanta ntfy; ver [`docs/PUSH.md`](docs/PUSH.md).
+- Familia: entra al dashboard como administrador y usa *Familia > Invitar a alguien*; ver [`docs/FAMILIA.md`](docs/FAMILIA.md).
 - Datos persistentes en el volumen `kairo-db`. Copia de seguridad: `docker compose exec db pg_dump -U kairo kairo > kairo.sql`, o *Ajustes > Datos* en el dashboard (JSON con todo).
 - Actualizar: `git pull && docker compose up -d --build`. Las migraciones de la base de datos se aplican solas.
 - Si al compilar Maven Central responde `429 Too Many Requests`, usa un espejo:
@@ -126,12 +133,15 @@ Detalles completos en [`docs/ANDROID.md`](docs/ANDROID.md).
 
 Sí, Kairo tiene su propio sistema de avisos y no usa Firebase ni servicios de Google:
 
-1. **Alarmas locales exactas**: el teléfono programa recordatorios, avisos de eventos y el resumen matinal. Suenan aunque no haya internet.
-2. **WebSocket** con tu servidor: avisos al instante y todo se actualiza en vivo entre dashboard, teléfono y reloj.
-3. **Sincronización periódica** (WorkManager, cada 15 min) para reprogramar alarmas.
-4. **ntfy** autoalojado opcional (`NTFY_URL`, `NTFY_TOPIC`) como canal adicional.
+1. **Push propio con UnifiedPush**: tu servidor envía cada aviso cifrado de punta a punta a un ntfy que también es
+   tuyo (`docker compose --profile push up -d`), y la app ntfy del teléfono se lo entrega a Kairo, con la app cerrada.
+2. **Conexión directa** con tu servidor (WebSocket) mientras la app está abierta, "Oye Kairo" está activo o activas
+   *Conexión directa*: avisos al instante y todo se actualiza en vivo entre dashboard, teléfonos y reloj.
+3. **Alarmas locales exactas y sincronización cada 15 min**: recordatorios, avisos de eventos y el resumen matinal
+   suenan aunque no haya internet.
 
 Los recordatorios por lugar usan las alertas de proximidad de Android, sin Google Play Services.
+Cómo configurarlo, en [`docs/PUSH.md`](docs/PUSH.md).
 
 ## Seguridad y privacidad
 
@@ -142,6 +152,9 @@ Los recordatorios por lugar usan las alertas de proximidad de Android, sin Googl
 - Límite de intentos en el inicio de sesión, contenedor sin privilegios de root, cabeceras de seguridad, puerto sólo en localhost.
 - En el teléfono, los tokens se guardan cifrados con Android Keystore.
 - Acciones destructivas por voz quedan registradas y se pueden deshacer.
+- En familia, lo personal de cada uno es privado; los códigos de invitación son de un solo uso y vencen; al quitar a
+  alguien sus sesiones dejan de valer al instante.
+- El push va cifrado para cada teléfono (RFC 8291) y firmado (VAPID): el servidor ntfy no puede leerlo.
 
 ## Desarrollo local
 

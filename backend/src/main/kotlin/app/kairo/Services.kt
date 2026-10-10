@@ -78,7 +78,7 @@ class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
 
     val briefing = BriefingService(events, tasks, reminders, notes, lists, weather, settings, nan)
     val voice = VoiceService(nan, settings)
-    val tools = BuiltinTools(notes, tasks, reminders, places, lists, events, memories, briefing, weather, files, nan, family, users, notifier)
+    val tools = BuiltinTools(notes, tasks, reminders, places, lists, events, memories, briefing, weather, files, nan, users, notifier)
     val agent = Agent(nan, tools, mcp, conversations, memories, places, lists, settings, family)
     val capture = CaptureService(agent, nan, files, settings)
     val recordings = RecordingService(recordingsRepo, voice, notes, tasks, settings, nan, bus, scope)
