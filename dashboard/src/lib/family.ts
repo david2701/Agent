@@ -4,13 +4,13 @@ import { t, type TKey } from './i18n'
 import { useFamily } from './queries'
 import type { Member } from './types'
 
-/** "Valentina Gómez" -> "Valentina" (for phrases like "Shared by Valentina"). */
+/** "Valentina Gomez" -> "Valentina" (for phrases like "Shared by Valentina"). */
 export function firstName(name: string | null | undefined) {
   const n = (name ?? '').trim()
   return n.split(/\s+/)[0] || n
 }
 
-/** Initials for the avatar: "Valentina Gómez" -> "VG", "David" -> "D". */
+/** Initials for the avatar: "Valentina Gomez" -> "VG", "Sam" -> "S". */
 export function initials(name: string | null | undefined) {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'
