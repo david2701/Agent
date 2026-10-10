@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Wear OS -->
+    <string name="app_name">Kairo</string>
+    <string name="wear_device_name">Reloj %1$s</string>
+    <string name="wear_pair_title">Vincular</string>
+    <string name="wear_pair_hint">En el teléfono: Ajustes &gt; Vincular reloj</string>
+    <string name="wear_pair_failed">No se pudo vincular</string>
+    <string name="wear_delete_cd">Borrar</string>
+    <string name="wear_stop">Detener</string>
+    <string name="wear_talk">Hablar</string>
+    <string name="wear_listening">Te escucho</string>
+    <string name="wear_thinking">Pensando</string>
+    <string name="wear_kairo">Kairo</string>
+    <string name="wear_done">Listo</string>
+    <string name="wear_tap_to_talk">Toca para hablar</string>
+    <string name="wear_today">Hoy</string>
+    <string name="wear_fired">Sonó: %1$s</string>
+    <string name="wear_overdue">Vencida: %1$s</string>
+    <string name="wear_clear_day">Día despejado</string>
+    <string name="wear_not_heard">No te escuché</string>
+    <string name="wear_offline">Sin conexión</string>
+    <string name="wear_err_generic">Algo salió mal</string>
+    <string name="wear_err_http">Error %1$d</string>
+    <string name="wear_err_session">Tu sesión expiró. Inicia sesión de nuevo.</string>
+    <string name="wear_err_too_many">Demasiados intentos seguidos. Espera un minuto y vuelve a probar.</string>
+</resources>

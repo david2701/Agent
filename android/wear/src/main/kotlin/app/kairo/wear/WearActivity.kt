@@ -1,5 +1,8 @@
 package app.kairo.wear
 
+import app.kairo.wear.R
+import androidx.compose.ui.res.stringResource
+import app.kairo.wear.friendly
 import android.Manifest
 import android.app.Activity
 import android.os.Build
@@ -101,16 +104,16 @@ private fun PairScreen(activity: Activity) {
     fun submit() {
         busy = true; error = null
         scope.launch {
-            runCatching { activity.wear.api.pair(BuildConfig.DEFAULT_SERVER, code, "Reloj ${Build.MODEL}") }
-                .onFailure { error = it.message ?: "No se pudo vincular"; code = "" }
+            runCatching { activity.wear.api.pair(BuildConfig.DEFAULT_SERVER, code, activity.getString(R.string.wear_device_name, Build.MODEL)) }
+                .onFailure { error = if (it is app.kairo.core.net.ApiException) it.friendly(activity) else activity.getString(R.string.wear_pair_failed); code = "" }
             busy = false
         }
     }
     ScreenScaffold(scrollState = list) { padding ->
         ScalingLazyColumn(state = list, contentPadding = padding, horizontalAlignment = Alignment.CenterHorizontally) {
-            item { ListHeader { Text("Vincular", textAlign = TextAlign.Center) } }
-            item { Text("En el teléfono: Ajustes > Vincular reloj", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { Text(code.padEnd(6, '·').chunked(3).joinToString(" "), style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(vertical = 6.dp)) }
+            item { ListHeader { Text(stringResource(R.string.wear_pair_title), textAlign = TextAlign.Center) } }
+            item { Text(stringResource(R.string.wear_pair_hint), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text(code.padEnd(6, '\u00B7').chunked(3).joinToString(" "), style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(vertical = 6.dp)) }
             error?.let { item { Text(it, color = Color(0xFFF0705F), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) } }
             listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("<", "0", "OK")).forEach { row ->
                 item {
@@ -127,7 +130,7 @@ private fun PairScreen(activity: Activity) {
                                 modifier = Modifier.size(width = 48.dp, height = 40.dp),
                                 colors = if (k == "OK") ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color(0xFF1A1206)) else ButtonDefaults.filledTonalButtonColors(),
                             ) {
-                                if (k == "<") Icon(Icons.AutoMirrored.Rounded.Backspace, "Borrar") else Text(k, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                if (k == "<") Icon(Icons.AutoMirrored.Rounded.Backspace, stringResource(R.string.wear_delete_cd)) else Text(k, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -140,6 +143,7 @@ private fun PairScreen(activity: Activity) {
 @Composable
 private fun VoiceHome() {
     val vm: WearVoice = viewModel()
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val s by vm.state.collectAsState()
     val list = rememberScalingLazyListState()
     val mic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) vm.toggle() }
@@ -151,7 +155,7 @@ private fun VoiceHome() {
             EdgeButton(
                 onClick = { if (vm.hasMic()) vm.toggle() else mic.launch(Manifest.permission.RECORD_AUDIO) },
                 colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color(0xFF1A1206)),
-            ) { Icon(if (busy) Icons.Rounded.Stop else Icons.Rounded.Mic, if (busy) "Detener" else "Hablar") }
+            ) { Icon(if (busy) Icons.Rounded.Stop else Icons.Rounded.Mic, if (busy) stringResource(R.string.wear_stop) else stringResource(R.string.wear_talk)) }
         },
     ) { padding ->
         ScalingLazyColumn(state = list, contentPadding = padding, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -163,10 +167,10 @@ private fun VoiceHome() {
             item {
                 Text(
                     when (s.phase) {
-                        WearPhase.Listening -> "Te escucho"
-                        WearPhase.Thinking -> "Pensando"
-                        WearPhase.Speaking -> "Kairo"
-                        WearPhase.Idle -> s.error ?: if (s.reply != null) "Listo" else "Toca para hablar"
+                        WearPhase.Listening -> stringResource(R.string.wear_listening)
+                        WearPhase.Thinking -> stringResource(R.string.wear_thinking)
+                        WearPhase.Speaking -> stringResource(R.string.wear_kairo)
+                        WearPhase.Idle -> s.error ?: if (s.reply != null) stringResource(R.string.wear_done) else stringResource(R.string.wear_tap_to_talk)
                     },
                     style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
                 )
@@ -175,15 +179,15 @@ private fun VoiceHome() {
             s.actions.forEach { a -> item { Text(a, style = MaterialTheme.typography.bodySmall, color = Amber, textAlign = TextAlign.Center) } }
             s.reply?.let { item { Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp)) } }
             s.today?.let { t ->
-                item { ListHeader { Text("Hoy") } }
+                item { ListHeader { Text(stringResource(R.string.wear_today)) } }
                 val lines = buildList {
-                    t.firedReminders.forEach { add("Sonó: ${it.text}") }
+                    t.firedReminders.forEach { add(resources.getString(R.string.wear_fired, it.text)) }
                     t.events.forEach { e -> add((if (e.allDay) "" else (e.startAt.toInstantOrNull()?.timeLabel() ?: "") + " ") + e.title) }
                     t.reminders.forEach { r -> add((r.nextFireAt?.toInstantOrNull()?.timeLabel() ?: "") + " " + r.text) }
-                    t.tasksOverdue.forEach { add("Vencida: ${it.title}") }
+                    t.tasksOverdue.forEach { add(resources.getString(R.string.wear_overdue, it.title)) }
                     t.tasksDueToday.forEach { add(it.title) }
                 }
-                if (lines.isEmpty()) item { Text("Día despejado", style = MaterialTheme.typography.bodySmall) }
+                if (lines.isEmpty()) item { Text(stringResource(R.string.wear_clear_day), style = MaterialTheme.typography.bodySmall) }
                 lines.take(8).forEach { l -> item { Text(l.trim(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)) } }
             }
         }
