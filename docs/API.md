@@ -67,6 +67,8 @@ Lo pendiente vive en memoria 10 minutos. Detalle en [FAMILIA.md](FAMILIA.md#prot
 
 ### Compartir con Kairo
 `POST /capture` multipart (`file` imagen, `text?`, `url?`, `conversationId?`) o JSON `{text?, url?}` -> SSE.
+La vista previa de `url` sólo se descarga de direcciones públicas (cada redirección, como mucho 3, se vuelve a validar),
+con un máximo de 512 KB y 12 s; si no se puede, el agente recibe sólo el enlace.
 
 ### Conversaciones
 - `GET /conversations` -> `[{id, title, createdAt, updatedAt, preview}]`
@@ -158,7 +160,10 @@ que llega por WebSocket; el distribuidor no puede leerlo.
 - `DELETE /push/register` · `POST /push/test` -> `{delivered}` (envía un `family.notice` de prueba sólo por push:
   Web Push y APNs; `delivered` suma los dispositivos que lo aceptaron por ambas vías)
 
-Los endpoints deben ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http` para pruebas o una red local).
+Los endpoints deben ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http` para pruebas o una red local) y apuntar a
+una dirección pública, salvo el host de `NTFY_PUBLIC_URL` / `NTFY_URL` (tu ntfy) o con `KAIRO_PUSH_ALLOW_PRIVATE=true`
+(redes privadas; nunca loopback ni enlace local). Se comprueba al registrar y antes de cada envío. Un endpoint que ya
+registró otra cuenta no se reasigna: `400`.
 
 ### Push de Apple (APNs)
 
@@ -168,6 +173,7 @@ token de proveedor ES256 firmado con la clave `.p8`; cada token del iPhone queda
   `registeredDevices`: tokens de APNs de este usuario)
 - `POST /push/apns/register {token, environment: "sandbox"|"production", kind: "device", activityId?}` -> `{available, registeredDevices}`
   - `token`: el token del dispositivo en hexadecimal (64 a 200 caracteres); si no, `400`. Se actualiza si ya existía
+    para la misma cuenta; si lo registró otra cuenta, `400` (hay que cerrar sesión en ella primero)
     y reemplaza al token anterior del mismo dispositivo. `environment` inválido o `kind` distinto de `device` -> `400`.
   - Se guarda aunque el servidor no tenga APNs configurado (`available: false`): empieza a llegar en cuanto se configure.
 - `DELETE /push/apns/register` -> `{ok}` (borra los tokens de APNs de este dispositivo; también se borran al cerrar
@@ -197,6 +203,9 @@ Contenido de cada push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expi
 ## Ajustes y sistema
 - `GET|PATCH /settings` -> `{settings: UserSettings, googleAvailable, ntfyAvailable}`
   - `UserSettings = {chatModel, fallbackModel, visionModel, imageModel, fastMode, voice, voiceSpeed, sttModel, language, wakeWord, briefingEnabled, briefingTime "HH:MM", lastBriefingDate, homeCity, homeLatitude, homeLongitude, ntfyTopic, googleCalendarId, defaultEventReminderMinutes, keepRecordingAudio}`
+  - Los modelos (`chatModel`, `fallbackModel`, `visionModel`, `imageModel`, `sttModel`) deben estar en `GET /models`
+    (si Nan no responde, al menos tener un nombre válido: letras, números y `._:/@+-`, máximo 100); el valor actual y el
+    de fábrica siempre se aceptan. `ntfyTopic`: letras, números, `-` y `_` (máximo 64). Si no, `400`.
 - `GET /geocode?q=Medellín` -> `[{name, admin, country, latitude, longitude, timezone}]`
 - `GET /models` -> `{models: [...]}` (modelos disponibles en Nan)
 - `GET /devices` -> `[{id, name, platform, createdAt, lastSeenAt, current}]` · `DELETE /devices/{id}`
@@ -207,7 +216,23 @@ Contenido de cada push (`apns-push-type: alert`, `apns-priority: 10`, `apns-expi
   `POST /integrations/google/calendar {calendarId}`, `POST /integrations/google/family-calendar {calendarId|null}`
   (calendario de Google compartido con la familia donde van los eventos familiares que creas), `DELETE /integrations/google`
 - MCP: `GET|POST /mcp-servers {name, url, headers?}`, `PATCH /mcp-servers/{id} {enabled}`, `DELETE /mcp-servers/{id}`, `POST /mcp-servers/{id}/test` -> `{tools}`
+  (ver [Servidores MCP](#servidores-mcp))
 - `GET /health` (público)
+
+### Servidores MCP
+
+Para que nadie use Kairo para llegar a servicios internos (SSRF), la URL de un servidor MCP se valida al guardarla y
+antes de cada petición:
+- Sólo `http`/`https`, sin `usuario:contraseña@` ni formas raras de IP (`2130706433`, `0x7f.1`...).
+- Todas las direcciones a las que resuelve deben ser públicas. Con `KAIRO_MCP_ALLOW_PRIVATE=true` se aceptan también
+  las redes privadas y CGNAT (Home Assistant en la LAN o por Tailscale), pero nunca loopback, enlace local
+  (`169.254.x.x`, metadatos de la nube) ni los servicios internos `db`, `kairo`, `ntfy`, `backup` o `localhost`.
+- `KAIRO_MCP_ALLOWED_HOSTS=host1,host2`: hosts exactos que el operador permite siempre (por ejemplo otro contenedor).
+- No se siguen redirecciones y las respuestas se cortan a 2 MB.
+- `POST /mcp-servers/{id}/test` y las herramientas del agente sólo dicen "No se pudo conectar con el servidor MCP"
+  cuando algo falla; el motivo (conexión rechazada, código HTTP...) queda en el log del servidor.
+- Las sesiones MCP y la caché de herramientas se separan por URL y cabeceras: dos personas con la misma URL y distintas
+  credenciales nunca comparten sesión.
 
 ## Tiempo real (WebSocket)
 `GET /ws?access_token=...` envía `{type, data}`:

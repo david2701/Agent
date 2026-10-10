@@ -1,5 +1,6 @@
 package app.kairo.realtime
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.Serializable
@@ -22,17 +23,32 @@ object EventTypes {
     const val FAMILY_NOTICE = "family.notice"
 }
 
-/** Bus en memoria por usuario. Suficiente para una sola instancia del servidor. */
+/**
+ * Bus en memoria por usuario. Suficiente para una sola instancia del servidor.
+ *
+ * Publicar nunca espera: si un suscriptor lento (un WebSocket que el cliente no lee) llena el búfer, ese suscriptor
+ * pierde los eventos más viejos (DROP_OLDEST) en vez de frenar a quien publica (los planificadores de recordatorios
+ * y avisos de toda la familia). Los clientes se resincronizan solos, así que perder un `entity.changed` es inocuo.
+ */
 class EventBus {
     private val flows = ConcurrentHashMap<UUID, MutableSharedFlow<ServerEvent>>()
 
-    fun flow(userId: UUID): SharedFlow<ServerEvent> = flows.getOrPut(userId) { MutableSharedFlow(extraBufferCapacity = 64) }
+    private fun of(userId: UUID): MutableSharedFlow<ServerEvent> =
+        flows.getOrPut(userId) { MutableSharedFlow(extraBufferCapacity = BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST) }
 
+    fun flow(userId: UUID): SharedFlow<ServerEvent> = of(userId)
+
+    @Suppress("RedundantSuspendModifier") // se mantiene suspend por compatibilidad con quienes lo llaman
     suspend fun publish(userId: UUID, event: ServerEvent) {
-        (flows.getOrPut(userId) { MutableSharedFlow(extraBufferCapacity = 64) }).emit(event)
+        // Con DROP_OLDEST tryEmit siempre tiene éxito y nunca suspende
+        of(userId).tryEmit(event)
     }
 
     fun subscriberCount(userId: UUID): Int = flows[userId]?.subscriptionCount?.value ?: 0
+
+    private companion object {
+        const val BUFFER = 64
+    }
 
     suspend fun entityChanged(userIds: Collection<UUID>, entity: String, id: UUID?, op: String) =
         userIds.forEach { entityChanged(it, entity, id, op) }

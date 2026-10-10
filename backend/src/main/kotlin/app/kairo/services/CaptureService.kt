@@ -11,19 +11,17 @@ import app.kairo.domain.User
 import app.kairo.nan.ChatMessage
 import app.kairo.nan.ChatOptions
 import app.kairo.nan.NanClient
+import app.kairo.util.SafeUrl
+import app.kairo.util.logSafe
+import app.kairo.util.safeGet
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.readAvailable
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
-import java.net.InetAddress
-import java.net.URI
+import kotlinx.coroutines.withTimeoutOrNull
+import org.slf4j.LoggerFactory
 import java.util.Base64
 import java.util.UUID
 
@@ -37,10 +35,17 @@ class CaptureService(
     private val files: FilesRepo,
     private val settings: SettingsService,
 ) {
+    private val log = LoggerFactory.getLogger(CaptureService::class.java)
+
+    /** Sin redirecciones automáticas: [safeGet] las sigue a mano y valida cada salto. */
     private val http = HttpClient(CIO) {
         engine { proxyFromEnv()?.let { proxy = it } }
-        install(HttpTimeout) { requestTimeoutMillis = 8_000 }
-        followRedirects = true
+        install(HttpTimeout) {
+            requestTimeoutMillis = 8_000
+            connectTimeoutMillis = 5_000
+            socketTimeoutMillis = 5_000
+        }
+        followRedirects = false
         expectSuccess = false
     }
 
@@ -107,26 +112,26 @@ class CaptureService(
         return res.message.text.trim()
     }
 
-    /** Vista previa de un enlace con protección SSRF (no se permiten direcciones privadas). */
+    /**
+     * Vista previa de un enlace con protección SSRF (ver [SafeUrl]): sólo hosts públicos en cada salto,
+     * como mucho [MAX_REDIRECTS] redirecciones, [MAX_BYTES] de cuerpo y [TOTAL_TIMEOUT_MS] en total.
+     */
     private suspend fun fetchLinkPreview(raw: String): String? {
-        val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return null
-        if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank()) return null
-        val safe = withContext(Dispatchers.IO) {
-            runCatching { InetAddress.getAllByName(uri.host).none { it.isLoopbackAddress || it.isSiteLocalAddress || it.isLinkLocalAddress || it.isAnyLocalAddress || it.isMulticastAddress } }.getOrDefault(false)
-        }
-        if (!safe) return null
-        return runCatching {
-            val resp = http.get(uri.toString()) { header("User-Agent", "Mozilla/5.0 (compatible; KairoBot/1.0)") }
-            if (!resp.status.isSuccess()) return null
-            val ch = resp.bodyAsChannel()
-            val buf = ByteArray(512 * 1024)
-            var total = 0
-            while (total < buf.size) {
-                val n = ch.readAvailable(buf, total, buf.size - total)
-                if (n <= 0) break
-                total += n
+        val fetched = try {
+            withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
+                http.safeGet(raw, SafeUrl.Policy(), maxBytes = MAX_BYTES, maxRedirects = MAX_REDIRECTS) {
+                    header("User-Agent", "Mozilla/5.0 (compatible; KairoBot/1.0)")
+                }
             }
-            val html = String(buf, 0, total, Charsets.UTF_8)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.info("Vista previa de enlace descartada: {}", logSafe(e.message ?: e.javaClass.simpleName, 200))
+            null
+        } ?: return null
+        if (fetched.status !in 200..299) return null
+        return runCatching {
+            val html = String(fetched.body, Charsets.UTF_8)
             val title = Regex("<title[^>]*>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)?.trim()
             val desc = Regex("<meta[^>]+(?:name|property)=[\"'](?:og:)?description[\"'][^>]*content=[\"']([^\"']*)", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
             val body = html.replace(Regex("<script[\\s\\S]*?</script>|<style[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
@@ -140,4 +145,10 @@ class CaptureService(
     }
 
     private fun decode(s: String) = s.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
+
+    private companion object {
+        const val MAX_BYTES = 512 * 1024
+        const val MAX_REDIRECTS = 3
+        const val TOTAL_TIMEOUT_MS = 12_000L
+    }
 }

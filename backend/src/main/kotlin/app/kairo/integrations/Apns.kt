@@ -10,10 +10,12 @@ import app.kairo.util.jdkProxySelector
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -263,12 +265,15 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
         db.tx {
             // Un token por dispositivo: si la app recibió uno nuevo (reinstalación, restauración), el viejo ya no sirve
             if (deviceId != null) exec("delete from apns_tokens where device_id = ? and kind = ? and token <> ?", deviceId, k, t)
-            exec(
+            // Un token de otra cuenta no se reasigna: así nadie puede quitarle el push a otro ni recibir el suyo
+            val n = exec(
                 """insert into apns_tokens(user_id, device_id, token, environment, kind, activity_id) values (?, ?, ?, ?, ?, ?)
-                   on conflict (token) do update set user_id = excluded.user_id, device_id = excluded.device_id,
-                   environment = excluded.environment, kind = excluded.kind, activity_id = excluded.activity_id, updated_at = now()""",
+                   on conflict (token) do update set device_id = excluded.device_id,
+                   environment = excluded.environment, kind = excluded.kind, activity_id = excluded.activity_id, updated_at = now()
+                   where apns_tokens.user_id = excluded.user_id""",
                 userId, deviceId, t, env, k, activity,
             )
+            require(n > 0) { "Ese token de APNs ya está registrado por otra cuenta" }
         }
     }
 
@@ -310,16 +315,19 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
             .POST(HttpRequest.BodyPublishers.ofString(payload))
             .build()
         val response = try {
-            http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
+            val r = http.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).await()
+            // Apple responde JSON corto; se lee como mucho MAX_RESPONSE_BYTES y se cierra el resto
+            val body = withContext(Dispatchers.IO) { r.body().use { String(it.readNBytes(MAX_RESPONSE_BYTES), Charsets.UTF_8) } }
+            r.statusCode() to body
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.warn("APNs ({}) no respondió: {}", t.environment, (e.message ?: e.javaClass.simpleName).replace(t.token, "…"))
             return false
         }
-        val status = response.statusCode()
+        val (status, responseBody) = response
         if (status == 200) return true
-        val reason = runCatching { Json.parseToJsonElement(response.body()).jsonObject["reason"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+        val reason = runCatching { Json.parseToJsonElement(responseBody).jsonObject["reason"]?.jsonPrimitive?.contentOrNull }.getOrNull()
         when {
             status == 410 || (status == 400 && reason in DEAD_TOKEN_REASONS) -> {
                 // El token ya no sirve (app desinstalada, otro entorno u otra app): la app se volverá a registrar
@@ -342,6 +350,7 @@ class ApnsService(private val db: Db, private val cfg: AppConfig) {
         const val ENV_PRODUCTION = "production"
         const val KIND_DEVICE = "device"
         private val KINDS = setOf(KIND_DEVICE)
+        private const val MAX_RESPONSE_BYTES = 64 * 1024
         private const val PRODUCTION_HOST = "https://api.push.apple.com"
         private const val SANDBOX_HOST = "https://api.sandbox.push.apple.com"
         private val DEAD_TOKEN_REASONS = setOf("BadDeviceToken", "DeviceTokenNotForTopic", "Unregistered")

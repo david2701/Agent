@@ -31,7 +31,10 @@ data class ReminderPatch(
  */
 class RemindersRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
 
-    private val select = """select r.*, p.name as place_name from reminders r left join places p on p.id = r.place_id"""
+    /** El nombre del lugar sólo sale si el lugar sigue existiendo y lo puede ver el dueño del recordatorio. */
+    private val select = """select r.*, p.name as place_name from reminders r left join places p on p.id = r.place_id
+        and p.deleted_at is null
+        and (p.user_id = r.user_id or (p.shared and p.household_id = (select ru.household_id from users ru where ru.id = r.user_id)))"""
 
     /** El recordatorio es de [userId] o él lo programó para otro. Dos parámetros: userId, userId. */
     private val mine = "(r.user_id = ? or r.created_by = ?)"
@@ -68,6 +71,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
         val rule = Recurrence.normalize(rrule)
         val next = computeNext(dueAt, rule, timezone, Instant.now().minusSeconds(60))
         val by = createdBy?.takeIf { it != userId }
+        placeId?.let { requirePlaceVisible(userId, it) }
         val reminder = db.tx {
             val id = one(
                 """insert into reminders(user_id, text, due_at, rrule, timezone, place_id, place_trigger, next_fire_at, task_id, source, created_by)
@@ -96,6 +100,8 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
 
     suspend fun update(userId: UUID, id: UUID, patch: ReminderPatch, source: String): Reminder? {
         val current = get(userId, id) ?: return null
+        // Lo mismo que al crear: el lugar tiene que estar disponible para quien recibe el aviso
+        if (!patch.clearPlace && patch.placeId != null && patch.placeId != current.placeId) requirePlaceVisible(current.ownerId ?: userId, patch.placeId)
         val rule = if (patch.clearRrule) null else Recurrence.normalize(patch.rrule) ?: current.rrule
         val due = patch.dueAt ?: current.dueAt
         val placeId = if (patch.clearPlace) null else patch.placeId ?: current.placeId
@@ -192,6 +198,14 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo, priv
             "$select where r.user_id = ? and r.deleted_at is null and r.status = 'scheduled' order by r.next_fire_at nulls last limit 500",
             userId,
         ) { map(it) }
+    }
+
+    /** El lugar existe, no está borrado y [ownerId] lo puede ver (suyo o compartido en su familia). */
+    private suspend fun requirePlaceVisible(ownerId: UUID, placeId: UUID) {
+        val ok = db.read {
+            one("select 1 as ok from places where id = ? and deleted_at is null and ${visibleTo()}", placeId, ownerId, ownerId) { true }
+        } ?: false
+        require(ok) { "Ese lugar no está disponible para esa persona; compártelo con la familia primero" }
     }
 
     private fun computeNext(dueAt: Instant?, rrule: String?, tz: String, after: Instant): Instant? {

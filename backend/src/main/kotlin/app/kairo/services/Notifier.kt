@@ -11,6 +11,7 @@ import app.kairo.integrations.PushService
 import app.kairo.realtime.EventBus
 import app.kairo.realtime.EventTypes
 import app.kairo.realtime.ServerEvent
+import app.kairo.util.logSafe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
@@ -45,7 +46,8 @@ class Notifier(
         bus.publish(userId, event)
         scope.launch {
             runCatching { push.send(userId, event) }.onFailure { log.warn("Push falló: {}", it.message) }
-            runCatching { ntfyTopic(userId)?.let { ntfy.send(it, title, body, tags = tags, priority = priority) } }
+            runCatching { ntfyTarget(userId)?.let { (topic, auth) -> ntfy.send(topic, title, body, tags = tags, priority = priority, authenticated = auth) } }
+                .onFailure { log.warn("ntfy falló: {}", logSafe(it.message)) }
         }
         // Aparte, para que un Web Push lento no retrase el aviso del iPhone
         if (apns.available) scope.launch {
@@ -85,10 +87,21 @@ class Notifier(
     suspend fun firstName(userId: UUID): String =
         users.byId(userId)?.displayName?.trim()?.split(' ')?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "Alguien"
 
-    private suspend fun ntfyTopic(userId: UUID): String? {
-        settings.get(userId).ntfyTopic?.takeIf { it.isNotBlank() }?.let { return it }
-        // El tema global de .env es del propietario; los demás miembros configuran el suyo
-        val owner = cfg.ownerEmail ?: return null
-        return if (users.byId(userId)?.email.equals(owner, ignoreCase = true)) cfg.ntfyTopic else null
+    /**
+     * Tema de ntfy de la persona y si se publica con NTFY_TOKEN.
+     * El tema de .env (NTFY_TOPIC) y el token del servidor son del propietario (KAIRO_OWNER_EMAIL): sólo sus avisos
+     * se publican con NTFY_TOKEN. Los demás miembros pueden poner su propio tema en Ajustes, que se publica sin token
+     * (como lo haría cualquiera desde fuera), y nunca el tema del propietario.
+     */
+    private suspend fun ntfyTarget(userId: UUID): Pair<String, Boolean>? {
+        val own = settings.get(userId).ntfyTopic?.trim()?.takeIf { it.isNotEmpty() }
+        val owner = cfg.ownerEmail?.takeIf { it.isNotBlank() }
+        val isOwner = owner != null && users.byId(userId)?.email.equals(owner, ignoreCase = true)
+        return when {
+            own == null -> if (isOwner) cfg.ntfyTopic?.let { it to true } else null
+            isOwner -> own to true
+            own == cfg.ntfyTopic -> null
+            else -> own to false
+        }
     }
 }

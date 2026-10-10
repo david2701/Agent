@@ -86,6 +86,7 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
         assigneeId: UUID? = null,
     ): Task {
         val isShared = shared || (assigneeId != null && assigneeId != userId)
+        projectId?.let { requireOwnProject(userId, it) }
         val task = db.tx {
             val sort = one("select coalesce(min(sort), 0) - 1 as s from tasks where user_id = ? and status = ?", userId, status) { it.getDouble("s") } ?: 0.0
             val id = one(
@@ -113,6 +114,7 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
         if (patch.shared != null && patch.shared != current.shared && current.ownerId != userId) {
             throw FamilyException("Solo quien creó la tarea puede cambiar si se comparte")
         }
+        if (!patch.clearProject && patch.projectId != null && patch.projectId != current.projectId) requireOwnProject(userId, patch.projectId)
         val newStatus = patch.status?.let(::normalizeStatus) ?: current.status
         val newAssignee = if (patch.clearAssignee) null else patch.assigneeId ?: current.assigneeId
         val newShared = (patch.shared ?: current.shared) || (newAssignee != null && newAssignee != current.ownerId)
@@ -178,6 +180,12 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo, private 
     }
 
     // --- Proyectos ---
+
+    /** Los proyectos son personales: sólo se puede usar uno propio y no borrado. */
+    private suspend fun requireOwnProject(userId: UUID, projectId: UUID) {
+        val ok = db.read { one("select 1 as ok from projects where id = ? and user_id = ? and deleted_at is null", projectId, userId) { true } } ?: false
+        require(ok) { "Ese proyecto no existe" }
+    }
 
     suspend fun projects(userId: UUID): List<Project> = db.read {
         query("select * from projects where user_id = ? and deleted_at is null order by sort, name", userId) { mapProject(it) }
