@@ -37,8 +37,8 @@ android {
         applicationId = "app.kairo.android"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         // URL del servidor sugerida en el login (se puede cambiar en la app)
         buildConfigField("String", "DEFAULT_SERVER", "\"$kairoServerUrl\"")
         // Plegables y teléfonos actuales son arm64; x86_64 solo para el emulador.
