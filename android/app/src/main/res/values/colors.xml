@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kairo_ink">#0E1013</color>
+    <color name="kairo_bone">#ECE8E1</color>
+    <color name="kairo_amber">#F0A23B</color>
+    <color name="kairo_bg_light">#F3F4F5</color>
+</resources>

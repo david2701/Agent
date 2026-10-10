@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="talk" android:enabled="true" android:icon="@drawable/ic_stat_kairo"
+        android:shortcutShortLabel="@string/assist_label">
+        <intent android:action="app.kairo.android.TALK" android:targetPackage="app.kairo.android"
+            android:targetClass="app.kairo.android.assist.AssistActivity" />
+    </shortcut>
+</shortcuts>

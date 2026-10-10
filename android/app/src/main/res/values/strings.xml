@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kairo</string>
+    <string name="assist_label">Hablar con Kairo</string>
+    <string name="share_label">Guardar en Kairo</string>
+    <string name="tile_label">Kairo</string>
+    <string name="widget_description">Tu día y un botón para hablar con Kairo</string>
+    <string name="listening_service_label">Escucha de Kairo</string>
+</resources>

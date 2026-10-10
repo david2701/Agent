@@ -26,3 +26,10 @@ captures/
 
 # Logs
 *.log
+
+# Android
+android/.gradle/
+android/app/build/
+android/core/build/
+android/wear/build/
+android/build/
