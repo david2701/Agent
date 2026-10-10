@@ -42,7 +42,7 @@ run_device() { # "udid|nombre" prefijo-archivo secciones...
   local udid="${1%%|*}" label="${1#*|}" prefix="$2"; shift 2
   echo "== $label"
   xcrun simctl boot "$udid" 2>/dev/null
-  xcrun simctl bootstatus "$udid" -b > /dev/null
+  echo "  arrancando…"; xcrun simctl bootstatus "$udid" -b > /dev/null; echo "  listo ($(date +%T))"
   xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null
   xcrun simctl install "$udid" "$APP" || { echo "no se pudo instalar"; return 1; }
   for spec in "$@"; do

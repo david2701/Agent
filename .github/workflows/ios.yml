@@ -58,6 +58,7 @@ jobs:
       - name: Capturas en el simulador
         if: steps.ios.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 20
         working-directory: ios
         run: bash ci/screenshots.sh build/dd/Build/Products/Debug-iphonesimulator/Kairo.app build/capturas
       - uses: actions/upload-artifact@v4
