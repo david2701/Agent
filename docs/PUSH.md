@@ -52,6 +52,18 @@ No hace falta crear temas ni suscripciones a mano: Kairo y ntfy los gestionan so
 - Si quieres cerrarlo más, ntfy permite control de acceso (`auth-default-access: deny-all`) dejando escritura
   anónima sólo en los temas `up*`; consulta la documentación de ntfy sobre UnifiedPush.
 
+### Qué endpoints acepta Kairo
+
+El endpoint lo manda el teléfono, así que Kairo lo valida (al registrarlo y antes de cada envío) para que nadie pueda
+usarlo para llegar a servicios de tu red:
+- Debe ser `https` (`KAIRO_PUSH_ALLOW_HTTP=true` permite `http`, para pruebas).
+- El host de `NTFY_PUBLIC_URL` (o de `NTFY_URL`) se acepta siempre, aunque resuelva a una IP de tu red local; es tu
+  ntfy. Si ese host es local o está en `NO_PROXY`, Kairo llega a él sin pasar por `HTTPS_PROXY`.
+- Cualquier otro host (ntfy.sh, otro distribuidor) tiene que resolver a direcciones públicas. Si usas un distribuidor
+  en tu red con otro nombre, pon `KAIRO_PUSH_ALLOW_PRIVATE=true` (acepta redes privadas; nunca loopback ni `169.254.x.x`).
+- Un endpoint o token de APNs que ya registró otra cuenta no se reasigna (`400`): cierra sesión en esa cuenta en el
+  teléfono (o revoca su dispositivo en *Ajustes > Dispositivos*) antes de entrar con otra.
+
 ## Comprobar que funciona
 
 - Dashboard: *Ajustes > Notificaciones* muestra cuántos teléfonos tienen push registrado.
@@ -143,3 +155,9 @@ y Kairo lo borra; la app lo vuelve a registrar al iniciar sesión.
 Aparte del push de la app, el servidor puede publicar los avisos en un tema de ntfy para quien prefiera verlos en
 la propia app ntfy o en el escritorio: `NTFY_URL`, `NTFY_TOPIC` y `NTFY_TOKEN` en `.env` (tema del propietario), o
 un tema por persona en *Ajustes*.
+
+`NTFY_TOPIC` y `NTFY_TOKEN` son del propietario (`KAIRO_OWNER_EMAIL`): sólo sus avisos se publican con el token. Los
+demás miembros pueden elegir su propio tema (letras, números, `-` y `_`), que Kairo publica **sin** token, y no pueden
+usar el tema del propietario. Si tu ntfy exige autenticación para escribir (`auth-default-access: deny-all`), da
+permiso de escritura anónima a los temas de los miembros (`ntfy access everyone tema-de-sofia write-only`) o que usen
+temas en ntfy.sh.

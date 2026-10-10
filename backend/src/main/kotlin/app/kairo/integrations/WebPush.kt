@@ -7,16 +7,20 @@ import app.kairo.db.uuid
 import app.kairo.realtime.ServerEvent
 import app.kairo.util.ApiJson
 import app.kairo.util.Crypto
+import app.kairo.util.SafeUrl
 import app.kairo.util.bypassProxy
+import app.kairo.util.logSafe
 import app.kairo.util.proxyFromEnv
+import app.kairo.util.readCapped
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import kotlinx.coroutines.sync.Mutex
@@ -154,18 +158,31 @@ object WebPushCrypto {
  * Push propio sin Firebase: envía Web Push cifrado a los endpoints UnifiedPush que registran los teléfonos
  * (por ejemplo un ntfy autoalojado). Firma con VAPID (RFC 8292) usando una clave que se genera una vez
  * y se guarda cifrada en la base de datos.
+ *
+ * El endpoint lo elige el teléfono, así que se valida contra SSRF ([SafeUrl]) al registrarlo y antes de cada envío:
+ * sólo hosts públicos, salvo el ntfy propio (host de NTFY_PUBLIC_URL o NTFY_URL, que puede estar en la red local)
+ * o con KAIRO_PUSH_ALLOW_PRIVATE=true (cualquier host de la red privada; nunca loopback ni enlace local).
  */
-class PushService(private val db: Db, private val crypto: Crypto, private val cfg: AppConfig) {
+class PushService(private val db: Db, private val crypto: Crypto, private val cfg: AppConfig, env: Map<String, String> = System.getenv()) {
     private val log = LoggerFactory.getLogger(PushService::class.java)
     private val http = HttpClient(CIO) {
         engine { proxyFromEnv()?.let { proxy = it } }
         install(HttpTimeout) { requestTimeoutMillis = 15_000 }
+        followRedirects = false
         expectSuccess = false
     }
+    /** Sin proxy: sólo para el ntfy propio cuando está en la red local o en NO_PROXY. */
     private val direct = HttpClient(CIO) {
         install(HttpTimeout) { requestTimeoutMillis = 15_000 }
+        followRedirects = false
         expectSuccess = false
     }
+    /** Hosts del ntfy que configuró el operador. */
+    private val ntfyHosts: Set<String> = ntfyHosts(env["NTFY_PUBLIC_URL"], cfg.ntfyUrl)
+    private val endpointPolicy = SafeUrl.Policy(
+        allowPrivate = env["KAIRO_PUSH_ALLOW_PRIVATE"]?.trim()?.toBooleanStrictOrNull() ?: false,
+        trustedHosts = ntfyHosts,
+    )
     private val keyLock = Mutex()
     @Volatile private var vapid: Pair<KeyPair, String>? = null
 
@@ -197,22 +214,40 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
         )
     }
 
+    /**
+     * Comprueba un endpoint: https (o http con KAIRO_PUSH_ALLOW_HTTP) y destino permitido.
+     * Devuelve la URL ya analizada; lanza IllegalArgumentException si no sirve.
+     */
+    private suspend fun checkEndpoint(endpoint: String): Url {
+        val checked = try {
+            SafeUrl.check(endpoint, endpointPolicy)
+        } catch (e: SafeUrl.UnsafeUrlException) {
+            throw IllegalArgumentException(
+                if (e.blockedAddress) "El endpoint de push apunta a una dirección no permitida (red local o privada)" else "El endpoint de push debe ser una URL https",
+            )
+        }
+        val scheme = checked.url.protocol.name
+        require(scheme == "https" || (cfg.pushAllowHttp && scheme == "http")) { "El endpoint de push debe ser una URL https" }
+        return checked.url
+    }
+
     suspend fun register(userId: UUID, deviceId: UUID?, endpoint: String, p256dh: String, auth: String) {
-        val url = runCatching { Url(endpoint) }.getOrNull()
-        val schemeOk = url?.protocol?.name == "https" || (cfg.pushAllowHttp && url?.protocol?.name == "http")
-        require(url != null && schemeOk && url.host.isNotBlank()) { "El endpoint de push debe ser una URL https" }
+        checkEndpoint(endpoint)
         val pub = runCatching { WebPushCrypto.unb64u(p256dh) }.getOrNull()
         require(pub != null && runCatching { WebPushCrypto.decodePublic(pub) }.isSuccess) { "Clave pública de push inválida" }
         val sec = runCatching { WebPushCrypto.unb64u(auth) }.getOrNull()
         require(sec != null && sec.size == 16) { "Secreto de push inválido" }
         db.tx {
             if (deviceId != null) exec("delete from push_endpoints where device_id = ? and endpoint <> ?", deviceId, endpoint)
-            exec(
+            // Un endpoint de otra cuenta no se reasigna: así nadie puede quitarle el push a otro ni recibir el suyo
+            val n = exec(
                 """insert into push_endpoints(user_id, device_id, endpoint, p256dh, auth) values (?, ?, ?, ?, ?)
-                   on conflict (endpoint) do update set user_id = excluded.user_id, device_id = excluded.device_id,
-                   p256dh = excluded.p256dh, auth = excluded.auth, failures = 0""",
+                   on conflict (endpoint) do update set device_id = excluded.device_id,
+                   p256dh = excluded.p256dh, auth = excluded.auth, failures = 0
+                   where push_endpoints.user_id = excluded.user_id""",
                 userId, deviceId, endpoint, p256dh, auth,
             )
+            require(n > 0) { "Ese endpoint de push ya está registrado por otra cuenta" }
         }
     }
 
@@ -236,16 +271,22 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
         var ok = 0
         for (t in targets) {
             val result = runCatching {
+                // Se vuelve a validar en cada envío: el DNS puede haber cambiado desde el registro
+                val url = checkEndpoint(t.endpoint)
                 val body = WebPushCrypto.encrypt(payload, WebPushCrypto.unb64u(t.p256dh), WebPushCrypto.unb64u(t.auth))
-                val client = if (bypassProxy(Url(t.endpoint).host)) direct else http
-                client.post(t.endpoint) {
+                val client = if (useDirect(url.host)) direct else http
+                client.preparePost(url) {
                     header("TTL", ttlSeconds.toString())
                     header("Urgency", urgency)
                     header("Content-Encoding", "aes128gcm")
                     header("Content-Type", "application/octet-stream")
                     header("Authorization", "vapid t=${vapidJwt(t.endpoint, kp)}, k=$pubB64")
                     setBody(body)
-                }.status.value
+                }.execute { resp ->
+                    // Sólo interesa el código; del cuerpo se lee como mucho MAX_RESPONSE_BYTES y se descarta
+                    resp.bodyAsChannel().readCapped(MAX_RESPONSE_BYTES)
+                    resp.status.value
+                }
             }
             val status = result.getOrNull()
             when {
@@ -255,7 +296,7 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
                 }
                 status == 404 || status == 410 -> db.tx { exec("delete from push_endpoints where id = ?", t.id) }
                 else -> {
-                    log.warn("Push a {} falló: {}", Url(t.endpoint).host, status ?: result.exceptionOrNull()?.message)
+                    log.warn("Push a {} falló: {}", logSafe(runCatching { Url(t.endpoint).host }.getOrDefault("?"), 120), logSafe(status ?: result.exceptionOrNull()?.message))
                     db.tx { exec("update push_endpoints set failures = failures + 1 where id = ?", t.id) }
                     db.tx { exec("delete from push_endpoints where id = ? and failures > 50", t.id) }
                 }
@@ -275,5 +316,23 @@ class PushService(private val db: Db, private val crypto: Crypto, private val cf
             .sign(Algorithm.ECDSA256(kp.public as ECPublicKey, kp.private as ECPrivateKey))
     }
 
+    /** Sin proxy sólo para el ntfy propio (y si además es local o está en NO_PROXY); el resto, por el proxy si lo hay. */
+    private fun useDirect(host: String): Boolean = SafeUrl.normalizeHost(host) in ntfyHosts && bypassProxy(host)
+
     private data class PushTarget(val id: UUID, val endpoint: String, val p256dh: String, val auth: String)
+
+    companion object {
+        const val MAX_RESPONSE_BYTES = 64 * 1024
+
+        /** Hosts de las URLs de ntfy configuradas (NTFY_PUBLIC_URL para los teléfonos, NTFY_URL para el servidor). */
+        fun ntfyHosts(vararg urls: String?): Set<String> = urls.filterNotNull()
+            .mapNotNull { raw ->
+                // java.net.URI y no Url de Ktor: Ktor completa un texto que no es URL con "localhost"
+                runCatching { java.net.URI(raw.trim()) }.getOrNull()
+                    ?.takeIf { it.scheme?.lowercase() in setOf("http", "https") }
+                    ?.host?.let(SafeUrl::normalizeHost)
+            }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
 }

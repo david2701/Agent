@@ -134,7 +134,9 @@ fun Route.dataRoutes(s: Services) {
                 title = b.str("title"), notes = b.rawStr("notes"), status = b.str("status"), priority = b.str("priority"),
                 dueDate = b.str("dueDate")?.let { parseUserDate(it) }, clearDueDate = b.isNull("dueDate"),
                 dueAt = b.str("dueAt")?.let { parseInstant(it) }, clearDueAt = b.isNull("dueAt"),
-                projectId = b.str("projectId")?.let(UUID::fromString), clearProject = b.isNull("projectId"),
+                // El repositorio comprueba que el proyecto sea del usuario
+                projectId = b.str("projectId")?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: badRequest("projectId inválido") },
+                clearProject = b.isNull("projectId"),
                 tags = b.strList("tags"), sort = b.double("sort"),
                 shared = b.bool("shared"),
                 assigneeId = b.str("assigneeId")?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: badRequest("assigneeId inválido") },
@@ -185,7 +187,9 @@ fun Route.dataRoutes(s: Services) {
             val patch = ReminderPatch(
                 text = b.str("text"), dueAt = b.str("dueAt")?.let { parseInstant(it) },
                 rrule = b.str("rrule"), clearRrule = b.isNull("rrule"),
-                placeId = b.str("placeId")?.let(UUID::fromString), placeTrigger = b.str("placeTrigger"), clearPlace = b.isNull("placeId"),
+                // El repositorio comprueba, como al crear, que el lugar esté disponible para quien recibe el aviso
+                placeId = b.str("placeId")?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: badRequest("placeId inválido") },
+                placeTrigger = b.str("placeTrigger"), clearPlace = b.isNull("placeId"),
             )
             call.respond(s.reminders.update(call.userId(), call.uuidParam(), patch, call.source()) ?: notFound("Recordatorio"))
         }

@@ -3,6 +3,9 @@ package app.kairo.util
 import io.ktor.client.engine.ProxyBuilder
 import io.ktor.client.engine.ProxyConfig
 import io.ktor.http.Url
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readAvailable
+import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.net.ProxySelector
 import java.net.http.HttpClient
@@ -24,7 +27,8 @@ fun jdkProxySelector(): ProxySelector =
 
 /**
  * true si a [host] hay que llegar sin proxy: está en NO_PROXY o es una dirección local/privada
- * (un ntfy en la misma red, por ejemplo).
+ * (un ntfy en la misma red, por ejemplo). Sólo debe usarse con hosts que configuró el operador
+ * (el ntfy propio): nunca con URLs elegidas por un usuario.
  */
 fun bypassProxy(host: String): Boolean {
     val h = host.lowercase().trim('[', ']')
@@ -36,3 +40,40 @@ fun bypassProxy(host: String): Boolean {
     }
 }
 
+/**
+ * Lee como mucho [max] bytes del canal, sin cargar el resto en memoria.
+ * Devuelve los bytes y si quedaba más contenido (truncated).
+ */
+suspend fun ByteReadChannel.readCapped(max: Int): Pair<ByteArray, Boolean> {
+    require(max >= 0)
+    val limit = max.toLong() + 1 // un byte de más para saber si se recortó
+    val out = ByteArrayOutputStream(minOf(limit, 64L * 1024).toInt())
+    val buf = ByteArray(8 * 1024)
+    while (out.size() < limit) {
+        val n = readAvailable(buf, 0, minOf(buf.size.toLong(), limit - out.size()).toInt())
+        if (n <= 0) break
+        out.write(buf, 0, n)
+    }
+    val bytes = out.toByteArray()
+    return if (bytes.size > max) bytes.copyOf(max) to true else bytes to false
+}
+
+/**
+ * Texto apto para el log: escapa CR/LF y otros caracteres de control (evita inyectar líneas falsas en el log)
+ * y lo recorta a [max] caracteres.
+ */
+fun logSafe(value: Any?, max: Int = 300): String {
+    val s = value?.toString() ?: return "null"
+    val sb = StringBuilder(minOf(s.length, max) + 8)
+    for (c in s) {
+        if (sb.length >= max) { sb.append('…'); break }
+        when {
+            c == '\n' -> sb.append("\\n")
+            c == '\r' -> sb.append("\\r")
+            c == '\t' -> sb.append("\\t")
+            c.isISOControl() || c == '\u2028' || c == '\u2029' -> sb.append("\\u%04x".format(c.code))
+            else -> sb.append(c)
+        }
+    }
+    return sb.toString()
+}

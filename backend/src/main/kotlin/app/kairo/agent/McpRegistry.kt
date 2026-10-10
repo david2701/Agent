@@ -34,7 +34,11 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
     }
 
     suspend fun create(userId: UUID, name: String, url: String, headers: Map<String, String>): McpServer {
-        require(url.startsWith("https://") || url.startsWith("http://")) { "La URL debe empezar por https://" }
+        // Protección SSRF (ver SafeUrl): sólo hosts públicos salvo KAIRO_MCP_ALLOW_PRIVATE / KAIRO_MCP_ALLOWED_HOSTS
+        client.validateUrl(url.trim())
+        require(name.none { it.isISOControl() }) { "El nombre no puede tener saltos de línea ni caracteres de control" }
+        val headerName = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$") // token de RFC 9110
+        require(headers.all { (k, v) -> headerName.matches(k) && v.none { it == '\r' || it == '\n' || it == '\u0000' } }) { "Cabeceras inválidas" }
         val enc = headers.takeIf { it.isNotEmpty() }?.let { crypto.encrypt(KairoJson.encodeToString(MapSerializer(String.serializer(), String.serializer()), it)) }
         val id = db.tx { one("insert into mcp_servers(user_id, name, url, headers) values (?, ?, ?, ?) returning id", userId, name.trim(), url.trim(), enc) { it.uuid("id") }!! }
         return list(userId).first { it.id == id }

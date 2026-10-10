@@ -166,7 +166,7 @@ fun Route.systemRoutes(s: Services) {
     get("/settings") { call.respond(SettingsResponse(s.settings.get(call.userId()), s.config.googleEnabled, s.ntfy.enabled)) }
     patch("/settings") {
         val patch = call.receiveJsonObject()
-        val updated = runCatching { s.settings.patch(call.userId(), patch) }.getOrElse { badRequest("Ajustes inválidos: ${it.message?.take(120)}") }
+        val updated = runCatching { s.settings.patch(call.userId(), patch) { s.nan.models() } }.getOrElse { badRequest("Ajustes inválidos: ${it.message?.take(120)}") }
         call.respond(SettingsResponse(updated, s.config.googleEnabled, s.ntfy.enabled))
     }
     get("/geocode") {
@@ -234,13 +234,21 @@ fun Route.systemRoutes(s: Services) {
         post {
             val b = call.receiveBody<McpCreate>()
             if (b.name.isBlank()) badRequest("Nombre vacío")
-            val server = runCatching { s.mcp.create(call.userId(), b.name, b.url, b.headers) }.getOrElse { badRequest(it.message ?: "Datos inválidos") }
+            // Sólo los errores de validación (mensajes propios) llegan al cliente
+            val server = try {
+                s.mcp.create(call.userId(), b.name, b.url, b.headers)
+            } catch (e: IllegalArgumentException) {
+                badRequest(e.message ?: "Datos inválidos")
+            }
             call.respond(HttpStatusCode.Created, server)
         }
         patch("/{id}") { call.respond(s.mcp.update(call.userId(), call.uuidParam(), call.receiveBody<McpPatch>().enabled) ?: notFound("Servidor")) }
         delete("/{id}") { if (!s.mcp.delete(call.userId(), call.uuidParam())) notFound("Servidor"); call.respond(OkResponse()) }
         post("/{id}/test") {
-            val tools = runCatching { s.mcp.test(call.userId(), call.uuidParam()) }.getOrElse { badRequest("No se pudo conectar: ${it.message?.take(160)}") }
+            // Mensaje genérico: el detalle del fallo (conexión rechazada, timeout, código HTTP) queda sólo en el log
+            // para que la prueba no sirva para escanear puertos de la red interna
+            val tools = runCatching { s.mcp.test(call.userId(), call.uuidParam()) }
+                .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; badRequest(app.kairo.integrations.McpClient.GENERIC_ERROR) }
             call.respond(McpTestResult(tools))
         }
     }

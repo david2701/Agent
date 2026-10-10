@@ -206,11 +206,12 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo, private
                 ); "updated"
             }
             else -> {
+                // household_id es obligatorio desde V2; lo que llega de Google es personal (shared = false)
                 exec(
-                    """insert into events(user_id, title, description, location, start_at, end_at, all_day, timezone, source,
+                    """insert into events(user_id, household_id, shared, title, description, location, start_at, end_at, all_day, timezone, source,
                        google_event_id, google_calendar_id, google_etag, google_recurring_id, dirty)
-                       values (?, ?, ?, ?, ?, ?, ?, ?, 'google', ?, ?, ?, ?, false)""",
-                    userId, g.title, g.description, g.location, g.startAt, g.endAt, g.allDay, g.timezone,
+                       values (?, $HOUSEHOLD_OF, false, ?, ?, ?, ?, ?, ?, ?, 'google', ?, ?, ?, ?, false)""",
+                    userId, userId, g.title, g.description, g.location, g.startAt, g.endAt, g.allDay, g.timezone,
                     g.googleId, g.calendarId, g.etag, g.recurringId,
                 ); "created"
             }

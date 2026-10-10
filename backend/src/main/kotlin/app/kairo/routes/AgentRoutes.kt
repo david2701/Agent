@@ -95,7 +95,10 @@ fun Route.agentRoutes(s: Services) {
         val caps = call.clientCapabilities()
         call.streamAgent(flow {
             val t = runCatching { s.voice.transcribe(userId, audio, up.fileName ?: "audio.m4a", up.contentType ?: "audio/mp4") }.getOrElse {
-                emit(AgentEvent.Error("No pude transcribir el audio: ${it.message?.take(100)}"))
+                // El detalle (respuesta de Nan) sólo va al log; al cliente, un mensaje genérico
+                org.slf4j.LoggerFactory.getLogger("app.kairo.routes.AgentRoutes")
+                    .warn("Transcripción fallida: {}", app.kairo.util.logSafe(it.message ?: it.javaClass.simpleName))
+                emit(AgentEvent.Error("No pude transcribir el audio. Intenta de nuevo."))
                 return@flow
             }
             if (s.voice.isNoise(t.text)) {

@@ -2,12 +2,15 @@ package app.kairo.integrations
 
 import app.kairo.util.proxyFromEnv
 import app.kairo.config.AppConfig
+import app.kairo.util.logSafe
+import app.kairo.util.readCapped
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.json.buildJsonArray
@@ -24,18 +27,31 @@ class NtfyNotifier(private val cfg: AppConfig) {
     private val http = HttpClient(CIO) {
         engine { proxyFromEnv()?.let { proxy = it } }
         install(HttpTimeout) { requestTimeoutMillis = 10_000 }
+        followRedirects = false
         expectSuccess = false
     }
 
     val enabled: Boolean get() = cfg.ntfyUrl != null
 
-    suspend fun send(topicOverride: String?, title: String, message: String, tags: List<String> = emptyList(), clickUrl: String? = null, priority: Int = 4) {
+    /**
+     * Publica en [topicOverride] (o en NTFY_TOPIC). NTFY_TOKEN sólo se adjunta con [authenticated]: el token es del
+     * propietario y no debe servir para publicar en temas que elige otro miembro.
+     */
+    suspend fun send(
+        topicOverride: String?,
+        title: String,
+        message: String,
+        tags: List<String> = emptyList(),
+        clickUrl: String? = null,
+        priority: Int = 4,
+        authenticated: Boolean = topicOverride == null,
+    ) {
         val base = cfg.ntfyUrl ?: return
         val topic = topicOverride ?: cfg.ntfyTopic ?: return
         runCatching {
-            http.post(base) {
+            http.preparePost(base) {
                 contentType(ContentType.Application.Json)
-                cfg.ntfyToken?.let { header("Authorization", "Bearer $it") }
+                if (authenticated) cfg.ntfyToken?.let { header("Authorization", "Bearer $it") }
                 setBody(buildJsonObject {
                     put("topic", topic)
                     put("title", title)
@@ -44,7 +60,14 @@ class NtfyNotifier(private val cfg: AppConfig) {
                     if (tags.isNotEmpty()) put("tags", buildJsonArray { tags.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
                     clickUrl?.let { put("click", it) }
                 }.toString())
+            }.execute { resp ->
+                resp.bodyAsChannel().readCapped(MAX_RESPONSE_BYTES)
+                if (resp.status.value !in 200..299) log.warn("ntfy respondió {}", resp.status.value)
             }
-        }.onFailure { log.warn("ntfy falló: {}", it.message) }
+        }.onFailure { log.warn("ntfy falló: {}", logSafe(it.message)) }
+    }
+
+    private companion object {
+        const val MAX_RESPONSE_BYTES = 64 * 1024
     }
 }
