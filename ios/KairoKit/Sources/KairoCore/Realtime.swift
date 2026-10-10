@@ -3,9 +3,9 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Evento del servidor ya interpretado. Llega igual por WebSocket y por push (APNs).
+/// Server event already interpreted. It arrives the same way over WebSocket and push (APNs).
 public enum RealtimeEvent: Sendable, Hashable {
-    /// Cambió una colección ("note", "task", "list", "family"...): hay que recargarla.
+    /// A collection changed ("note", "task", "list", "family"...): it has to be reloaded.
     case changed(entity: String, id: String?, op: String)
     case reminderFire(id: String, text: String, fireAt: Date, createdBy: String?)
     case eventAlert(id: String, title: String, startAt: Date, alertAt: Date, minutes: Int, location: String, shared: Bool)
@@ -21,10 +21,10 @@ public enum RealtimeEvent: Sendable, Hashable {
         case "entity.changed":
             self = .changed(entity: s("entity") ?? "", id: s("id"), op: s("op") ?? "updated")
         case "reminder.fire":
-            self = .reminderFire(id: s("id") ?? "", text: s("text") ?? "Recordatorio", fireAt: KairoDate.parse(s("fireAt")) ?? .now, createdBy: s("createdBy"))
+            self = .reminderFire(id: s("id") ?? "", text: s("text") ?? L10n.tr("Reminder"), fireAt: KairoDate.parse(s("fireAt")) ?? .now, createdBy: s("createdBy"))
         case "event.alert":
             self = .eventAlert(
-                id: s("id") ?? "", title: s("title") ?? "Evento", startAt: KairoDate.parse(s("startAt")) ?? .now,
+                id: s("id") ?? "", title: s("title") ?? L10n.tr("Event"), startAt: KairoDate.parse(s("startAt")) ?? .now,
                 alertAt: KairoDate.parse(s("alertAt")) ?? .now, minutes: d["minutes"]?.int ?? 0,
                 location: s("location") ?? "", shared: d["shared"]?.bool ?? false
             )
@@ -34,7 +34,7 @@ public enum RealtimeEvent: Sendable, Hashable {
             self = .recordingUpdated(id: s("id") ?? "")
         case "family.notice":
             self = .familyNotice(Notice(
-                id: s("id") ?? UUID().uuidString, kind: s("kind") ?? "message", title: s("title") ?? "Familia", body: s("body") ?? "",
+                id: s("id") ?? UUID().uuidString, kind: s("kind") ?? "message", title: s("title") ?? L10n.tr("Family notice"), body: s("body") ?? "",
                 actorId: s("actorId"), entityType: s("entityType"), entityId: s("entityId"), createdAt: s("createdAt") ?? ""
             ))
         default:
@@ -42,8 +42,8 @@ public enum RealtimeEvent: Sendable, Hashable {
         }
     }
 
-    /// Clave para no mostrar dos veces el mismo aviso si llega por WebSocket, por push y por la alarma local.
-    /// Coincide con la de `NotificationPlan` y con la app de Android.
+    /// Key to avoid showing the same notice twice when it arrives over WebSocket, push and the local alarm.
+    /// It matches the one in `NotificationPlan` and the Android app.
     public var dedupeKey: String? {
         switch self {
         case .reminderFire(let id, _, let at, _): "rem:\(id):\(Int(at.timeIntervalSince1970))"
@@ -57,7 +57,7 @@ public enum RealtimeEvent: Sendable, Hashable {
 
 #if canImport(Darwin)
 public extension KairoAPI {
-    /// Conexión en vivo con el servidor: reconecta con espera creciente y mantiene vivo el socket.
+    /// Live connection to the server: reconnects with growing back-off and keeps the socket alive.
     nonisolated func realtime() -> AsyncStream<ServerEvent> {
         AsyncStream { continuation in
             let task = Task {
@@ -105,7 +105,7 @@ public extension KairoAPI {
 #endif
 
 extension KairoAPI {
-    /// `wss://servidor/api/ws?access_token=...` (el WebSocket no admite cabeceras en todas las plataformas).
+    /// `wss://server/api/ws?access_token=...` (WebSockets do not support headers on every platform).
     func socketURL() async throws -> URL? {
         guard let base = await sessions.current()?.serverURL else { return nil }
         let token = try await currentAccessToken()

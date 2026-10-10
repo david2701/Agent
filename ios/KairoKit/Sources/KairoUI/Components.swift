@@ -1,7 +1,7 @@
 import SwiftUI
 import KairoCore
 
-// MARK: - Iconos por tipo de entidad (SF Symbols)
+// MARK: - Icons by entity type (SF Symbols)
 
 public enum KairoSymbol {
     public static func entity(_ type: String) -> String {
@@ -31,7 +31,7 @@ public enum KairoSymbol {
     }
 }
 
-// MARK: - Tarjeta de acción del agente ("Nota guardada: Wifi")
+// MARK: - Agent action card ("Note saved: Wifi")
 
 public struct ActionCard: View {
     public var summary: String
@@ -77,9 +77,9 @@ public struct ActionCard: View {
     }
 }
 
-// MARK: - Familia
+// MARK: - Family
 
-/// "Familiar" (con la casita) o "de Valentina".
+/// "Family" (with the little house) or "Valentina's".
 public struct SharedBadge: View {
     public var owner: String?
     public var compact: Bool
@@ -92,18 +92,23 @@ public struct SharedBadge: View {
     public var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "house").font(.system(size: compact ? 10 : 11, weight: .semibold))
-            if !compact { Text(owner.map { "de \($0)" } ?? "Familiar").font(.kCaption) }
+            if !compact { label.font(.kCaption) }
         }
         .foregroundStyle(KairoColor.muted)
         .padding(.horizontal, compact ? 5 : 7)
         .padding(.vertical, 3)
         .background(KairoColor.surface2, in: Capsule())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(owner.map { "Familiar, de \($0)" } ?? "Familiar")
+        .accessibilityLabel(owner.map { String(localized: "Family, \($0)'s", bundle: .module) } ?? String(localized: "Family", bundle: .module))
+    }
+
+    private var label: Text {
+        guard let owner else { return Text("Family", bundle: .module) }
+        return Text(verbatim: String(localized: "\(owner)'s", bundle: .module))
     }
 }
 
-/// Iniciales en un círculo neutro (sin colores nuevos).
+/// Initials in a neutral circle (no new colors).
 public struct MemberAvatar: View {
     public var initials: String
     public var size: CGFloat
@@ -123,16 +128,21 @@ public struct MemberAvatar: View {
     }
 }
 
-// MARK: - Estados
+// MARK: - States
 
 public struct EmptyStateView: View {
     public var symbol: String
-    public var title: String
-    public var message: String
-    public var actionTitle: String?
+    public var title: Text
+    public var message: Text
+    public var actionTitle: Text?
     public var action: (() -> Void)?
 
-    public init(symbol: String, title: String, message: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+    /// Texts are looked up in the main bundle (the app's own string catalog).
+    public init(symbol: String, title: LocalizedStringKey, message: LocalizedStringKey, actionTitle: LocalizedStringKey? = nil, action: (() -> Void)? = nil) {
+        self.init(symbol: symbol, title: Text(title), message: Text(message), actionTitle: actionTitle.map { Text($0) }, action: action)
+    }
+
+    public init(symbol: String, title: Text, message: Text, actionTitle: Text? = nil, action: (() -> Void)? = nil) {
         self.symbol = symbol; self.title = title; self.message = message; self.actionTitle = actionTitle; self.action = action
     }
 
@@ -143,10 +153,10 @@ public struct EmptyStateView: View {
                 .foregroundStyle(KairoColor.faint)
                 .symbolEffect(.bounce, options: .nonRepeating)
                 .padding(.bottom, 4)
-            Text(title).font(.kHeadline).foregroundStyle(KairoColor.text)
-            Text(message).font(.kSubheadline).foregroundStyle(KairoColor.muted).multilineTextAlignment(.center)
+            title.font(.kHeadline).foregroundStyle(KairoColor.text)
+            message.font(.kSubheadline).foregroundStyle(KairoColor.muted).multilineTextAlignment(.center)
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
+                Button(action: action) { actionTitle }
                     .buttonStyle(KairoButtonStyle(kind: .secondary))
                     .padding(.top, 6)
             }
@@ -167,11 +177,12 @@ public struct ErrorStateView: View {
     }
 
     public var body: some View {
-        EmptyStateView(symbol: "wifi.exclamationmark", title: "No se pudo cargar", message: message, actionTitle: "Reintentar", action: retry)
+        EmptyStateView(symbol: "wifi.exclamationmark", title: Text("Couldn't load", bundle: .module), message: Text(verbatim: message),
+                       actionTitle: Text("Try again", bundle: .module), action: retry)
     }
 }
 
-/// Bloques grises mientras carga (se respetan los tamaños del contenido real).
+/// Gray blocks while loading (the sizes of the real content are respected).
 public struct SkeletonRows: View {
     public var count: Int
     @State private var pulse = false
@@ -194,11 +205,11 @@ public struct SkeletonRows: View {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
         .padding(.vertical, 8)
-        .accessibilityLabel("Cargando")
+        .accessibilityLabel(Text("Loading", bundle: .module))
     }
 }
 
-// MARK: - Botones
+// MARK: - Buttons
 
 public struct KairoButtonStyle: ButtonStyle {
     public enum Kind: Sendable { case primary, secondary, quiet, danger }
@@ -245,22 +256,33 @@ public struct KairoButtonStyle: ButtonStyle {
     }
 }
 
-/// Chip de filtro ("Todas", "Mías", "Familiares").
+/// Filter chip ("All", "Mine", "Family").
 public struct FilterChip: View {
-    public var title: String
+    public var title: Text
     public var count: Int?
     public var selected: Bool
     public var action: () -> Void
 
-    public init(_ title: String, count: Int? = nil, selected: Bool, action: @escaping () -> Void) {
-        self.title = title; self.count = count; self.selected = selected; self.action = action
+    /// A literal title is looked up in the main bundle (the app's own string catalog).
+    public init(_ title: LocalizedStringKey, count: Int? = nil, selected: Bool, action: @escaping () -> Void) {
+        self.init(text: Text(title), count: count, selected: selected, action: action)
+    }
+
+    /// A dynamic title (a name, for example) is shown as is.
+    @_disfavoredOverload
+    public init<S: StringProtocol>(_ title: S, count: Int? = nil, selected: Bool, action: @escaping () -> Void) {
+        self.init(text: Text(verbatim: String(title)), count: count, selected: selected, action: action)
+    }
+
+    private init(text: Text, count: Int?, selected: Bool, action: @escaping () -> Void) {
+        self.title = text; self.count = count; self.selected = selected; self.action = action
     }
 
     public var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Text(title).font(.kairo(14, .medium))
-                if let count { Text("\(count)").font(.kMonoSmall).foregroundStyle(selected ? KairoColor.accentStrong : KairoColor.faint) }
+                title.font(.kairo(14, .medium))
+                if let count { Text(verbatim: "\(count)").font(.kMonoSmall).foregroundStyle(selected ? KairoColor.accentStrong : KairoColor.faint) }
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
@@ -274,15 +296,15 @@ public struct FilterChip: View {
     }
 }
 
-// MARK: - Tarjeta
+// MARK: - Card
 
 public struct KairoCard<Content: View>: View {
-    public var title: String?
+    public var title: Text?
     public var trailing: AnyView?
     @ViewBuilder public var content: Content
 
-    public init(_ title: String? = nil, trailing: AnyView? = nil, @ViewBuilder content: () -> Content) {
-        self.title = title
+    public init(_ title: LocalizedStringKey? = nil, trailing: AnyView? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title.map { Text($0) }
         self.trailing = trailing
         self.content = content()
     }
@@ -291,7 +313,7 @@ public struct KairoCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             if title != nil || trailing != nil {
                 HStack {
-                    if let title { Text(title).font(.kHeadline).foregroundStyle(KairoColor.text) }
+                    if let title { title.font(.kHeadline).foregroundStyle(KairoColor.text) }
                     Spacer()
                     trailing
                 }
@@ -305,7 +327,7 @@ public struct KairoCard<Content: View>: View {
     }
 }
 
-// MARK: - Markdown ligero (negritas, cursivas, enlaces, listas, títulos)
+// MARK: - Light Markdown (bold, italics, links, lists, headings)
 
 public struct MarkdownText: View {
     public var text: String
@@ -365,7 +387,7 @@ public struct MarkdownText: View {
                     }
                 case .numbered(let n):
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(n).").font(.kMono).foregroundStyle(KairoColor.muted)
+                        Text(verbatim: "\(n).").font(.kMono).foregroundStyle(KairoColor.muted)
                         Text(inline(b.text)).font(font)
                     }
                 }
@@ -378,7 +400,7 @@ public struct MarkdownText: View {
 }
 
 public extension View {
-    /// Texto seleccionable donde el sistema lo permite (no en Apple Watch).
+    /// Selectable text where the system allows it (not on Apple Watch).
     @ViewBuilder func selectableText() -> some View {
         #if os(watchOS)
         self
@@ -388,21 +410,32 @@ public extension View {
     }
 }
 
-// MARK: - Encabezado de sección
+// MARK: - Section header
 
 public struct SectionLabel: View {
-    public var title: String
+    public var title: Text
     public var count: Int?
     public var tint: Color
 
-    public init(_ title: String, count: Int? = nil, tint: Color = KairoColor.muted) {
-        self.title = title; self.count = count; self.tint = tint
+    /// A literal title is looked up in the main bundle (the app's own string catalog).
+    public init(_ title: LocalizedStringKey, count: Int? = nil, tint: Color = KairoColor.muted) {
+        self.init(text: Text(title), count: count, tint: tint)
+    }
+
+    /// A dynamic title is shown as is.
+    @_disfavoredOverload
+    public init<S: StringProtocol>(_ title: S, count: Int? = nil, tint: Color = KairoColor.muted) {
+        self.init(text: Text(verbatim: String(title)), count: count, tint: tint)
+    }
+
+    private init(text: Text, count: Int?, tint: Color) {
+        self.title = text; self.count = count; self.tint = tint
     }
 
     public var body: some View {
         HStack(spacing: 6) {
-            Text(title).font(.kairo(13, .semibold))
-            if let count { Text("\(count)").font(.kMonoSmall) }
+            title.font(.kairo(13, .semibold))
+            if let count { Text(verbatim: "\(count)").font(.kMonoSmall) }
         }
         .foregroundStyle(tint)
         .textCase(nil)

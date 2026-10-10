@@ -1,7 +1,7 @@
 import Foundation
 
-/// Resumen que la app deja en el contenedor compartido (App Group) para los widgets, las Live Activities,
-/// los controles y el reloj. Así muestran datos al instante sin pedir nada a la red.
+/// Summary the app leaves in the shared container (App Group) for the widgets, Live Activities,
+/// controls and the watch, so they show data instantly without asking the network for anything.
 public struct SharedSnapshot: Codable, Sendable, Hashable {
     public struct Item: Codable, Sendable, Hashable, Identifiable {
         public var id: String
@@ -43,18 +43,18 @@ public struct SharedSnapshot: Codable, Sendable, Hashable {
         self.events = events; self.tasks = tasks; self.reminders = reminders; self.lists = lists; self.weather = weather; self.unreadNotices = unreadNotices
     }
 
-    /// Construye el resumen a partir de `/today`.
+    /// Builds the summary from `/today`.
     public init(today t: TodayData, userName: String, unreadNotices: Int, family: FamilyInfo?) {
-        func owner(_ id: String?) -> String { family?.ownerName(id).map { " · de \($0)" } ?? "" }
+        func owner(_ id: String?) -> String { family?.ownerName(id).map { L10n.tr(" · %@'s", strings: $0) } ?? "" }
         let events = t.events.compactMap { e -> Item? in
             guard let start = e.start else { return nil }
-            let when = e.allDay ? "Todo el día" : KairoDate.time(start)
+            let when = e.allDay ? L10n.tr("All day") : KairoDate.time(start)
             return Item(id: e.occurrenceId, title: e.title, subtitle: when + (e.location.isEmpty ? "" : " · \(e.location)"), date: start, shared: e.shared)
         }
         let tasks = (t.tasksOverdue + t.tasksDueToday + t.tasksInProgress).reduce(into: [KTask]()) { acc, task in
             if !acc.contains(where: { $0.id == task.id }) { acc.append(task) }
         }.map { task in
-            let due = task.dueDate.flatMap { KairoDate.day($0) }.map { KairoDate.humanDay($0) } ?? (task.status == "doing" ? "En curso" : "")
+            let due = task.dueDate.flatMap { KairoDate.day($0) }.map { KairoDate.humanDay($0) } ?? (task.status == "doing" ? L10n.tr("In progress") : "")
             return Item(id: task.id, title: task.title, subtitle: due + owner(task.ownerId), date: task.dueDate.flatMap { KairoDate.day($0) }, shared: task.shared, done: task.isDone)
         }
         let reminders = t.reminders.compactMap { r -> Item? in
@@ -69,13 +69,13 @@ public struct SharedSnapshot: Codable, Sendable, Hashable {
                   reminders: reminders, lists: lists, weather: weather, unreadNotices: unreadNotices)
     }
 
-    /// Próximo evento que todavía no terminó.
+    /// Next event that has not finished yet.
     public func nextEvent(after now: Date = .now) -> Item? {
         events.first { ($0.date ?? .distantPast).addingTimeInterval(3600) > now }
     }
 }
 
-/// Lectura y escritura del resumen en un directorio compartido.
+/// Reads and writes the summary in a shared directory.
 public struct SnapshotStore: Sendable {
     public let directory: URL
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Eventos SSE del agente (ver docs/API.md, "Agente (SSE)").
+/// Agent SSE events (see docs/API.md, "Agent (SSE)").
 public enum AgentEvent: Sendable, Hashable {
     case start(conversationId: String)
     case transcript(String)
@@ -13,7 +13,7 @@ public enum AgentEvent: Sendable, Hashable {
     case error(String)
 }
 
-/// Acción que el agente pide al teléfono: temporizador o alarma.
+/// Action the agent asks the phone to perform: a timer or an alarm.
 public enum DeviceAction: Sendable, Hashable {
     case timer(seconds: Int, label: String)
     case alarm(hour: Int, minute: Int, label: String, days: [String])
@@ -59,32 +59,32 @@ extension AgentEvent: Decodable {
         case "device_action": self = .deviceAction(DeviceAction(json: (try? c.decode(JSONValue.self, forKey: .action)) ?? .null))
         case "attachment": self = .attachment(try c.decode(FileRef.self, forKey: .file))
         case "done": self = .done(conversationId: s(.conversationId), messageId: s(.messageId), text: s(.text), spoken: s(.spoken))
-        case "error": self = .error(s(.message).isEmpty ? "Error del agente" : s(.message))
-        default: self = .error("Evento desconocido: \(type)")
+        case "error": self = .error(s(.message).isEmpty ? L10n.tr("Agent error") : s(.message))
+        default: self = .error(L10n.tr("Unknown event: %@", strings: type))
         }
     }
 }
 
-/// Lector incremental de Server-Sent Events: recibe líneas y devuelve el JSON de cada `data:`.
-/// El backend envía un evento por línea `data: {...}` seguido de una línea vacía.
+/// Incremental Server-Sent Events reader: takes lines and returns the JSON of each `data:`.
+/// The backend sends one event per `data: {...}` line followed by an empty line.
 public struct SSEParser: Sendable {
     private var buffer: [String] = []
 
     public init() {}
 
-    /// Procesa una línea (sin el salto). Devuelve el contenido de un evento completo, si lo hay.
+    /// Processes one line (without the line break). Returns the content of a complete event, if any.
     public mutating func feed(_ line: String) -> String? {
         let l = line.hasSuffix("\r") ? String(line.dropLast()) : line
         if l.isEmpty {
             defer { buffer.removeAll() }
             return buffer.isEmpty ? nil : buffer.joined(separator: "\n")
         }
-        if l.hasPrefix(":") { return nil } // comentario (": kairo")
+        if l.hasPrefix(":") { return nil } // comment (": kairo")
         if l.hasPrefix("data:") {
             var v = l.dropFirst(5)
             if v.first == " " { v = v.dropFirst() }
             buffer.append(String(v))
-            // El backend nunca parte un JSON en varias líneas: lo entregamos al instante sin esperar la vacía
+            // The backend never splits a JSON over several lines: deliver it right away without waiting for the empty one
             if buffer.count == 1, v.first == "{", v.last == "}" {
                 defer { buffer.removeAll() }
                 return buffer[0]
@@ -93,7 +93,7 @@ public struct SSEParser: Sendable {
         return nil
     }
 
-    /// Lo que quede al cerrar el flujo.
+    /// Whatever is left when the stream closes.
     public mutating func finish() -> String? {
         defer { buffer.removeAll() }
         return buffer.isEmpty ? nil : buffer.joined(separator: "\n")
@@ -105,7 +105,7 @@ public struct SSEParser: Sendable {
     }
 }
 
-/// Estado de un turno del agente armado a partir de los eventos (lo usan el chat, la voz y Siri).
+/// State of an agent turn built from the events (used by chat, voice and Siri).
 public struct AgentTurn: Sendable, Hashable {
     public struct Action: Sendable, Hashable, Identifiable {
         public var id: String
@@ -130,10 +130,10 @@ public struct AgentTurn: Sendable, Hashable {
 
     public init() {}
 
-    /// Texto que se muestra mientras llega y al terminar.
+    /// Text shown while it arrives and when it finishes.
     public var text: String { final ?? partial }
 
-    /// Lo que está haciendo ahora ("Guardando nota"), si hay una herramienta corriendo.
+    /// What it is doing right now ("Saving note"), if a tool is running.
     public var working: String? { actions.last(where: \.running)?.label }
 
     public mutating func apply(_ ev: AgentEvent) {
@@ -143,7 +143,7 @@ public struct AgentTurn: Sendable, Hashable {
         case .delta(let t, _): partial += t
         case .toolStart(let id, let name, let label):
             actions.append(Action(id: id, name: name, label: label, running: true, ok: true, summary: label, entity: nil))
-            partial = "" // el texto previo a herramientas no se conserva (igual que en el servidor)
+            partial = "" // text before tool calls is not kept (same as on the server)
         case .toolEnd(let id, let name, let ok, let summary, let entity):
             if let i = actions.firstIndex(where: { $0.id == id }) {
                 actions[i].running = false; actions[i].ok = ok; actions[i].summary = summary; actions[i].entity = entity

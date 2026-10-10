@@ -1,7 +1,7 @@
 import Foundation
 
-// Modelos que reflejan docs/API.md. Las fechas viajan como texto ISO-8601 y se convierten con
-// `KairoDate` cuando la UI las necesita (igual que en la app de Android).
+// Models that mirror docs/API.md. Dates travel as ISO-8601 text and are converted with
+// `KairoDate` when the UI needs them (same as in the Android app).
 
 public struct User: Codable, Sendable, Hashable, Identifiable {
     public var id: String
@@ -10,7 +10,7 @@ public struct User: Codable, Sendable, Hashable, Identifiable {
     public var timezone: String
     public var createdAt: String
     public var householdId: String?
-    /// admin | member (de la familia)
+    /// admin | member (of the family)
     public var role: String
     public var color: String?
 
@@ -31,7 +31,7 @@ public struct User: Codable, Sendable, Hashable, Identifiable {
         color = try c.decodeIfPresent(String.self, forKey: .color)
     }
 
-    /// "Valentina" en vez de "Valentina Gómez".
+    /// "Valentina" instead of "Valentina Gómez".
     public var firstName: String { displayName.split(separator: " ").first.map(String.init) ?? displayName }
 }
 
@@ -64,7 +64,7 @@ public struct Note: Codable, Sendable, Hashable, Identifiable {
     public var createdAt: String
     public var updatedAt: String
     public var score: Double?
-    /// Familiar: la ven y editan todos los miembros del hogar.
+    /// Family: every household member can see and edit it.
     public var shared: Bool
     public var ownerId: String?
 
@@ -113,7 +113,7 @@ public struct KTask: Codable, Sendable, Hashable, Identifiable {
     public var updatedAt: String
     public var shared: Bool
     public var ownerId: String?
-    /// Responsable (miembro de la familia); asignarla a otro la vuelve familiar.
+    /// Assignee (a family member); assigning it to someone else makes it a family item.
     public var assigneeId: String?
 
     public init(from decoder: Decoder) throws {
@@ -184,9 +184,9 @@ public struct Reminder: Codable, Sendable, Hashable, Identifiable {
     public var source: String
     public var createdAt: String
     public var updatedAt: String
-    /// A quién le suena (si es distinto de ti, lo programaste para otro miembro).
+    /// Who it rings for (if it is not you, you scheduled it for another member).
     public var ownerId: String?
-    /// Quién lo programó, cuando fue otro miembro.
+    /// Who scheduled it, when it was another member.
     public var createdBy: String?
 
     public init(from decoder: Decoder) throws {
@@ -287,7 +287,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
 
     public var start: Date? { KairoDate.parse(startAt) }
     public var end: Date? { KairoDate.parse(endAt) }
-    /// Los recurrentes llegan expandidos con el mismo id: la clave única es id + inicio.
+    /// Recurring events arrive expanded with the same id: the unique key is id + start.
     public var occurrenceId: String { "\(id)@\(startAt)" }
 }
 
@@ -351,7 +351,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// Entrada del historial de actividad (no confundir con `ActivityKit.Activity`).
+/// Entry in the activity history (not to be confused with `ActivityKit.Activity`).
 public struct ActivityEntry: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var kind: String
@@ -437,8 +437,8 @@ public struct UserSettings: Codable, Sendable, Hashable {
     public var voice: String = "ef_dora"
     public var voiceSpeed: Double = 1.0
     public var sttModel: String = "whisper"
-    public var language: String = "es"
-    public var wakeWord: String = "oye kairo"
+    public var language: String = "en"
+    public var wakeWord: String = "hey kairo"
     public var briefingEnabled: Bool = true
     public var briefingTime: String = "07:00"
     public var lastBriefingDate: String?
@@ -509,7 +509,7 @@ public struct DeviceSync: Codable, Sendable {
     public var eventAlerts: [EventAlert]
     public var briefingEnabled: Bool
     public var briefingTime: String
-    /// Avisos de la familia sin leer (últimas 48 h), por si no llegaron por push.
+    /// Unread family notices (last 48 h), in case they did not arrive by push.
     public var notices: [Notice]
     public var pushRegistered: Bool
 
@@ -526,7 +526,7 @@ public struct DeviceSync: Codable, Sendable {
     }
 }
 
-// MARK: - Familia
+// MARK: - Family
 
 public struct Household: Codable, Sendable, Hashable, Identifiable {
     public var id: String
@@ -557,18 +557,18 @@ public struct FamilyInfo: Codable, Sendable, Hashable {
     public var isAdmin: Bool
 
     public func member(_ id: String?) -> Member? { id.flatMap { m in members.first { $0.id == m } } }
-    /// Los demás miembros (sin ti).
+    /// The other members (not you).
     public var others: [Member] { members.filter { $0.id != me } }
-    /// "de Valentina" para lo que no es tuyo; nil si es tuyo.
+    /// The owner's first name for things that are not yours; nil if it is yours.
     public func ownerName(_ ownerId: String?) -> String? {
         guard let ownerId, ownerId != me else { return nil }
-        return member(ownerId)?.firstName ?? "otro miembro"
+        return member(ownerId)?.firstName ?? L10n.tr("another member")
     }
 }
 
 public struct Invitation: Codable, Sendable, Hashable, Identifiable {
     public var id: String
-    /// invite (miembro nuevo) | reset (código de acceso de un miembro existente)
+    /// invite (new member) | reset (access code for an existing member)
     public var kind: String
     public var name: String
     public var role: String
@@ -584,7 +584,7 @@ public struct InviteCreated: Codable, Sendable, Hashable {
     public var link: String
 }
 
-/// Lo que abre un código antes de unirse (`GET /auth/invite/{code}`).
+/// What a code opens before joining (`GET /auth/invite/{code}`).
 public struct InvitePreview: Codable, Sendable, Hashable {
     public var kind: String
     public var householdName: String
@@ -592,10 +592,10 @@ public struct InvitePreview: Codable, Sendable, Hashable {
     public var email: String?
 }
 
-/// Aviso de la familia. Llega por `GET /notices`, `family.notice` (WebSocket o push) y `/sync/device`.
+/// Family notice. Arrives via `GET /notices`, `family.notice` (WebSocket or push) and `/sync/device`.
 public struct Notice: Codable, Sendable, Hashable, Identifiable {
     public var id: String
-    /// shared | updated | assigned | reminder | message (y "test" en la prueba de push)
+    /// shared | updated | assigned | reminder | message (and "test" in the push test)
     public var kind: String
     public var title: String
     public var body: String
@@ -640,10 +640,10 @@ public struct UserEnvelope: Codable, Sendable { public var user: User }
 public struct TagsResponse: Codable, Sendable { public var tags: [String] }
 public struct OkResponse: Codable, Sendable { public var ok: Bool? }
 
-/// Registro de push nativo de Apple (APNs) para este dispositivo.
+/// Native Apple push (APNs) registration for this device.
 public struct ApnsStatus: Codable, Sendable { public var available: Bool; public var registeredDevices: Int }
 
-/// Evento del WebSocket y de los avisos push: `{type, data}`.
+/// WebSocket and push event: `{type, data}`.
 public struct ServerEvent: Codable, Sendable, Hashable {
     public var type: String
     public var data: JSONValue

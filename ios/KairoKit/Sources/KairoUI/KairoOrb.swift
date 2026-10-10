@@ -1,14 +1,15 @@
 import SwiftUI
+import KairoCore
 
 public enum OrbState: Sendable, Equatable {
     case idle, armed, listening, thinking, speaking, error
 }
 
-/// El orbe de Kairo: anillo abierto + punto ámbar (la misma geometría del ícono), igual que en Android.
-/// - idle: respira lento. - armed: el punto late (esperando "Oye Kairo").
-/// - listening: el anillo se deforma con el nivel del micrófono y el punto crece.
-/// - thinking: el hueco gira. - speaking: ondas concéntricas al ritmo de la voz.
-/// Con "Reducir movimiento" queda estático.
+/// Kairo's orb: open ring + amber dot (the same geometry as the icon), same as on Android.
+/// - idle: breathes slowly. - armed: the dot pulses (waiting for the wake phrase).
+/// - listening: the ring deforms with the microphone level and the dot grows.
+/// - thinking: the gap rotates. - speaking: concentric waves to the rhythm of the voice.
+/// With "Reduce Motion" it stays still.
 public struct KairoOrb: View {
     public var state: OrbState
     public var level: Double
@@ -50,12 +51,12 @@ public struct KairoOrb: View {
 
     private var description: String {
         switch state {
-        case .idle: "Kairo en reposo"
-        case .armed: "Kairo atento a Oye Kairo"
-        case .listening: "Kairo escuchando"
-        case .thinking: "Kairo pensando"
-        case .speaking: "Kairo hablando"
-        case .error: "Kairo no pudo completar la acción"
+        case .idle: String(localized: "Kairo is idle", bundle: .module)
+        case .armed: String(localized: "Kairo is waiting for \(KairoLanguage.wakePhraseDisplay)", bundle: .module)
+        case .listening: String(localized: "Kairo is listening", bundle: .module)
+        case .thinking: String(localized: "Kairo is thinking", bundle: .module)
+        case .speaking: String(localized: "Kairo is speaking", bundle: .module)
+        case .error: String(localized: "Kairo couldn't complete the action", bundle: .module)
         }
     }
 
@@ -93,7 +94,7 @@ public struct KairoOrb: View {
         c.translateBy(x: center.x, y: center.y)
         c.rotate(by: .degrees(rotation))
 
-        // Anillo abierto (deformado por la voz al escuchar)
+        // Open ring (deformed by the voice while listening)
         let start = gapCenter + gapHalf
         let sweep = 360 - 2 * gapHalf
         var path = Path()
@@ -107,7 +108,7 @@ public struct KairoOrb: View {
         }
         c.stroke(path, with: .color(ring), style: StrokeStyle(lineWidth: stroke, lineCap: .round))
 
-        // Punto ámbar en el hueco
+        // Amber dot in the gap
         let a = gapCenter * .pi / 180
         let armedPulse = (state == .armed && !still) ? 0.92 + 0.12 * breath : 1
         let dotR = stroke * 0.85 * (1 + smoothLevel * 0.55 * activity) * armedPulse
@@ -120,16 +121,16 @@ public struct KairoOrb: View {
     }
 }
 
-/// La marca estática (ícono): para encabezados y estados vacíos.
+/// The static mark (icon): for headers and empty states.
 public struct KairoMark: View {
     public init() {}
     public var body: some View {
         KairoOrb(state: .idle)
-            .accessibilityLabel("Kairo")
+            .accessibilityLabel(Text(verbatim: "Kairo"))
     }
 }
 
-#Preview("Estados del orbe") {
+#Preview("Orb states") {
     HStack(spacing: 24) {
         KairoOrb(state: .idle).frame(width: 90)
         KairoOrb(state: .listening, level: 0.6).frame(width: 90)

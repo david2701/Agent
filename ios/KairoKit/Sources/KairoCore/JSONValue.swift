@@ -1,6 +1,6 @@
 import Foundation
 
-/// Valor JSON arbitrario (para `meta`, `data` de eventos y cuerpos de PATCH con `null` explícitos).
+/// Arbitrary JSON value (for `meta`, event `data` and PATCH bodies with explicit `null`s).
 public enum JSONValue: Sendable, Hashable, Codable {
     case null
     case bool(Bool)
@@ -94,10 +94,10 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByBooleanLiteral, Ex
 }
 
 public extension JSONValue {
-    /// Texto u `null` (para borrar un campo en un PATCH).
+    /// Text or `null` (to clear a field in a PATCH).
     static func stringOrNull(_ s: String?) -> JSONValue { s.map(JSONValue.string) ?? .null }
     static func strings(_ list: [String]) -> JSONValue { .array(list.map(JSONValue.string)) }
 }
 
-/// Cuerpo JSON libre.
+/// Free-form JSON body.
 public typealias JSONObject = [String: JSONValue]

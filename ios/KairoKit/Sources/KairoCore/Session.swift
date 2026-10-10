@@ -3,7 +3,7 @@ import Foundation
 import Security
 #endif
 
-/// Sesión guardada de un dispositivo: servidor, usuario y refresh token (rota en cada renovación).
+/// Session stored on a device: server, user and refresh token (rotates on every refresh).
 public struct StoredSession: Codable, Sendable, Hashable {
     public var serverURL: String
     public var user: User
@@ -15,7 +15,7 @@ public struct StoredSession: Codable, Sendable, Hashable {
     }
 }
 
-/// Almacén de secretos. En iPhone, iPad y Apple Watch es el Llavero; en pruebas, memoria.
+/// Secret store. On iPhone, iPad and Apple Watch it is the Keychain; in tests, memory.
 public protocol SecretStore: Sendable {
     func read(_ key: String) -> Data?
     func write(_ key: String, _ value: Data?)
@@ -30,7 +30,7 @@ public final class MemoryStore: SecretStore, @unchecked Sendable {
 }
 
 #if canImport(Security)
-/// Llavero de Apple. Con [accessGroup] la app y sus extensiones comparten las entradas.
+/// Apple Keychain. With [accessGroup] the app and its extensions share the entries.
 public struct KeychainStore: SecretStore {
     public let service: String
     public let accessGroup: String?
@@ -65,14 +65,14 @@ public struct KeychainStore: SecretStore {
         guard let value else { return }
         var add = q
         add[kSecValueData as String] = value
-        // Disponible tras el primer desbloqueo: las alarmas, los widgets y el reloj funcionan con la pantalla bloqueada
+        // Available after first unlock: alarms, widgets and the watch work with the screen locked
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(add as CFDictionary, nil)
     }
 }
 #endif
 
-/// Sesión del dispositivo y token de acceso en memoria.
+/// Device session and in-memory access token.
 public actor SessionStore {
     private let store: SecretStore
     private let key: String
@@ -116,7 +116,7 @@ public actor SessionStore {
 
     public func setAccess(_ token: String, expiresIn: Int) {
         accessToken = token
-        // Margen de un minuto para no usar un token a punto de vencer
+        // One-minute margin so a token about to expire is not used
         accessExpiry = Date().addingTimeInterval(TimeInterval(max(60, expiresIn - 60)))
     }
 
