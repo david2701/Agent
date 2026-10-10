@@ -8,51 +8,64 @@ import app.kairo.db.uuid
 import java.sql.ResultSet
 import java.util.UUID
 
-/** Lugares guardados (Casa, Trabajo, Súper) para recordatorios por ubicación. */
+/** Lugares guardados (Casa, Trabajo, Súper) para recordatorios por ubicación. Casa suele ser familiar. */
 class PlacesRepo(private val db: Db, private val activity: ActivityRepo) {
 
     suspend fun list(userId: UUID): List<Place> = db.read {
-        query("select * from places where user_id = ? and deleted_at is null order by name", userId) { map(it) }
+        query("select * from places where ${visibleTo()} and deleted_at is null order by name", userId, userId) { map(it) }
     }
 
     suspend fun get(userId: UUID, id: UUID): Place? = db.read {
-        one("select * from places where user_id = ? and id = ? and deleted_at is null", userId, id) { map(it) }
+        one("select * from places where ${visibleTo()} and id = ? and deleted_at is null", userId, userId, id) { map(it) }
     }
 
+    /** Por nombre; ante un empate, primero los propios. */
     suspend fun findByName(userId: UUID, name: String): Place? {
         val target = Text.normalize(name)
-        return list(userId).firstOrNull { Text.normalize(it.name) == target }
-            ?: list(userId).firstOrNull { Text.normalize(it.name).contains(target) || target.contains(Text.normalize(it.name)) }
+        val all = list(userId).sortedBy { if (it.ownerId == userId) 0 else 1 }
+        return all.firstOrNull { Text.normalize(it.name) == target }
+            ?: all.firstOrNull { Text.normalize(it.name).contains(target) || target.contains(Text.normalize(it.name)) }
     }
 
-    suspend fun upsert(userId: UUID, name: String, lat: Double, lon: Double, radiusM: Int, address: String?, source: String): Place {
+    suspend fun upsert(userId: UUID, name: String, lat: Double, lon: Double, radiusM: Int, address: String?, source: String, shared: Boolean? = null): Place {
         val existing = findByName(userId, name)?.takeIf { Text.normalize(it.name) == Text.normalize(name) }
         val place = db.tx {
             if (existing != null) {
                 one(
-                    "update places set latitude = ?, longitude = ?, radius_m = ?, address = coalesce(?, address) where id = ? returning *",
-                    lat, lon, radiusM, address, existing.id,
+                    """update places set latitude = ?, longitude = ?, radius_m = ?, address = coalesce(?, address),
+                       shared = case when user_id = ? then coalesce(?, shared) else shared end where id = ? returning *""",
+                    lat, lon, radiusM, address, userId, shared, existing.id,
                 ) { map(it) }!!
             } else {
                 one(
-                    "insert into places(user_id, name, latitude, longitude, radius_m, address) values (?, ?, ?, ?, ?, ?) returning *",
-                    userId, name.trim(), lat, lon, radiusM, address,
+                    "insert into places(user_id, household_id, shared, name, latitude, longitude, radius_m, address) values (?, $HOUSEHOLD_OF, ?, ?, ?, ?, ?, ?) returning *",
+                    userId, userId, shared ?: false, name.trim(), lat, lon, radiusM, address,
                 ) { map(it) }!!
             }
         }
-        activity.record(userId, if (existing != null) Kinds.UPDATED else Kinds.CREATED, EntityTypes.PLACE, place.id, "Lugar: ${place.name}", source)
+        activity.record(
+            userId, if (existing != null) Kinds.UPDATED else Kinds.CREATED, EntityTypes.PLACE, place.id, "Lugar: ${place.name}", source,
+            shared = place.shared || existing?.shared == true,
+        )
         return place
+    }
+
+    suspend fun setShared(userId: UUID, id: UUID, shared: Boolean): Place? {
+        val p = db.tx { one("update places set shared = ? where user_id = ? and id = ? and deleted_at is null returning *", shared, userId, id) { map(it) } }
+            ?: return null
+        activity.notify(userId, EntityTypes.PLACE, id, Kinds.UPDATED, shared = true)
+        return p
     }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): Boolean {
         val p = get(userId, id) ?: return false
         db.tx { exec("update places set deleted_at = now() where id = ?", id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.PLACE, id, "Lugar eliminado: ${p.name}", source)
+        activity.record(userId, Kinds.DELETED, EntityTypes.PLACE, id, "Lugar eliminado: ${p.name}", source, shared = p.shared)
         return true
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
-        db.tx { exec("update places set deleted_at = null where user_id = ? and id = ?", userId, id) } > 0
+        db.tx { exec("update places set deleted_at = null where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
     private fun map(rs: ResultSet) = Place(
         id = rs.uuid("id"),
@@ -62,6 +75,8 @@ class PlacesRepo(private val db: Db, private val activity: ActivityRepo) {
         radiusM = rs.getInt("radius_m"),
         address = rs.strOrNull("address"),
         createdAt = rs.instant("created_at"),
+        shared = rs.getBoolean("shared"),
+        ownerId = rs.uuid("user_id"),
     )
 }
 

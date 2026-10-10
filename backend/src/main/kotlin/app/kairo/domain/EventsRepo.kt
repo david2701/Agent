@@ -8,6 +8,9 @@ import app.kairo.db.intList
 import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
+import app.kairo.services.Notifier
+import app.kairo.util.humanDate
+import app.kairo.util.humanDateTime
 import app.kairo.util.zoneOf
 import java.sql.ResultSet
 import java.time.Duration
@@ -25,6 +28,7 @@ data class EventPatch(
     val clearRrule: Boolean = false,
     val reminderMinutes: List<Int>? = null,
     val color: String? = null,
+    val shared: Boolean? = null,
 )
 
 /** Datos de un evento leído de Google Calendar. */
@@ -43,16 +47,16 @@ data class GoogleEventData(
     val cancelled: Boolean,
 )
 
-class EventsRepo(private val db: Db, private val activity: ActivityRepo) {
+class EventsRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
 
-    /** Eventos en un rango, expandiendo los recurrentes creados en Kairo. */
+    /** Eventos en un rango (los propios y los familiares), expandiendo los recurrentes creados en Kairo. */
     suspend fun range(userId: UUID, from: Instant, to: Instant): List<Event> {
         val rows = db.read {
             query(
-                """select * from events where user_id = ? and deleted_at is null
+                """select * from events where ${visibleTo()} and deleted_at is null
                    and ((rrule is null and start_at < ? and end_at > ?) or (rrule is not null and start_at < ?))
                    order by start_at""",
-                userId, to, from, to,
+                userId, userId, to, from, to,
             ) { map(it) }
         }
         val out = ArrayList<Event>()
@@ -74,12 +78,12 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo) {
     suspend fun alerts(userId: UUID, from: Instant, to: Instant): List<EventAlert> =
         range(userId, from, to.plusSeconds(8L * 86400))
             .filter { !it.allDay }
-            .flatMap { e -> e.reminderMinutes.map { m -> EventAlert(e.id, e.title, e.startAt, e.startAt.minusSeconds(m * 60L), m, e.location) } }
+            .flatMap { e -> e.reminderMinutes.map { m -> EventAlert(e.id, e.title, e.startAt, e.startAt.minusSeconds(m * 60L), m, e.location, e.shared) } }
             .filter { !it.alertAt.isBefore(from) && it.alertAt.isBefore(to) }
             .sortedBy { it.alertAt }
 
     private fun Tx.getTx(userId: UUID, id: UUID): Event? =
-        one("select * from events where user_id = ? and id = ? and deleted_at is null", userId, id) { map(it) }
+        one("select * from events where ${visibleTo()} and id = ? and deleted_at is null", userId, userId, id) { map(it) }
 
     suspend fun create(
         userId: UUID,
@@ -94,49 +98,75 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo) {
         reminderMinutes: List<Int> = listOf(15),
         color: String? = null,
         source: String,
+        shared: Boolean = false,
     ): Event {
         val event = db.tx {
             val id = one(
-                """insert into events(user_id, title, description, location, start_at, end_at, all_day, rrule, timezone,
-                   reminder_minutes, color, source, dirty) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'kairo', true) returning id""",
-                userId, title.trim(), description, location, startAt, if (endAt.isAfter(startAt)) endAt else startAt.plusSeconds(3600),
+                """insert into events(user_id, household_id, shared, title, description, location, start_at, end_at, all_day, rrule, timezone,
+                   reminder_minutes, color, source, dirty) values (?, $HOUSEHOLD_OF, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'kairo', true) returning id""",
+                userId, userId, shared, title.trim(), description, location, startAt, if (endAt.isAfter(startAt)) endAt else startAt.plusSeconds(3600),
                 allDay, Recurrence.normalize(rrule), timezone, IntArrayParam(reminderMinutes), color,
             ) { it.uuid("id") }!!
             getTx(userId, id)!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.EVENT, event.id, "Evento: ${event.title}", source)
+        activity.record(userId, Kinds.CREATED, EntityTypes.EVENT, event.id, "Evento: ${event.title}", source, shared = event.shared)
+        if (event.shared) {
+            notifier.everyone(userId, NoticeKinds.SHARED, "${notifier.firstName(userId)} agregó un evento familiar", describe(event), EntityTypes.EVENT, event.id)
+        }
         return event
+    }
+
+    /** "Cita médica de Sofía · jueves 15 de octubre a las 10:00 · Clínica" */
+    private fun describe(e: Event): String {
+        val zone = zoneOf(e.timezone)
+        val whenText = if (e.allDay) humanDate(e.startAt.atZone(zone).toLocalDate()) + ", todo el día" else humanDateTime(e.startAt, zone)
+        return listOf(e.title, whenText, e.location).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
     suspend fun update(userId: UUID, id: UUID, patch: EventPatch, source: String): Event? {
         val c = get(userId, id) ?: return null
+        if (patch.shared != null && patch.shared != c.shared && c.ownerId != userId) {
+            throw FamilyException("Solo quien creó el evento puede cambiar si se comparte")
+        }
         val start = patch.startAt ?: c.startAt
         var end = patch.endAt ?: if (patch.startAt != null) start.plus(Duration.between(c.startAt, c.endAt)) else c.endAt
         if (!end.isAfter(start)) end = start.plusSeconds(3600)
         val event = db.tx {
             exec(
                 """update events set title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, rrule = ?,
-                   reminder_minutes = ?, color = ?, dirty = true, updated_at = now() where user_id = ? and id = ?""",
+                   reminder_minutes = ?, color = ?, shared = ?, dirty = true, updated_at = now() where ${visibleTo()} and id = ?""",
                 patch.title?.trim() ?: c.title, patch.description ?: c.description, patch.location ?: c.location,
                 start, end, patch.allDay ?: c.allDay,
                 if (patch.clearRrule) null else Recurrence.normalize(patch.rrule) ?: c.rrule,
-                IntArrayParam(patch.reminderMinutes ?: c.reminderMinutes), patch.color ?: c.color, userId, id,
+                IntArrayParam(patch.reminderMinutes ?: c.reminderMinutes), patch.color ?: c.color, patch.shared ?: c.shared,
+                userId, userId, id,
             )
             getTx(userId, id)
         } ?: return null
-        activity.record(userId, Kinds.UPDATED, EntityTypes.EVENT, id, "Evento editado: ${event.title}", source)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.EVENT, id, "Evento editado: ${event.title}", source, shared = event.shared || c.shared)
+        if (event.shared) {
+            val name = notifier.firstName(userId)
+            when {
+                !c.shared -> notifier.everyone(userId, NoticeKinds.SHARED, "$name agregó un evento familiar", describe(event), EntityTypes.EVENT, id)
+                event.startAt != c.startAt || event.allDay != c.allDay ->
+                    notifier.everyone(userId, NoticeKinds.UPDATED, "$name cambió un evento familiar", describe(event), EntityTypes.EVENT, id)
+            }
+        }
         return event
     }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): Event? {
         val c = get(userId, id) ?: return null
-        db.tx { exec("update events set deleted_at = now(), dirty = true, updated_at = now() where user_id = ? and id = ?", userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.EVENT, id, "Evento eliminado: ${c.title}", source)
+        db.tx { exec("update events set deleted_at = now(), dirty = true, updated_at = now() where ${visibleTo()} and id = ?", userId, userId, id) }
+        activity.record(userId, Kinds.DELETED, EntityTypes.EVENT, id, "Evento eliminado: ${c.title}", source, shared = c.shared)
+        if (c.shared) {
+            notifier.everyone(userId, NoticeKinds.UPDATED, "${notifier.firstName(userId)} canceló un evento familiar", describe(c), EntityTypes.EVENT, id)
+        }
         return c
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
-        db.tx { exec("update events set deleted_at = null, dirty = true, updated_at = now() where user_id = ? and id = ?", userId, id) } > 0
+        db.tx { exec("update events set deleted_at = null, dirty = true, updated_at = now() where ${visibleTo()} and id = ?", userId, userId, id) } > 0
 
     // --- Sincronización con Google ---
 
@@ -203,5 +233,7 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo) {
         googleEventId = rs.strOrNull("google_event_id"),
         createdAt = rs.instant("created_at"),
         updatedAt = rs.instant("updated_at"),
+        shared = rs.getBoolean("shared"),
+        ownerId = rs.uuid("user_id"),
     )
 }

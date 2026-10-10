@@ -4,10 +4,12 @@ import app.kairo.domain.EntityRef
 import app.kairo.domain.EntityTypes
 import app.kairo.domain.EventPatch
 import app.kairo.domain.EventsRepo
+import app.kairo.domain.FamilyRepo
 import app.kairo.domain.FilesRepo
 import app.kairo.domain.ListsRepo
 import app.kairo.domain.MemoriesRepo
 import app.kairo.domain.NotePatch
+import app.kairo.domain.NoticeKinds
 import app.kairo.domain.NotesRepo
 import app.kairo.domain.PlacesRepo
 import app.kairo.domain.Recurrence
@@ -15,9 +17,12 @@ import app.kairo.domain.ReminderPatch
 import app.kairo.domain.RemindersRepo
 import app.kairo.domain.TaskPatch
 import app.kairo.domain.TasksRepo
+import app.kairo.domain.Text
+import app.kairo.domain.UsersRepo
 import app.kairo.integrations.WeatherService
 import app.kairo.nan.NanClient
 import app.kairo.services.BriefingService
+import app.kairo.services.Notifier
 import app.kairo.util.bool
 import app.kairo.util.humanDate
 import app.kairo.util.humanDateTime
@@ -51,6 +56,9 @@ class BuiltinTools(
     private val weather: WeatherService,
     private val files: FilesRepo,
     private val nan: NanClient,
+    private val family: FamilyRepo,
+    private val users: UsersRepo,
+    private val notifier: Notifier,
 ) {
 
     fun all(): List<Tool> = ToolRegistryBuilder().apply {
@@ -60,6 +68,7 @@ class BuiltinTools(
         listTools()
         calendarTools()
         memoryTools()
+        familyTools()
         deviceTools()
         infoTools()
     }.tools
@@ -75,12 +84,18 @@ class BuiltinTools(
                 string("content", "Contenido completo de la nota, en markdown simple", required = true)
                 stringArray("tags", "Etiquetas en minúsculas sin #")
                 boolean("pinned", "Fijar arriba")
+                boolean("shared", "Nota familiar: la ve toda la familia (wifi de la casa, datos del colegio...)")
             },
         ) { a ->
             val content = a.str("content") ?: return@tool ToolResult.error("Falta el contenido de la nota")
             val attach = pendingAttachments.toList().also { pendingAttachments.clear() }
-            val n = notes.create(userId, a.str("title") ?: "", content, a.strList("tags") ?: emptyList(), a.bool("pinned") ?: false, source, attach)
-            ToolResult(json { put("id", n.id.toString()); put("title", n.title) }, "Nota guardada: ${n.title}", entity = EntityRef(EntityTypes.NOTE, n.id, n.title))
+            val shared = a.bool("shared") ?: false
+            val n = notes.create(userId, a.str("title") ?: "", content, a.strList("tags") ?: emptyList(), a.bool("pinned") ?: false, source, attach, shared)
+            ToolResult(
+                json { put("id", n.id.toString()); put("title", n.title); put("shared", n.shared) },
+                (if (n.shared) "Nota familiar: " else "Nota guardada: ") + n.title,
+                entity = EntityRef(EntityTypes.NOTE, n.id, n.title),
+            )
         }
 
         tool(
@@ -100,6 +115,8 @@ class BuiltinTools(
                             add(json {
                                 put("id", n.id.toString()); put("title", n.title); put("content", n.content.take(1500))
                                 put("tags", JsonArray(n.tags.map { JsonPrimitive(it) })); put("updated", humanDateTime(n.updatedAt, zone))
+                                if (n.shared) put("familiar", true)
+                                memberName(n.ownerId)?.let { put("de", it) }
                             })
                         }
                     })
@@ -152,16 +169,26 @@ class BuiltinTools(
                 string("priority", "Prioridad", enum = listOf("low", "medium", "high", "urgent"))
                 string("project", "Nombre del proyecto o área (se crea si no existe)")
                 string("status", "Estado inicial", enum = listOf("todo", "doing"))
+                boolean("shared", "Tarea familiar, visible para todos")
+                string("assignee", "Nombre del miembro de la familia que debe hacerla (la vuelve familiar)")
             },
         ) { a ->
             val title = a.str("title") ?: return@tool ToolResult.error("Falta el título")
             val date = a.str("due_date")?.let { runCatching { parseUserDate(it) }.getOrNull() }
             val dueAt = if (date != null) a.str("due_time")?.let { t -> runCatching { date.atTime(LocalTime.parse(t.padStart(5, '0'))).atZone(zone).toInstant() }.getOrNull() } else null
+            val assignee = a.str("assignee")?.let { n -> findMember(n) ?: return@tool unknownMember(n) }
             val project = a.str("project")?.let { tasks.findOrCreateProject(userId, it) }
-            val t = tasks.create(userId, title, a.str("notes") ?: "", a.str("priority") ?: "medium", date, dueAt, project?.id, status = a.str("status") ?: "todo", source = source)
+            val t = tasks.create(
+                userId, title, a.str("notes") ?: "", a.str("priority") ?: "medium", date, dueAt, project?.id,
+                status = a.str("status") ?: "todo", source = source, shared = a.bool("shared") ?: false, assigneeId = assignee?.id,
+            )
+            val who = memberName(t.assigneeId)
             ToolResult(
-                json { put("id", t.id.toString()); put("title", t.title); t.dueDate?.let { put("due", humanDate(it, today())) } },
-                "Tarea: ${t.title}" + (t.dueDate?.let { " · ${humanDate(it, today())}" } ?: ""),
+                json {
+                    put("id", t.id.toString()); put("title", t.title); t.dueDate?.let { put("due", humanDate(it, today())) }
+                    put("shared", t.shared); who?.let { put("assignee", it) }
+                },
+                "Tarea" + (who?.let { " para $it" } ?: if (t.shared) " familiar" else "") + ": ${t.title}" + (t.dueDate?.let { " · ${humanDate(it, today())}" } ?: ""),
                 entity = EntityRef(EntityTypes.TASK, t.id, t.title),
             )
         }
@@ -174,12 +201,14 @@ class BuiltinTools(
                 string("project", "Nombre del proyecto")
                 string("due_before", "Solo con fecha límite hasta YYYY-MM-DD")
                 string("query", "Texto para buscar en el título")
+                string("assignee", "Solo las asignadas a este miembro ('yo' para las del usuario)")
             },
         ) { a ->
             val project = a.str("project")?.let { name -> tasks.projects(userId).firstOrNull { it.name.equals(name, ignoreCase = true) } }
+            val assignee = a.str("assignee")?.let { n -> findMember(n) ?: return@tool unknownMember(n) }
             var list = tasks.list(
                 userId, status = a.str("status"), projectId = project?.id, includeDone = a.str("status") == "done",
-                dueBefore = a.str("due_before")?.let { runCatching { parseUserDate(it) }.getOrNull() },
+                dueBefore = a.str("due_before")?.let { runCatching { parseUserDate(it) }.getOrNull() }, assigneeId = assignee?.id,
             )
             a.str("query")?.let { q -> list = tasks.findOpen(userId, q, 10).takeIf { it.isNotEmpty() } ?: list.filter { it.title.contains(q, true) } }
             ToolResult(
@@ -189,6 +218,9 @@ class BuiltinTools(
                             add(json {
                                 put("id", t.id.toString()); put("title", t.title); put("status", t.status); put("priority", t.priority)
                                 t.dueDate?.let { put("due", it.toString()) }; t.projectName?.let { put("project", it) }
+                                if (t.shared) put("familiar", true)
+                                (if (t.assigneeId == userId) "tú" else memberName(t.assigneeId))?.let { put("asignada_a", it) }
+                                memberName(t.ownerId)?.let { put("creada_por", it) }
                             })
                         }
                     })
@@ -209,10 +241,13 @@ class BuiltinTools(
                 string("due_date", "Nueva fecha YYYY-MM-DD, o 'none' para quitarla")
                 string("project", "Proyecto")
                 string("notes", "Notas (reemplaza)")
+                string("assignee", "Miembro responsable, o 'none' para quitarlo")
             },
         ) { a ->
             val id = a.uuid("id") ?: return@tool ToolResult.error("Id inválido")
             val due = a.str("due_date")
+            val assigneeRaw = a.str("assignee")
+            val assignee = assigneeRaw?.takeIf { it != "none" }?.let { n -> findMember(n) ?: return@tool unknownMember(n) }
             val project = a.str("project")?.let { tasks.findOrCreateProject(userId, it) }
             val t = tasks.update(
                 userId, id,
@@ -220,6 +255,7 @@ class BuiltinTools(
                     title = a.str("title"), notes = a.str("notes"), status = a.str("status"), priority = a.str("priority"),
                     dueDate = due?.takeIf { it != "none" }?.let { runCatching { parseUserDate(it) }.getOrNull() },
                     clearDueDate = due == "none", projectId = project?.id,
+                    assigneeId = assignee?.id, clearAssignee = assigneeRaw == "none",
                 ),
                 source,
             ) ?: return@tool ToolResult.error("No encontré esa tarea")
@@ -275,27 +311,45 @@ class BuiltinTools(
                 string("rrule", "Regla de recurrencia sin el prefijo RRULE:")
                 string("place", "Nombre de un lugar guardado (Casa, Trabajo, Súper...)")
                 string("place_trigger", "Cuándo avisar en el lugar", enum = listOf("arrive", "leave"))
+                stringArray("for", "A quién recordarle: nombres de miembros de la familia, o ['todos']. Sin esto, al usuario.")
             },
         ) { a ->
             val text = a.str("text") ?: return@tool ToolResult.error("Falta el texto")
             val due = a.str("due_at")?.let { runCatching { parseUserDateTime(it, zone) }.getOrElse { e -> return@tool ToolResult.error(e.message ?: "Fecha inválida") } }
+            val forNames = a.strList("for").orEmpty().filter { it.isNotBlank() }
+            val targets = when {
+                forNames.isEmpty() -> listOf(userId)
+                forNames.any { Text.normalize(it) in setOf("todos", "todas", "todo el mundo", "la familia", "familia") } -> familyMembers.map { it.id }.ifEmpty { listOf(userId) }
+                else -> forNames.map { n -> findMember(n)?.id ?: return@tool unknownMember(n) }.distinct()
+            }
             val place = a.str("place")?.let { name ->
                 places.findByName(userId, name) ?: return@tool ToolResult.error(
                     "No tengo guardado el lugar '$name'. Lugares: ${places.list(userId).joinToString { it.name }.ifEmpty { "ninguno" }}. " +
                         "El usuario puede guardarlo diciendo 'guarda este lugar como $name' estando allí, o desde la app.",
                 )
             }
+            if (place != null && targets.any { it != userId } && !place.shared) {
+                return@tool ToolResult.error("El lugar '${place.name}' es personal; para avisar a otros allí, primero compártelo con la familia (herramienta share).")
+            }
             if (due == null && place == null) return@tool ToolResult.error("Necesito una fecha/hora o un lugar para el recordatorio")
             val rule = a.str("rrule")?.let { Recurrence.normalize(it) ?: return@tool ToolResult.error("Regla de recurrencia inválida: $it") }
-            val r = reminders.create(userId, text, due, rule, user.timezone, place?.id, a.str("place_trigger"), source = source)
+            val created = targets.map { target ->
+                val tz = if (target == userId) user.timezone else users.byId(target)?.timezone ?: user.timezone
+                reminders.create(target, text, due, rule, tz, place?.id, a.str("place_trigger"), source = source, createdBy = userId)
+            }
+            val r = created.first()
             val whenText = buildString {
                 r.nextFireAt?.let { append(humanDateTime(it, zone)) }
                 rule?.let { append(" (${Recurrence.describe(it)})") }
                 place?.let { append(if (a.str("place_trigger") == "leave") "al salir de ${it.name}" else "al llegar a ${it.name}") }
             }.trim()
+            val who = targets.mapNotNull { memberName(it) ?: if (targets.size > 1) "ti" else null }
             ToolResult(
-                json { put("id", r.id.toString()); put("when", whenText) },
-                "Recordatorio: ${r.text} · $whenText",
+                json {
+                    put("ids", JsonArray(created.map { JsonPrimitive(it.id.toString()) })); put("when", whenText)
+                    if (who.isNotEmpty()) put("para", JsonArray(who.map { JsonPrimitive(it) }))
+                },
+                "Recordatorio" + (if (who.isNotEmpty()) " para ${who.joinToString(" y ")}" else "") + ": ${r.text} · $whenText",
                 entity = EntityRef(EntityTypes.REMINDER, r.id, r.text),
             )
         }
@@ -315,6 +369,8 @@ class BuiltinTools(
                                 r.nextFireAt?.let { put("next", humanDateTime(it, zone)) }
                                 r.rrule?.let { put("repeats", Recurrence.describe(it)) }
                                 r.placeName?.let { put("place", it) }
+                                memberName(r.ownerId)?.let { put("para", it) }
+                                memberName(r.createdBy)?.let { put("programado_por", it) }
                             })
                         }
                     })
@@ -381,11 +437,12 @@ class BuiltinTools(
             params {
                 string("name", "Nombre del lugar", required = true)
                 integer("radius_m", "Radio en metros (por defecto 150)")
+                boolean("shared", "Lugar familiar (Casa, el colegio): sirve para recordatorios de todos")
             },
         ) { a ->
             val loc = location ?: return@tool ToolResult.error("No tengo tu ubicación. Abre Kairo en el teléfono con la ubicación activada, o guarda el lugar desde Ajustes > Lugares.")
             val name = a.str("name") ?: return@tool ToolResult.error("Falta el nombre")
-            val p = places.upsert(userId, name, loc.latitude, loc.longitude, (a.int("radius_m") ?: 150).coerceIn(50, 2000), null, source)
+            val p = places.upsert(userId, name, loc.latitude, loc.longitude, (a.int("radius_m") ?: 150).coerceIn(50, 2000), null, source, a.bool("shared"))
             ToolResult(json { put("id", p.id.toString()); put("name", p.name) }, "Lugar guardado: ${p.name}", entity = EntityRef(EntityTypes.PLACE, p.id, p.name))
         }
     }
@@ -399,11 +456,12 @@ class BuiltinTools(
             params {
                 string("list", "Nombre de la lista, ej. 'Supermercado'", required = true)
                 stringArray("items", "Elementos a agregar", required = true)
+                boolean("shared", "Usar o crear la lista familiar (la que ve toda la casa)")
             },
         ) { a ->
             val name = a.str("list") ?: "Supermercado"
             val items = a.strList("items") ?: return@tool ToolResult.error("No hay elementos")
-            val list = lists.findOrCreate(userId, name, source)
+            val list = lists.findOrCreate(userId, name, source, shared = a.bool("shared") ?: false)
             val updated = lists.addItems(userId, list.id, items, source)!!
             ToolResult(
                 json { put("list", updated.name); put("pending", updated.items.count { !it.checked }) },
@@ -427,6 +485,7 @@ class BuiltinTools(
                         all.forEach { l ->
                             add(json {
                                 put("id", l.id.toString()); put("name", l.name)
+                                if (l.shared) put("familiar", true)
                                 put("pending", JsonArray(l.items.filter { !it.checked }.map { JsonPrimitive(it.text) }))
                                 put("checked", JsonArray(l.items.filter { it.checked }.map { JsonPrimitive(it.text) }))
                             })
@@ -489,6 +548,7 @@ class BuiltinTools(
                 string("description", "Descripción")
                 string("rrule", "Recurrencia RFC 5545 sin prefijo (ej. FREQ=YEARLY para cumpleaños)")
                 intArray("reminder_minutes", "Minutos antes para avisar (ej. [30, 10])")
+                boolean("shared", "Evento familiar: aparece en el calendario de toda la familia y les avisa")
             },
         ) { a ->
             val title = a.str("title") ?: return@tool ToolResult.error("Falta el título")
@@ -502,9 +562,14 @@ class BuiltinTools(
             val e = events.create(
                 userId, title, start, end, allDay, user.timezone, a.str("description") ?: "", a.str("location") ?: "",
                 a.str("rrule"), a.intList("reminder_minutes") ?: listOf(settings.defaultEventReminderMinutes), source = source,
+                shared = a.bool("shared") ?: false,
             )
             val whenText = if (allDay) humanDate(start.atZone(zone).toLocalDate(), today()) + " (todo el día)" else humanDateTime(start, zone)
-            ToolResult(json { put("id", e.id.toString()); put("when", whenText) }, "Evento: ${e.title} · $whenText", entity = EntityRef(EntityTypes.EVENT, e.id, e.title))
+            ToolResult(
+                json { put("id", e.id.toString()); put("when", whenText); put("shared", e.shared) },
+                (if (e.shared) "Evento familiar: " else "Evento: ") + "${e.title} · $whenText",
+                entity = EntityRef(EntityTypes.EVENT, e.id, e.title),
+            )
         }
 
         tool(
@@ -520,7 +585,9 @@ class BuiltinTools(
             val start = from.atStartOfDay(zone).toInstant()
             val end = to.plusDays(1).atStartOfDay(zone).toInstant()
             val evs = events.range(userId, start, end)
-            val ts = tasks.list(userId, includeDone = false).filter { t -> t.status != "done" && t.dueDate != null && !t.dueDate.isBefore(from) && !t.dueDate.isAfter(to) }
+            val ts = tasks.list(userId, includeDone = false).filter { t ->
+                t.status != "done" && t.dueDate != null && !t.dueDate.isBefore(from) && !t.dueDate.isAfter(to) && (t.assigneeId == null || t.assigneeId == userId)
+            }
             val rs = reminders.list(userId, listOf("scheduled")).filter { r -> r.nextFireAt != null && r.nextFireAt >= start && r.nextFireAt < end }
             ToolResult(
                 buildJsonObject {
@@ -531,6 +598,8 @@ class BuiltinTools(
                                 put("id", e.id.toString()); put("title", e.title)
                                 put("when", if (e.allDay) humanDate(e.startAt.atZone(zone).toLocalDate(), today()) + " todo el día" else humanDateTime(e.startAt, zone) + " a " + humanTime(e.endAt, zone))
                                 if (e.location.isNotBlank()) put("location", e.location)
+                                if (e.shared) put("familiar", true)
+                                memberName(e.ownerId)?.let { put("agendado_por", it) }
                             })
                         }
                     })
@@ -616,6 +685,64 @@ class BuiltinTools(
             ToolResult(json { put("forgotten", true) }, "Olvidado: ${m.content}", entity = EntityRef(EntityTypes.MEMORY, m.id, m.content.take(60)))
         }
     }
+
+    // ---------------------------------------------------------------- Familia
+
+    private fun ToolRegistryBuilder.familyTools() {
+        tool(
+            "share", "Compartiendo con la familia",
+            "Comparte con la familia (o deja de compartir) algo que ya existe: una nota, tarea o evento por id, o una lista o lugar por nombre.",
+            params {
+                string("type", "Qué es", required = true, enum = listOf("note", "task", "event", "list", "place"))
+                string("id", "Id (notas, tareas y eventos)")
+                string("name", "Nombre (listas y lugares)")
+                boolean("shared", "true para compartir, false para volverlo personal", required = true)
+            },
+        ) { a ->
+            val shared = a.bool("shared") ?: true
+            val verb = if (shared) "Compartido con la familia" else "Ahora es personal"
+            runCatching {
+                when (a.str("type")) {
+                    "note" -> notes.update(userId, a.uuid("id") ?: error("Falta el id"), NotePatch(shared = shared), source)
+                        ?.let { ToolResult(json { put("ok", true) }, "$verb: ${it.title}", entity = EntityRef(EntityTypes.NOTE, it.id, it.title)) }
+                    "task" -> tasks.update(userId, a.uuid("id") ?: error("Falta el id"), TaskPatch(shared = shared), source)
+                        ?.let { ToolResult(json { put("ok", true) }, "$verb: ${it.title}", entity = EntityRef(EntityTypes.TASK, it.id, it.title)) }
+                    "event" -> events.update(userId, a.uuid("id") ?: error("Falta el id"), EventPatch(shared = shared), source)
+                        ?.let { ToolResult(json { put("ok", true) }, "$verb: ${it.title}", entity = EntityRef(EntityTypes.EVENT, it.id, it.title)) }
+                    "list" -> {
+                        val l = a.uuid("id")?.let { lists.get(userId, it) } ?: lists.findByName(userId, a.str("name") ?: "", preferShared = !shared)
+                        l?.let { lists.rename(userId, it.id, null, null, shared) }
+                            ?.let { ToolResult(json { put("ok", true) }, "$verb: ${it.name}", entity = EntityRef(EntityTypes.LIST, it.id, it.name)) }
+                    }
+                    "place" -> places.findByName(userId, a.str("name") ?: "")?.let { places.setShared(userId, it.id, shared) }
+                        ?.let { ToolResult(json { put("ok", true) }, "$verb: ${it.name}", entity = EntityRef(EntityTypes.PLACE, it.id, it.name)) }
+                    else -> null
+                }
+            }.getOrElse { return@tool ToolResult.error(it.message ?: "No se pudo cambiar") } ?: ToolResult.error("No lo encontré")
+        }
+
+        tool(
+            "message_family", "Avisando a la familia",
+            "Envía un aviso a miembros de la familia en su teléfono ('avísale a Valentina que llego tarde', 'diles a todos que la cena está lista').",
+            params {
+                string("text", "El mensaje, redactado para quien lo recibe", required = true)
+                stringArray("to", "Nombres de los destinatarios; vacío o ['todos'] para toda la familia")
+            },
+        ) { a ->
+            val text = a.str("text")?.trim()?.take(500)?.ifEmpty { null } ?: return@tool ToolResult.error("Falta el mensaje")
+            val names = a.strList("to").orEmpty().filter { it.isNotBlank() && Text.normalize(it) !in setOf("todos", "todas", "familia", "la familia") }
+            val to = if (names.isEmpty()) familyMembers.map { it.id } - userId else names.map { n -> findMember(n)?.id ?: return@tool unknownMember(n) } - userId
+            if (to.isEmpty()) return@tool ToolResult.error("No hay otros miembros en la familia. Se invitan desde Ajustes > Familia.")
+            notifier.family(userId, to, NoticeKinds.MESSAGE, notifier.firstName(userId), text)
+            val who = to.mapNotNull { memberName(it) }
+            ToolResult(json { put("sent", to.size) }, "Aviso a ${who.joinToString(" y ")}: $text")
+        }
+    }
+
+    private fun ToolContext.unknownMember(name: String): ToolResult = ToolResult.error(
+        if (familyMembers.size <= 1) "No hay nadie más en tu familia todavía. Se invita desde Ajustes > Familia en el dashboard."
+        else "No encontré a '$name' en la familia. Miembros: ${familyMembers.joinToString { it.displayName }}.",
+    )
 
     // ---------------------------------------------------------------- Dispositivo
 

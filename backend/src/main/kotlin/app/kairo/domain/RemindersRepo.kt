@@ -8,6 +8,8 @@ import app.kairo.db.str
 import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.db.uuidOrNull
+import app.kairo.services.Notifier
+import app.kairo.util.humanDateTime
 import app.kairo.util.zoneOf
 import java.sql.ResultSet
 import java.time.Instant
@@ -23,16 +25,23 @@ data class ReminderPatch(
     val clearPlace: Boolean = false,
 )
 
-class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
+/**
+ * Recordatorios. Son personales, pero un miembro puede programarle uno a otro ("recuérdale a Sofía que...").
+ * Quien lo programó lo ve en su lista y puede cambiarlo o cancelarlo; suena en el teléfono de quien lo recibe.
+ */
+class RemindersRepo(private val db: Db, private val activity: ActivityRepo, private val notifier: Notifier) {
 
     private val select = """select r.*, p.name as place_name from reminders r left join places p on p.id = r.place_id"""
 
+    /** El recordatorio es de [userId] o él lo programó para otro. Dos parámetros: userId, userId. */
+    private val mine = "(r.user_id = ? or r.created_by = ?)"
+
     suspend fun list(userId: UUID, statuses: List<String>? = null, limit: Int = 300): List<Reminder> = db.read {
         val all = query(
-            """$select where r.user_id = ? and r.deleted_at is null
+            """$select where $mine and r.deleted_at is null
                order by case r.status when 'fired' then 0 when 'scheduled' then 1 else 2 end,
                         r.next_fire_at nulls last, r.updated_at desc limit ?""",
-            userId, limit,
+            userId, userId, limit,
         ) { map(it) }
         if (statuses == null) all else all.filter { it.status in statuses }
     }
@@ -40,7 +49,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
     suspend fun get(userId: UUID, id: UUID): Reminder? = db.read { getTx(userId, id) }
 
     private fun Tx.getTx(userId: UUID, id: UUID): Reminder? =
-        one("$select where r.user_id = ? and r.id = ? and r.deleted_at is null", userId, id) { map(it) }
+        one("$select where $mine and r.id = ? and r.deleted_at is null", userId, userId, id) { map(it) }
 
     suspend fun create(
         userId: UUID,
@@ -52,21 +61,38 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
         placeTrigger: String? = null,
         taskId: UUID? = null,
         source: String,
+        /** Otro miembro que lo programa para [userId]. */
+        createdBy: UUID? = null,
     ): Reminder {
         require(dueAt != null || placeId != null) { "El recordatorio necesita una fecha u un lugar" }
         val rule = Recurrence.normalize(rrule)
         val next = computeNext(dueAt, rule, timezone, Instant.now().minusSeconds(60))
+        val by = createdBy?.takeIf { it != userId }
         val reminder = db.tx {
             val id = one(
-                """insert into reminders(user_id, text, due_at, rrule, timezone, place_id, place_trigger, next_fire_at, task_id, source)
-                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id""",
-                userId, text.trim(), dueAt, rule, timezone, placeId, placeId?.let { placeTrigger ?: "arrive" }, next, taskId, source,
+                """insert into reminders(user_id, text, due_at, rrule, timezone, place_id, place_trigger, next_fire_at, task_id, source, created_by)
+                   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id""",
+                userId, text.trim(), dueAt, rule, timezone, placeId, placeId?.let { placeTrigger ?: "arrive" }, next, taskId, source, by,
             ) { it.uuid("id") }!!
             getTx(userId, id)!!
         }
-        activity.record(userId, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, "Recordatorio: ${reminder.text}", source)
+        if (by == null) {
+            activity.record(userId, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, "Recordatorio: ${reminder.text}", source)
+        } else {
+            // Queda en la actividad de quien lo programó (para que pueda deshacerlo) y se refresca en ambos lados
+            val target = notifier.firstName(userId)
+            activity.record(by, Kinds.CREATED, EntityTypes.REMINDER, reminder.id, "Recordatorio para $target: ${reminder.text}", source, alsoTo = listOf(userId))
+            val whenText = reminder.nextFireAt?.let { humanDateTime(it, zoneOf(timezone)) } ?: reminder.placeName?.let { "al llegar a $it" }
+            notifier.family(
+                by, listOf(userId), NoticeKinds.REMINDER, "${notifier.firstName(by)} te programó un recordatorio",
+                listOfNotNull(reminder.text, whenText).joinToString(" · "), EntityTypes.REMINDER, reminder.id,
+            )
+        }
         return reminder
     }
+
+    /** Además del dueño, refresca a quien lo programó (o al revés). */
+    private fun others(userId: UUID, r: Reminder): List<UUID> = listOfNotNull(r.ownerId, r.createdBy).filter { it != userId }
 
     suspend fun update(userId: UUID, id: UUID, patch: ReminderPatch, source: String): Reminder? {
         val current = get(userId, id) ?: return null
@@ -79,14 +105,14 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
         val reminder = db.tx {
             exec(
                 """update reminders set text = ?, due_at = ?, rrule = ?, place_id = ?, place_trigger = ?, next_fire_at = ?,
-                   status = ?, updated_at = now() where user_id = ? and id = ?""",
+                   status = ?, updated_at = now() where id = ?""",
                 patch.text?.trim() ?: current.text, due, rule, placeId,
                 if (placeId == null) null else patch.placeTrigger ?: current.placeTrigger ?: "arrive",
-                next, status, userId, id,
+                next, status, id,
             )
             getTx(userId, id)
         } ?: return null
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio editado: ${reminder.text}", source)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio editado: ${reminder.text}", source, alsoTo = others(userId, reminder))
         return reminder
     }
 
@@ -105,7 +131,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
             }
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.COMPLETED, EntityTypes.REMINDER, id, "Recordatorio hecho: ${current.text}", source)
+        activity.record(userId, Kinds.COMPLETED, EntityTypes.REMINDER, id, "Recordatorio hecho: ${current.text}", source, alsoTo = others(userId, current))
         return reminder
     }
 
@@ -116,7 +142,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
             exec("update reminders set status = 'scheduled', next_fire_at = ?, updated_at = now() where id = ?", at, id)
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Pospuesto $minutes min: ${current.text}", source)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Pospuesto $minutes min: ${current.text}", source, alsoTo = others(userId, current))
         return reminder
     }
 
@@ -126,19 +152,19 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
             exec("update reminders set status = 'cancelled', next_fire_at = null, updated_at = now() where id = ?", id)
             getTx(userId, id)
         }
-        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio cancelado: ${current.text}", source)
+        activity.record(userId, Kinds.UPDATED, EntityTypes.REMINDER, id, "Recordatorio cancelado: ${current.text}", source, alsoTo = others(userId, current))
         return reminder
     }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): Reminder? {
         val current = get(userId, id) ?: return null
-        db.tx { exec("update reminders set deleted_at = now() where user_id = ? and id = ?", userId, id) }
-        activity.record(userId, Kinds.DELETED, EntityTypes.REMINDER, id, "Recordatorio eliminado: ${current.text}", source)
+        db.tx { exec("update reminders set deleted_at = now() where id = ?", id) }
+        activity.record(userId, Kinds.DELETED, EntityTypes.REMINDER, id, "Recordatorio eliminado: ${current.text}", source, alsoTo = others(userId, current))
         return current
     }
 
     suspend fun restore(userId: UUID, id: UUID): Boolean =
-        db.tx { exec("update reminders set deleted_at = null where user_id = ? and id = ?", userId, id) } > 0
+        db.tx { exec("update reminders r set deleted_at = null where $mine and r.id = ?", userId, userId, id) } > 0
 
     /** Recordatorios vencidos para el planificador. Bloquea filas para que una sola instancia los dispare. */
     suspend fun claimDue(now: Instant, handle: suspend (Reminder, UUID) -> Unit) {
@@ -191,5 +217,7 @@ class RemindersRepo(private val db: Db, private val activity: ActivityRepo) {
         source = rs.str("source"),
         createdAt = rs.instant("created_at"),
         updatedAt = rs.instant("updated_at"),
+        ownerId = rs.uuid("user_id"),
+        createdBy = rs.uuidOrNull("created_by"),
     )
 }

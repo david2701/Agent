@@ -19,6 +19,10 @@ data class User(
     val displayName: String,
     val timezone: String,
     val createdAt: Instant,
+    val householdId: UUID? = null,
+    /** admin | member */
+    val role: String = "member",
+    val color: String? = null,
 )
 
 @Serializable
@@ -33,6 +37,10 @@ data class Note(
     val createdAt: Instant,
     val updatedAt: Instant,
     val score: Double? = null,
+    /** Visible para toda la familia. */
+    val shared: Boolean = false,
+    /** Quién la creó (para lo compartido por otro miembro). */
+    val ownerId: UUID? = null,
 )
 
 @Serializable
@@ -58,6 +66,10 @@ data class Task(
     val completedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val shared: Boolean = false,
+    val ownerId: UUID? = null,
+    /** Miembro responsable (tareas familiares). */
+    val assigneeId: UUID? = null,
 )
 
 @Serializable
@@ -69,6 +81,8 @@ data class Place(
     val radiusM: Int,
     val address: String?,
     val createdAt: Instant,
+    val shared: Boolean = false,
+    val ownerId: UUID? = null,
 )
 
 @Serializable
@@ -88,6 +102,10 @@ data class Reminder(
     val source: String,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** A quién se le recuerda. */
+    val ownerId: UUID? = null,
+    /** Quién lo programó, si fue otro miembro de la familia. */
+    val createdBy: UUID? = null,
 )
 
 @Serializable
@@ -98,6 +116,8 @@ data class ShoppingList(
     val items: List<ListItem>,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val shared: Boolean = false,
+    val ownerId: UUID? = null,
 )
 
 @Serializable
@@ -126,11 +146,21 @@ data class Event(
     val googleEventId: String?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val shared: Boolean = false,
+    val ownerId: UUID? = null,
 )
 
 /** Aviso previo de un evento (según sus reminderMinutes). */
 @Serializable
-data class EventAlert(val eventId: UUID, val title: String, val startAt: Instant, val alertAt: Instant, val minutes: Int, val location: String)
+data class EventAlert(
+    val eventId: UUID,
+    val title: String,
+    val startAt: Instant,
+    val alertAt: Instant,
+    val minutes: Int,
+    val location: String,
+    val shared: Boolean = false,
+)
 
 @Serializable
 data class Memory(
@@ -213,4 +243,5 @@ object EntityTypes {
     const val PROJECT = "project"
     const val RECORDING = "recording"
     const val CONVERSATION = "conversation"
+    const val FAMILY = "family"
 }

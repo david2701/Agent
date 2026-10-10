@@ -24,6 +24,8 @@ data class AppConfig(
     val ntfyToken: String?,
     val corsOrigins: List<String>,
     val schedulersEnabled: Boolean,
+    /** Permite endpoints de push http:// (sólo pruebas o un ntfy en la red local). Por defecto, sólo https. */
+    val pushAllowHttp: Boolean = false,
 ) {
     val googleEnabled: Boolean get() = !googleClientId.isNullOrBlank() && !googleClientSecret.isNullOrBlank()
 
@@ -59,6 +61,7 @@ data class AppConfig(
                 ntfyToken = opt("NTFY_TOKEN"),
                 corsOrigins = opt("KAIRO_CORS_ORIGINS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList(),
                 schedulersEnabled = opt("KAIRO_SCHEDULERS")?.toBooleanStrictOrNull() ?: true,
+                pushAllowHttp = opt("KAIRO_PUSH_ALLOW_HTTP")?.toBooleanStrictOrNull() ?: false,
             )
         }
     }

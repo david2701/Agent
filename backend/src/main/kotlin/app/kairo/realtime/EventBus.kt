@@ -19,6 +19,7 @@ object EventTypes {
     const val EVENT_ALERT = "event.alert"
     const val BRIEFING_READY = "briefing.ready"
     const val RECORDING_UPDATED = "recording.updated"
+    const val FAMILY_NOTICE = "family.notice"
 }
 
 /** Bus en memoria por usuario. Suficiente para una sola instancia del servidor. */
@@ -32,6 +33,9 @@ class EventBus {
     }
 
     fun subscriberCount(userId: UUID): Int = flows[userId]?.subscriptionCount?.value ?: 0
+
+    suspend fun entityChanged(userIds: Collection<UUID>, entity: String, id: UUID?, op: String) =
+        userIds.forEach { entityChanged(it, entity, id, op) }
 
     suspend fun entityChanged(userId: UUID, entity: String, id: UUID?, op: String) = publish(
         userId,

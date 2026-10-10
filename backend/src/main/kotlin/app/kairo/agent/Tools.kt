@@ -2,6 +2,8 @@ package app.kairo.agent
 
 import app.kairo.domain.EntityRef
 import app.kairo.domain.FileRef
+import app.kairo.domain.Member
+import app.kairo.domain.Text
 import app.kairo.domain.User
 import app.kairo.domain.UserSettings
 import app.kairo.nan.FunctionSpec
@@ -31,8 +33,25 @@ class ToolContext(
     val capabilities: Set<String>,
     /** Archivos compartidos en este turno; se adjuntan a la primera nota que se cree. */
     val pendingAttachments: MutableList<UUID> = mutableListOf(),
+    /** Miembros de la familia (incluido el usuario). */
+    val familyMembers: List<Member> = emptyList(),
 ) {
     val userId: UUID get() = user.id
+
+    /** Nombre corto de un miembro, o null si es el propio usuario. */
+    fun memberName(id: UUID?): String? = id?.takeIf { it != userId }?.let { m ->
+        familyMembers.firstOrNull { it.id == m }?.displayName?.split(' ')?.firstOrNull() ?: "otro miembro"
+    }
+
+    /** Resuelve un nombre dicho por el usuario ("Vale", "Sofía", "yo"). */
+    fun findMember(name: String): Member? {
+        val n = Text.normalize(name)
+        if (n in setOf("yo", "mi", "me", "a mi")) return familyMembers.firstOrNull { it.id == userId }
+        familyMembers.firstOrNull { Text.normalize(it.displayName) == n }?.let { return it }
+        val first = familyMembers.filter { Text.normalize(it.displayName).split(' ').first() == n.split(' ').first() }
+        if (first.size == 1) return first[0]
+        return familyMembers.filter { Text.normalize(it.displayName).startsWith(n) }.singleOrNull()
+    }
 }
 
 data class ToolResult(

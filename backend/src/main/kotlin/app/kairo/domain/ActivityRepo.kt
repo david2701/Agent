@@ -24,7 +24,7 @@ object Kinds {
  * Registro de todo lo que cambia (lo haga el agente, el dashboard o la app).
  * Permite ver qué hizo Kairo y deshacer creaciones y borrados.
  */
-class ActivityRepo(private val db: Db, private val bus: EventBus) {
+class ActivityRepo(private val db: Db, private val bus: EventBus, private val family: FamilyRepo) {
 
     suspend fun record(
         userId: UUID,
@@ -33,6 +33,10 @@ class ActivityRepo(private val db: Db, private val bus: EventBus) {
         entityId: UUID?,
         summary: String,
         source: String,
+        /** Si es algo compartido, el cambio llega en vivo a toda la familia. */
+        shared: Boolean = false,
+        /** Otros usuarios que deben refrescar (p. ej. a quien se le programó un recordatorio). */
+        alsoTo: Collection<UUID> = emptyList(),
     ) {
         db.tx {
             exec(
@@ -40,12 +44,15 @@ class ActivityRepo(private val db: Db, private val bus: EventBus) {
                 userId, kind, entityType, entityId, summary.take(300), source,
             )
         }
-        bus.entityChanged(userId, entityType, entityId, kind)
+        bus.entityChanged(audience(userId, shared, alsoTo), entityType, entityId, kind)
     }
 
     /** Avisa a los clientes conectados de un cambio menor que no se guarda en el historial. */
-    suspend fun notify(userId: UUID, entityType: String, entityId: UUID?, kind: String) =
-        bus.entityChanged(userId, entityType, entityId, kind)
+    suspend fun notify(userId: UUID, entityType: String, entityId: UUID?, kind: String, shared: Boolean = false) =
+        bus.entityChanged(audience(userId, shared, emptyList()), entityType, entityId, kind)
+
+    private suspend fun audience(userId: UUID, shared: Boolean, alsoTo: Collection<UUID>): Set<UUID> =
+        ((if (shared) family.memberIds(userId) else listOf(userId)) + alsoTo).toSet()
 
     suspend fun list(userId: UUID, limit: Int = 50, before: Instant? = null): List<Activity> = db.read {
         query(

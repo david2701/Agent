@@ -11,3 +11,10 @@ kairo.tudominio.com {
     # Caddy en Docker unido a la red "kairo" (docker network connect kairo <caddy>):
     # reverse_proxy kairo:8080
 }
+
+# Opcional: push propio para los teléfonos (docker compose --profile push up -d).
+# Es el servidor que entregará los avisos de Kairo con la app cerrada, sin Firebase.
+ntfy.tudominio.com {
+    reverse_proxy 127.0.0.1:8090
+    # Caddy en Docker: reverse_proxy ntfy:80
+}

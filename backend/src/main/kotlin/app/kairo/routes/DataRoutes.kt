@@ -40,27 +40,43 @@ private const val SRC = "dashboard"
 private fun io.ktor.server.application.ApplicationCall.source(): String =
     when (request.headers["X-Kairo-Client"]?.lowercase()) { "android", "wear" -> "app"; else -> SRC }
 
-@Serializable data class NoteCreate(val title: String = "", val content: String = "", val tags: List<String> = emptyList(), val pinned: Boolean = false)
+@Serializable data class NoteCreate(
+    val title: String = "", val content: String = "", val tags: List<String> = emptyList(), val pinned: Boolean = false, val shared: Boolean = false,
+)
 @Serializable data class TaskCreate(
     val title: String, val notes: String = "", val priority: String = "medium", val dueDate: LocalDate? = null, val dueAt: Instant? = null,
     val projectId: UUID? = null, val project: String? = null, val tags: List<String> = emptyList(), val status: String = "todo",
+    val shared: Boolean = false, val assigneeId: UUID? = null,
 )
 @Serializable data class ProjectCreate(val name: String, val color: String? = null)
 @Serializable data class ProjectPatch(val name: String? = null, val color: String? = null, val sort: Double? = null)
-@Serializable data class ReminderCreate(val text: String, val dueAt: Instant? = null, val rrule: String? = null, val placeId: UUID? = null, val placeTrigger: String? = null)
+@Serializable data class ReminderCreate(
+    val text: String, val dueAt: Instant? = null, val rrule: String? = null, val placeId: UUID? = null, val placeTrigger: String? = null,
+    /** Otro miembro de la familia al que se le recuerda. */
+    val forUserId: UUID? = null,
+)
 @Serializable data class SnoozeRequest(val minutes: Int = 10)
-@Serializable data class PlaceCreate(val name: String, val latitude: Double, val longitude: Double, val radiusM: Int = 150, val address: String? = null)
-@Serializable data class ListCreate(val name: String, val icon: String? = null)
-@Serializable data class ListPatch(val name: String? = null, val icon: String? = null)
+@Serializable data class PlaceCreate(
+    val name: String, val latitude: Double, val longitude: Double, val radiusM: Int = 150, val address: String? = null, val shared: Boolean? = null,
+)
+@Serializable data class PlacePatch(val shared: Boolean)
+@Serializable data class ListCreate(val name: String, val icon: String? = null, val shared: Boolean = false)
+@Serializable data class ListPatch(val name: String? = null, val icon: String? = null, val shared: Boolean? = null)
 @Serializable data class ItemsAdd(val items: List<String>)
 @Serializable data class ItemPatch(val text: String? = null, val checked: Boolean? = null, val sort: Double? = null)
 @Serializable data class EventCreate(
     val title: String, val startAt: Instant, val endAt: Instant? = null, val allDay: Boolean = false, val location: String = "",
     val description: String = "", val rrule: String? = null, val reminderMinutes: List<Int>? = null, val color: String? = null,
+    val shared: Boolean = false,
 )
 @Serializable data class MemoryCreate(val content: String, val category: String = "general")
 @Serializable data class MemoryPatch(val content: String? = null, val category: String? = null)
 @Serializable data class TagsResponse(val tags: List<String>)
+
+/** Comprueba que [id] sea alguien de la familia del usuario. */
+private suspend fun Services.requireMember(userId: UUID, id: UUID) {
+    if (id !in family.memberIds(userId)) badRequest("Esa persona no es de tu familia")
+}
 
 fun Route.dataRoutes(s: Services) {
 
@@ -78,12 +94,12 @@ fun Route.dataRoutes(s: Services) {
         post {
             val b = call.receiveBody<NoteCreate>()
             if (b.content.isBlank() && b.title.isBlank()) badRequest("La nota está vacía")
-            call.respond(HttpStatusCode.Created, s.notes.create(call.userId(), b.title, b.content, b.tags, b.pinned, call.source()))
+            call.respond(HttpStatusCode.Created, s.notes.create(call.userId(), b.title, b.content, b.tags, b.pinned, call.source(), shared = b.shared))
         }
         get("/{id}") { call.respond(s.notes.get(call.userId(), call.uuidParam()) ?: notFound("Nota")) }
         patch("/{id}") {
             val b = call.receiveJsonObject()
-            val patch = NotePatch(b.rawStr("title"), b.rawStr("content"), b.strList("tags"), b.bool("pinned"))
+            val patch = NotePatch(b.rawStr("title"), b.rawStr("content"), b.strList("tags"), b.bool("pinned"), shared = b.bool("shared"))
             call.respond(s.notes.update(call.userId(), call.uuidParam(), patch, call.source()) ?: notFound("Nota"))
         }
         delete("/{id}") { s.notes.delete(call.userId(), call.uuidParam(), call.source()) ?: notFound("Nota"); call.respond(OkResponse()) }
@@ -97,6 +113,7 @@ fun Route.dataRoutes(s: Services) {
                 s.tasks.list(
                     call.userId(), status = q["status"], projectId = q["projectId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() },
                     includeDone = q["includeDone"]?.toBooleanStrictOrNull() ?: true,
+                    assigneeId = q["assignee"]?.let { a -> if (a == "me") call.userId() else runCatching { UUID.fromString(a) }.getOrNull() },
                 ),
             )
         }
@@ -104,7 +121,11 @@ fun Route.dataRoutes(s: Services) {
             val b = call.receiveBody<TaskCreate>()
             if (b.title.isBlank()) badRequest("La tarea necesita un título")
             val projectId = b.projectId ?: b.project?.takeIf { it.isNotBlank() }?.let { s.tasks.findOrCreateProject(call.userId(), it).id }
-            call.respond(HttpStatusCode.Created, s.tasks.create(call.userId(), b.title, b.notes, b.priority, b.dueDate, b.dueAt, projectId, b.tags, b.status, call.source()))
+            b.assigneeId?.let { s.requireMember(call.userId(), it) }
+            call.respond(
+                HttpStatusCode.Created,
+                s.tasks.create(call.userId(), b.title, b.notes, b.priority, b.dueDate, b.dueAt, projectId, b.tags, b.status, call.source(), b.shared, b.assigneeId),
+            )
         }
         get("/{id}") { call.respond(s.tasks.get(call.userId(), call.uuidParam()) ?: notFound("Tarea")) }
         patch("/{id}") {
@@ -115,7 +136,11 @@ fun Route.dataRoutes(s: Services) {
                 dueAt = b.str("dueAt")?.let { parseInstant(it) }, clearDueAt = b.isNull("dueAt"),
                 projectId = b.str("projectId")?.let(UUID::fromString), clearProject = b.isNull("projectId"),
                 tags = b.strList("tags"), sort = b.double("sort"),
+                shared = b.bool("shared"),
+                assigneeId = b.str("assigneeId")?.let { runCatching { UUID.fromString(it) }.getOrNull() ?: badRequest("assigneeId inválido") },
+                clearAssignee = b.isNull("assigneeId"),
             )
+            patch.assigneeId?.let { s.requireMember(call.userId(), it) }
             call.respond(s.tasks.update(call.userId(), call.uuidParam(), patch, call.source()) ?: notFound("Tarea"))
         }
         delete("/{id}") { s.tasks.delete(call.userId(), call.uuidParam(), call.source()) ?: notFound("Tarea"); call.respond(OkResponse()) }
@@ -145,8 +170,14 @@ fun Route.dataRoutes(s: Services) {
             if (b.text.isBlank()) badRequest("Texto vacío")
             if (b.dueAt == null && b.placeId == null) badRequest("Indica una fecha o un lugar")
             if (b.rrule != null && Recurrence.normalize(b.rrule) == null) badRequest("Regla de recurrencia inválida")
-            val user = s.users.byId(call.userId())!!
-            call.respond(HttpStatusCode.Created, s.reminders.create(user.id, b.text, b.dueAt, b.rrule, user.timezone, b.placeId, b.placeTrigger, source = call.source()))
+            val me = call.userId()
+            b.forUserId?.let { s.requireMember(me, it) }
+            val target = s.users.byId(b.forUserId ?: me)!!
+            if (b.placeId != null && s.places.get(target.id, b.placeId) == null) badRequest("Ese lugar no está disponible para esa persona; compártelo con la familia primero")
+            call.respond(
+                HttpStatusCode.Created,
+                s.reminders.create(target.id, b.text, b.dueAt, b.rrule, target.timezone, b.placeId, b.placeTrigger, source = call.source(), createdBy = me),
+            )
         }
         get("/{id}") { call.respond(s.reminders.get(call.userId(), call.uuidParam()) ?: notFound("Recordatorio")) }
         patch("/{id}") {
@@ -172,7 +203,11 @@ fun Route.dataRoutes(s: Services) {
             val b = call.receiveBody<PlaceCreate>()
             if (b.name.isBlank()) badRequest("Nombre vacío")
             if (b.latitude !in -90.0..90.0 || b.longitude !in -180.0..180.0) badRequest("Coordenadas inválidas")
-            call.respond(HttpStatusCode.Created, s.places.upsert(call.userId(), b.name, b.latitude, b.longitude, b.radiusM.coerceIn(50, 5000), b.address, call.source()))
+            call.respond(HttpStatusCode.Created, s.places.upsert(call.userId(), b.name, b.latitude, b.longitude, b.radiusM.coerceIn(50, 5000), b.address, call.source(), b.shared))
+        }
+        patch("/{id}") {
+            val b = call.receiveBody<PlacePatch>()
+            call.respond(s.places.setShared(call.userId(), call.uuidParam(), b.shared) ?: notFound("Lugar"))
         }
         delete("/{id}") { if (!s.places.delete(call.userId(), call.uuidParam(), call.source())) notFound("Lugar"); call.respond(OkResponse()) }
     }
@@ -183,12 +218,12 @@ fun Route.dataRoutes(s: Services) {
         post {
             val b = call.receiveBody<ListCreate>()
             if (b.name.isBlank()) badRequest("Nombre vacío")
-            call.respond(HttpStatusCode.Created, s.lists.create(call.userId(), b.name, b.icon, call.source()))
+            call.respond(HttpStatusCode.Created, s.lists.create(call.userId(), b.name, b.icon, call.source(), b.shared))
         }
         get("/{id}") { call.respond(s.lists.get(call.userId(), call.uuidParam()) ?: notFound("Lista")) }
         patch("/{id}") {
             val b = call.receiveBody<ListPatch>()
-            call.respond(s.lists.rename(call.userId(), call.uuidParam(), b.name, b.icon) ?: notFound("Lista"))
+            call.respond(s.lists.rename(call.userId(), call.uuidParam(), b.name, b.icon, b.shared) ?: notFound("Lista"))
         }
         delete("/{id}") { s.lists.delete(call.userId(), call.uuidParam(), call.source()) ?: notFound("Lista"); call.respond(OkResponse()) }
         post("/{id}/items") {
@@ -222,7 +257,7 @@ fun Route.dataRoutes(s: Services) {
                 HttpStatusCode.Created,
                 s.events.create(
                     user.id, b.title, b.startAt, b.endAt ?: b.startAt.plusSeconds(3600), b.allDay, user.timezone, b.description, b.location,
-                    b.rrule, b.reminderMinutes ?: listOf(st.defaultEventReminderMinutes), b.color, call.source(),
+                    b.rrule, b.reminderMinutes ?: listOf(st.defaultEventReminderMinutes), b.color, call.source(), b.shared,
                 ),
             )
         }
@@ -233,7 +268,7 @@ fun Route.dataRoutes(s: Services) {
                 title = b.str("title"), description = b.rawStr("description"), location = b.rawStr("location"),
                 startAt = b.str("startAt")?.let { parseInstant(it) }, endAt = b.str("endAt")?.let { parseInstant(it) },
                 allDay = b.bool("allDay"), rrule = b.str("rrule"), clearRrule = b.isNull("rrule"),
-                reminderMinutes = b.intList("reminderMinutes"), color = b.str("color"),
+                reminderMinutes = b.intList("reminderMinutes"), color = b.str("color"), shared = b.bool("shared"),
             )
             call.respond(s.events.update(call.userId(), call.uuidParam(), patch, call.source()) ?: notFound("Evento"))
         }

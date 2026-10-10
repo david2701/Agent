@@ -4,6 +4,7 @@ package app.kairo.agent
 
 import app.kairo.domain.ConversationsRepo
 import app.kairo.domain.EntityRef
+import app.kairo.domain.FamilyRepo
 import app.kairo.domain.FileRef
 import app.kairo.domain.ListsRepo
 import app.kairo.domain.MemoriesRepo
@@ -94,6 +95,7 @@ class Agent(
     private val places: PlacesRepo,
     private val lists: ListsRepo,
     private val settings: SettingsService,
+    private val family: FamilyRepo,
 ) {
     private val log = LoggerFactory.getLogger(Agent::class.java)
     private val builtinTools = builtin.all()
@@ -107,13 +109,15 @@ class Agent(
                 ?: conversations.create(user.id, (req.displayText ?: req.text).lineSequence().first().take(60))
             send(AgentEvent.Start(conv.id))
 
-            val (mems, plcs, lsts, extra) = coroutineScope {
+            val (ctxData, extra) = coroutineScope {
                 val m = async { runCatching { memories.relevant(user.id, req.text) }.getOrDefault(emptyList()) }
                 val p = async { places.list(user.id) }
-                val l = async { lists.all(user.id).map { it.name } }
+                val l = async { lists.all(user.id).map { if (it.shared) "${it.name} (familiar)" else it.name } }
+                val f = async { runCatching { family.info(user.id) }.getOrNull() }
                 val x = async { runCatching { mcp.tools(user.id) }.getOrDefault(emptyList()) }
-                Quad(m.await(), p.await(), l.await(), x.await())
+                Quad(m.await(), p.await(), l.await(), f.await()) to x.await()
             }
+            val (mems, plcs, lsts, fam) = ctxData
             val tools = builtinTools + extra
             val byName = tools.associateBy { it.name }
             val specs: List<ToolSpec> = tools.map { it.spec }
@@ -132,11 +136,14 @@ class Agent(
                 },
             )
             val messages = ArrayList<ChatMessage>()
-            messages += ChatMessage.system(SystemPrompt.build(user, zone, req.channel, mems, plcs, lsts))
+            messages += ChatMessage.system(SystemPrompt.build(user, zone, req.channel, mems, plcs, lsts, fam))
             messages += history
             messages += ChatMessage.user(userText)
 
-            val ctx = ToolContext(user, zone, s, req.channel, conv.id, req.location, req.capabilities, req.attachments.map { it.id }.toMutableList())
+            val ctx = ToolContext(
+                user, zone, s, req.channel, conv.id, req.location, req.capabilities, req.attachments.map { it.id }.toMutableList(),
+                familyMembers = fam?.members.orEmpty(),
+            )
             val opts = ChatOptions(
                 model = s.chatModel,
                 maxTokens = if (req.channel == "voice") 700 else 1800,

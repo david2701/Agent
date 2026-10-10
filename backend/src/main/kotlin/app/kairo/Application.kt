@@ -10,6 +10,7 @@ import app.kairo.routes.ApiException
 import app.kairo.routes.agentRoutes
 import app.kairo.routes.authRoutes
 import app.kairo.routes.dataRoutes
+import app.kairo.routes.familyRoutes
 import app.kairo.routes.publicRoutes
 import app.kairo.routes.systemRoutes
 import app.kairo.util.ApiJson
@@ -52,7 +53,6 @@ import io.ktor.server.websocket.timeout
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -128,13 +128,13 @@ fun Application.kairoModule(s: Services) {
             call.respond(HttpStatusCode.BadGateway, ApiError("El servicio de IA no respondió (${e.status})"))
         }
         exception<IllegalArgumentException> { call, e -> call.respond(HttpStatusCode.BadRequest, ApiError(e.message ?: "Solicitud inválida")) }
+        exception<app.kairo.domain.FamilyException> { call, e -> call.respond(HttpStatusCode.fromValue(e.status), ApiError(e.message ?: "No permitido")) }
         exception<Throwable> { call, e ->
             log.error("Error no controlado en {}", call.request.path(), e)
             call.respond(HttpStatusCode.InternalServerError, ApiError("Error interno del servidor"))
         }
     }
 
-    val deviceCache = ConcurrentHashMap<String, Pair<Long, Boolean>>()
     install(Authentication) {
         jwt("jwt") {
             realm = "kairo"
@@ -147,14 +147,8 @@ fun Application.kairoModule(s: Services) {
             validate { cred ->
                 val did = cred.payload.getClaim("did").asString() ?: return@validate null
                 if (cred.payload.audience?.contains(AuthService.AUDIENCE) != true) return@validate null
-                // Comprueba que el dispositivo no fue revocado (caché de 60 s)
-                val cached = deviceCache[did]
-                val active = if (cached != null && System.currentTimeMillis() - cached.first < 60_000) cached.second else {
-                    val a = runCatching { s.users.isDeviceActive(java.util.UUID.fromString(did)) }.getOrDefault(false)
-                    deviceCache[did] = System.currentTimeMillis() to a
-                    a
-                }
-                if (active) JWTPrincipal(cred.payload) else null
+                // Comprueba que el dispositivo no fue revocado (caché corta que se limpia al revocar)
+                if (s.auth.deviceActive(did)) JWTPrincipal(cred.payload) else null
             }
             challenge { _, _ -> call.respond(HttpStatusCode.Unauthorized, ApiError("Sesión inválida o expirada")) }
         }
@@ -168,6 +162,7 @@ fun Application.kairoModule(s: Services) {
                 dataRoutes(s)
                 agentRoutes(s)
                 systemRoutes(s)
+                familyRoutes(s)
             }
             route("{...}") {
                 handle { call.respond(HttpStatusCode.NotFound, ApiError("Ruta no encontrada")) }

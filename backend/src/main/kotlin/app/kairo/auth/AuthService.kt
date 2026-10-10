@@ -1,6 +1,7 @@
 package app.kairo.auth
 
 import app.kairo.config.AppConfig
+import app.kairo.domain.FamilyRepo
 import app.kairo.domain.User
 import app.kairo.domain.UsersRepo
 import app.kairo.util.Crypto
@@ -24,12 +25,26 @@ data class TokenPair(val accessToken: String, val refreshToken: String, val expi
  * - Access token JWT de 1 hora con el id del dispositivo.
  * - Refresh token opaco por dispositivo, guardado como hash SHA-256 y rotado en cada uso.
  */
-class AuthService(private val cfg: AppConfig, private val users: UsersRepo) {
+class AuthService(private val cfg: AppConfig, private val users: UsersRepo, private val family: FamilyRepo) {
     private val log = LoggerFactory.getLogger(AuthService::class.java)
     private val algorithm = Algorithm.HMAC256(cfg.jwtSecret)
     val verifier: JWTVerifier = JWT.require(algorithm).withIssuer(ISSUER).withAudience(AUDIENCE).build()
 
     private val dummyHash by lazy { hash(Crypto.randomToken(16)) }
+
+    private val deviceCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Boolean>>()
+
+    /** ¿Sigue vigente la sesión de este dispositivo? Se consulta en cada petición, con caché de 60 s. */
+    suspend fun deviceActive(deviceId: String): Boolean {
+        val now = System.currentTimeMillis()
+        deviceCache[deviceId]?.takeIf { now - it.first < 60_000 }?.let { return it.second }
+        val active = runCatching { users.isDeviceActive(UUID.fromString(deviceId)) }.getOrDefault(false)
+        deviceCache[deviceId] = now to active
+        return active
+    }
+
+    /** Tras revocar sesiones o quitar a alguien, para que deje de entrar de inmediato. */
+    fun forgetSessions() = deviceCache.clear()
 
     fun hash(password: String): String = BCrypt.withDefaults().hashToString(12, password.toCharArray())
 
@@ -104,6 +119,43 @@ class AuthService(private val cfg: AppConfig, private val users: UsersRepo) {
             }
         val user = users.byId(userId) ?: throw AuthException("Sesión expirada")
         user to TokenPair(access(userId, deviceId), next, ACCESS_TTL, deviceId)
+    }
+
+    /**
+     * Usa un código de la familia: con una invitación crea la cuenta del nuevo miembro; con un código de acceso
+     * (que generó el administrador) define una contraseña nueva para un miembro existente y cierra sus otras sesiones.
+     * Devuelve el usuario, sus tokens y si es una cuenta nueva.
+     */
+    suspend fun join(
+        code: String,
+        email: String?,
+        password: String,
+        displayName: String?,
+        deviceName: String,
+        platform: String,
+        timezone: String?,
+    ): Triple<User, TokenPair, Boolean> {
+        val inv = family.findInvite(code) ?: throw AuthException("El código no es válido o ya venció. Pide uno nuevo a quien administra la familia.")
+        if (password.length < 10) throw AuthException("La contraseña debe tener al menos 10 caracteres")
+        val (user, isNew) = if (inv.targetUserId != null) {
+            val target = users.byId(inv.targetUserId) ?: throw AuthException("Ese miembro ya no existe")
+            users.setPassword(target.id, hash(password))
+            users.revokeAllDevices(target.id)
+            forgetSessions()
+            target to false
+        } else {
+            val mail = email?.trim()?.lowercase().orEmpty()
+            if (!Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(mail)) throw AuthException("Escribe un correo válido")
+            if (users.emailTaken(mail)) throw AuthException("Ya hay una cuenta con ese correo")
+            val name = displayName?.trim()?.takeIf { it.isNotEmpty() } ?: inv.name.ifBlank { mail.substringBefore('@') }
+            val tz = timezone?.takeIf { runCatching { java.time.ZoneId.of(it) }.isSuccess } ?: cfg.defaultTimezone
+            users.create(mail, name.take(60), hash(password), tz, householdId = inv.householdId, role = inv.role) to true
+        }
+        family.markUsed(inv.id, user.id)
+        family.invalidate()
+        val refresh = Crypto.randomToken(48)
+        val deviceId = users.createDevice(user.id, deviceName.ifBlank { platform }, platform, Crypto.sha256(refresh))
+        return Triple(user, TokenPair(access(user.id, deviceId), refresh, ACCESS_TTL, deviceId), isNew)
     }
 
     suspend fun changePassword(userId: UUID, current: String, new: String) {

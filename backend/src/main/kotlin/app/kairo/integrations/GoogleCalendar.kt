@@ -37,6 +37,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -52,6 +53,8 @@ data class GoogleStatus(
     val available: Boolean,
     val connected: Boolean,
     val calendarId: String? = null,
+    /** Calendario de Google (compartido con la familia) donde van los eventos familiares que crea este usuario. */
+    val familyCalendarId: String? = null,
     val lastSyncAt: String? = null,
     val lastError: String? = null,
     val redirectUri: String,
@@ -132,8 +135,10 @@ class GoogleCalendarService(
                 Triple(it.str("meta"), it.instantOrNull("last_sync_at"), it.strOrNull("last_error"))
             }
         }
-        val calendarId = row?.first?.let { (KairoJson.parseToJsonElement(it).jsonObject["calendarId"] as? JsonPrimitive)?.content }
-        return GoogleStatus(cfg.googleEnabled, row != null, calendarId, row?.second?.toString(), row?.third, redirectUri)
+        val meta = row?.first?.let { KairoJson.parseToJsonElement(it).jsonObject }
+        val calendarId = (meta?.get("calendarId") as? JsonPrimitive)?.content
+        val familyCalendarId = (meta?.get("familyCalendarId") as? JsonPrimitive)?.contentOrNull
+        return GoogleStatus(cfg.googleEnabled, row != null, calendarId, familyCalendarId, row?.second?.toString(), row?.third, redirectUri)
     }
 
     suspend fun disconnect(userId: UUID) {
@@ -146,6 +151,14 @@ class GoogleCalendarService(
         exec(
             "update integrations set meta = jsonb_set(meta, '{calendarId}', to_jsonb(?::text)) where user_id = ? and provider = 'google'",
             calendarId, userId,
+        )
+    }
+
+    /** Calendario para los eventos familiares (null = el mismo de siempre). */
+    suspend fun setFamilyCalendar(userId: UUID, calendarId: String?) = db.tx {
+        exec(
+            "update integrations set meta = case when ?::text is null then meta - 'familyCalendarId' else jsonb_set(meta, '{familyCalendarId}', to_jsonb(?::text)) end where user_id = ? and provider = 'google'",
+            calendarId, calendarId, userId,
         )
     }
 
@@ -174,7 +187,8 @@ class GoogleCalendarService(
         try {
             for (d in events.dirty(userId)) {
                 val e = d.event
-                val target = "${API}/calendars/${(d.googleCalendarId ?: calendarId).encodeURLPathPart()}/events"
+                val insertInto = if (e.shared) st.familyCalendarId ?: calendarId else calendarId
+                val target = "${API}/calendars/${(d.googleCalendarId ?: insertInto).encodeURLPathPart()}/events"
                 when {
                     d.deleted && e.googleEventId != null -> {
                         val r = http.delete("$target/${e.googleEventId!!.encodeURLPathPart()}") { header("Authorization", "Bearer $token") }
@@ -191,7 +205,7 @@ class GoogleCalendarService(
                         }
                         if (r.status.isSuccess()) {
                             val o = KairoJson.parseToJsonElement(r.bodyAsText()).jsonObject
-                            events.markSynced(e.id, o["id"]?.jsonPrimitive?.content, calendarId, o["etag"]?.jsonPrimitive?.content); pushed++
+                            events.markSynced(e.id, o["id"]?.jsonPrimitive?.content, insertInto, o["etag"]?.jsonPrimitive?.content); pushed++
                         } else log.warn("Google insert {}: {}", r.status.value, r.bodyAsText().take(200))
                     }
                     else -> {

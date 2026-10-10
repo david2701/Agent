@@ -40,6 +40,18 @@ data class PairRequest(val code: String, val deviceName: String = "", val platfo
 @Serializable
 data class PasswordChange(val currentPassword: String, val newPassword: String)
 
+/** Unirse a la familia con una invitación, o definir contraseña nueva con un código de acceso. */
+@Serializable
+data class JoinRequest(
+    val code: String,
+    val email: String? = null,
+    val password: String,
+    val displayName: String? = null,
+    val deviceName: String = "",
+    val platform: String = "web",
+    val timezone: String? = null,
+)
+
 private const val COOKIE = "kairo_rt"
 
 fun Route.authRoutes(s: Services) {
@@ -67,6 +79,27 @@ fun Route.authRoutes(s: Services) {
                 }
                 call.respondTokens(user, tokens, web = false, s.config.publicUrl.startsWith("https"))
             }
+
+            /** Qué abre un código (para mostrar "Te invitaron a Nuestra familia" antes de pedir datos). */
+            get("/invite/{code}") {
+                val code = call.parameters["code"] ?: badRequest("Falta el código")
+                call.respond(s.family.preview(code) ?: notFound("Código"))
+            }
+
+            post("/join") {
+                val req = call.receiveBody<JoinRequest>()
+                val platform = req.platform.lowercase().take(20)
+                val (user, tokens, isNew) = try {
+                    s.auth.join(req.code, req.email, req.password, req.displayName, req.deviceName, platform, req.timezone)
+                } catch (e: AuthException) {
+                    badRequest(e.message ?: "No se pudo usar el código")
+                }
+                if (isNew) {
+                    s.notifier.everyone(user.id, app.kairo.domain.NoticeKinds.MESSAGE, "${user.displayName} se unió a la familia", "Ya puede ver lo que compartes.", "family", user.id)
+                    s.bus.entityChanged(s.family.memberIds(user.id), "family", user.id, "updated")
+                }
+                call.respondTokens(user, tokens, web = platform == "web", s.config.publicUrl.startsWith("https"))
+            }
         }
 
         // Límite propio: cada carga de página renueva la sesión y no debe agotar el de inicio de sesión.
@@ -88,6 +121,7 @@ fun Route.authRoutes(s: Services) {
         authenticate("jwt") {
             post("/logout") {
                 call.deviceId()?.let { s.users.revokeDevice(call.userId(), it) }
+                s.auth.forgetSessions()
                 call.clearCookie(s.config.publicUrl.startsWith("https"))
                 call.respond(OkResponse())
             }

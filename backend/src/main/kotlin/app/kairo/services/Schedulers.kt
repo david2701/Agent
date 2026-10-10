@@ -8,8 +8,6 @@ import app.kairo.domain.RemindersRepo
 import app.kairo.domain.SettingsService
 import app.kairo.domain.UsersRepo
 import app.kairo.integrations.GoogleCalendarService
-import app.kairo.integrations.NtfyNotifier
-import app.kairo.realtime.EventBus
 import app.kairo.realtime.EventTypes
 import app.kairo.realtime.ServerEvent
 import app.kairo.util.zoneOf
@@ -35,8 +33,8 @@ class Schedulers(
     private val google: GoogleCalendarService,
     private val embedder: Embedder,
     private val activity: ActivityRepo,
-    private val bus: EventBus,
-    private val ntfy: NtfyNotifier,
+    private val notifier: Notifier,
+    private val notices: app.kairo.domain.NoticesRepo,
     private val googleEnabled: Boolean,
 ) {
     private val log = LoggerFactory.getLogger(Schedulers::class.java)
@@ -47,6 +45,7 @@ class Schedulers(
         loop("resumen", 60_000) { briefings() }
         loop("embeddings", 10 * 60_000, initialDelay = 30_000) { embedder.backfill() }
         if (googleEnabled) loop("google", 5 * 60_000, initialDelay = 20_000) { googleSync() }
+        loop("limpieza", 6 * 3600_000, initialDelay = 5 * 60_000) { notices.prune() }
     }
 
     private fun loop(name: String, everyMs: Long, initialDelay: Long = 2_000, block: suspend () -> Unit) {
@@ -65,22 +64,19 @@ class Schedulers(
         }
     }
 
-    /** Dispara recordatorios vencidos: WebSocket a los dispositivos + ntfy como respaldo. */
+    /** Dispara recordatorios vencidos: WebSocket, Web Push y ntfy (el teléfono además tiene su alarma local). */
     suspend fun fireReminders() {
         reminders.claimDue(Instant.now()) { r, userId ->
             val fireAt = r.nextFireAt ?: Instant.now()
-            bus.publish(
-                userId,
-                ServerEvent(EventTypes.REMINDER_FIRE, buildJsonObject {
-                    put("id", r.id.toString())
-                    put("text", r.text)
-                    put("fireAt", fireAt.toString())
-                    put("recurring", r.rrule != null)
-                }),
-            )
-            activity.record(userId, Kinds.FIRED, EntityTypes.REMINDER, r.id, "Sonó: ${r.text}", "system")
-            val s = settings.get(userId)
-            ntfy.send(s.ntfyTopic, "Kairo", r.text, tags = listOf("alarm_clock"))
+            val event = ServerEvent(EventTypes.REMINDER_FIRE, buildJsonObject {
+                put("id", r.id.toString())
+                put("text", r.text)
+                put("fireAt", fireAt.toString())
+                put("recurring", r.rrule != null)
+                r.createdBy?.let { put("createdBy", it.toString()) }
+            })
+            activity.record(userId, Kinds.FIRED, EntityTypes.REMINDER, r.id, "Sonó: ${r.text}", "system", alsoTo = listOfNotNull(r.createdBy))
+            notifier.deliver(userId, event, "Kairo", r.text, tags = listOf("alarm_clock"))
         }
     }
 
@@ -94,15 +90,15 @@ class Schedulers(
         lastEventCheck = now
         sentAlerts.entries.removeIf { now.toEpochMilli() - it.value > 2 * 86_400_000L }
         for (user in users.all()) {
-            val s = settings.get(user.id)
+            // Los eventos familiares avisan a cada miembro en su teléfono
             for (a in events.alerts(user.id, from, now)) {
-                val key = "${a.eventId}:${a.startAt.epochSecond}:${a.minutes}"
+                val key = "${user.id}:${a.eventId}:${a.startAt.epochSecond}:${a.minutes}"
                 if (sentAlerts.putIfAbsent(key, now.toEpochMilli()) != null) continue
-                bus.publish(user.id, ServerEvent(EventTypes.EVENT_ALERT, buildJsonObject {
+                val event = ServerEvent(EventTypes.EVENT_ALERT, buildJsonObject {
                     put("id", a.eventId.toString()); put("title", a.title); put("startAt", a.startAt.toString())
-                    put("alertAt", a.alertAt.toString()); put("minutes", a.minutes); put("location", a.location)
-                }))
-                ntfy.send(s.ntfyTopic, a.title, if (a.minutes == 0) "Empieza ahora" else "Empieza en ${a.minutes} min", tags = listOf("calendar"))
+                    put("alertAt", a.alertAt.toString()); put("minutes", a.minutes); put("location", a.location); put("shared", a.shared)
+                })
+                notifier.deliver(user.id, event, a.title, if (a.minutes == 0) "Empieza ahora" else "Empieza en ${a.minutes} min", tags = listOf("calendar"))
             }
         }
     }
@@ -120,8 +116,10 @@ class Schedulers(
             if (now.toLocalTime().isBefore(target) || now.toLocalTime().isAfter(target.plusHours(2))) continue
             settings.setInternal(user.id, "lastBriefingDate", JsonPrimitive(today))
             val text = runCatching { briefing.generate(user) }.getOrElse { log.warn("No se pudo generar el resumen: {}", it.message); continue }
-            bus.publish(user.id, ServerEvent(EventTypes.BRIEFING_READY, buildJsonObject { put("text", text); put("date", today) }))
-            ntfy.send(s.ntfyTopic, "Tu día", text, tags = listOf("sunrise"), priority = 3)
+            notifier.deliver(
+                user.id, ServerEvent(EventTypes.BRIEFING_READY, buildJsonObject { put("text", text); put("date", today) }),
+                "Tu día", text, tags = listOf("sunrise"), priority = 3,
+            )
         }
     }
 

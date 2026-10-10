@@ -4,6 +4,7 @@ import app.kairo.db.Db
 import app.kairo.db.Jsonb
 import app.kairo.db.instant
 import app.kairo.db.str
+import app.kairo.db.strOrNull
 import app.kairo.db.uuid
 import app.kairo.util.KairoJson
 import kotlinx.serialization.json.JsonElement
@@ -26,12 +27,17 @@ class UsersRepo(private val db: Db) {
 
     suspend fun byId(id: UUID): User? = db.read { one("select * from users where id = ?", id) { map(it) } }
 
-    suspend fun create(email: String, name: String, passwordHash: String, timezone: String): User = db.tx {
+    /** Crea un usuario. Sin [householdId] se crea también su propio hogar y queda como administrador. */
+    suspend fun create(email: String, name: String, passwordHash: String, timezone: String, householdId: UUID? = null, role: String = "admin"): User = db.tx {
+        val hh = householdId ?: one("insert into households(name) values (?) returning id", "Familia de ${name.trim()}") { it.uuid("id") }!!
         one(
-            "insert into users(email, display_name, password_hash, timezone) values (?, ?, ?, ?) returning *",
-            email.trim().lowercase(), name.trim(), passwordHash, timezone,
+            "insert into users(email, display_name, password_hash, timezone, household_id, role) values (?, ?, ?, ?, ?, ?) returning *",
+            email.trim().lowercase(), name.trim(), passwordHash, timezone, hh, if (householdId == null) "admin" else role,
         ) { map(it) }!!
     }
+
+    suspend fun emailTaken(email: String): Boolean =
+        db.read { one("select 1 from users where lower(email) = lower(?)", email.trim()) { true } } ?: false
 
     suspend fun update(id: UUID, displayName: String?, timezone: String?): User? = db.tx {
         one(
@@ -89,8 +95,18 @@ class UsersRepo(private val db: Db) {
     }
 
     suspend fun revokeDevice(userId: UUID, deviceId: UUID): Boolean = db.tx {
+        exec("delete from push_endpoints where device_id = ? and user_id = ?", deviceId, userId)
         exec("update devices set revoked_at = now() where user_id = ? and id = ?", userId, deviceId) > 0
     }
 
-    private fun map(rs: ResultSet) = User(rs.uuid("id"), rs.str("email"), rs.str("display_name"), rs.str("timezone"), rs.instant("created_at"))
+    /** Cierra todas las sesiones de un usuario (tras definir una contraseña nueva con un código de acceso). */
+    suspend fun revokeAllDevices(userId: UUID) = db.tx {
+        exec("delete from push_endpoints where user_id = ?", userId)
+        exec("update devices set revoked_at = now() where user_id = ? and revoked_at is null", userId)
+    }
+
+    private fun map(rs: ResultSet) = User(
+        rs.uuid("id"), rs.str("email"), rs.str("display_name"), rs.str("timezone"), rs.instant("created_at"),
+        householdId = rs.uuid("household_id"), role = rs.str("role"), color = rs.strOrNull("color"),
+    )
 }

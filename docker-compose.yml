@@ -42,8 +42,29 @@ services:
       - "127.0.0.1:${KAIRO_HOST_PORT:-8080}:8080"
     networks: [kairo]
 
+  # Opcional: push propio para los teléfonos (UnifiedPush), sin Firebase. Se activa con:
+  #   docker compose --profile push up -d
+  # Publícalo con Caddy (deploy/Caddyfile.example) y en cada teléfono instala la app ntfy apuntando a él.
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    command: serve
+    profiles: ["push"]
+    restart: unless-stopped
+    environment:
+      NTFY_BASE_URL: ${NTFY_PUBLIC_URL:-https://ntfy.tudominio.com}
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_CACHE_DURATION: 24h
+      NTFY_ENABLE_SIGNUP: "false"
+    volumes:
+      - ntfy-data:/var/lib/ntfy
+    ports:
+      - "127.0.0.1:${NTFY_HOST_PORT:-8090}:80"
+    networks: [kairo]
+
 volumes:
   kairo-db:
+  ntfy-data:
 
 networks:
   kairo:

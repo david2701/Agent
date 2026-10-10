@@ -58,7 +58,8 @@ class BriefingService(
         val start = day.atStartOfDay(zone).toInstant()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant()
         val s = settings.get(user.id)
-        val allTasks = tasks.list(user.id, includeDone = false)
+        // Las tareas familiares asignadas a otra persona no son pendientes de este usuario
+        val allTasks = tasks.list(user.id, includeDone = false).filter { it.assigneeId == null || it.assigneeId == user.id }
         val open = allTasks.filter { it.status != "done" }
         val rem = reminders.list(user.id, listOf("scheduled", "fired"))
         val w = if (s.homeLatitude != null && s.homeLongitude != null) {

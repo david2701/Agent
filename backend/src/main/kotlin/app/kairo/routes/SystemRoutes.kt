@@ -61,6 +61,7 @@ import java.util.UUID
 @Serializable data class McpTestResult(val tools: List<String>)
 @Serializable data class GoogleAuthUrl(val url: String)
 @Serializable data class GoogleCalendarSelect(val calendarId: String)
+@Serializable data class GoogleFamilyCalendarSelect(val calendarId: String? = null)
 @Serializable data class SyncResult(val pushed: Int, val pulled: Int, val deleted: Int)
 @Serializable data class DeviceSync(
     val serverTime: Instant,
@@ -69,6 +70,9 @@ import java.util.UUID
     val eventAlerts: List<app.kairo.domain.EventAlert>,
     val briefingEnabled: Boolean,
     val briefingTime: String,
+    /** Avisos de la familia sin leer de las últimas 48 horas: el teléfono muestra los que no le llegaron por push. */
+    val notices: List<app.kairo.domain.Notice> = emptyList(),
+    val pushRegistered: Boolean = false,
 )
 @Serializable data class ModelsResponse(val models: List<String>)
 @Serializable data class HealthResponse(val status: String, val version: String)
@@ -174,7 +178,11 @@ fun Route.systemRoutes(s: Services) {
         val current = call.deviceId()
         call.respond(s.users.devices(call.userId()).map { it.copy(current = it.id == current) })
     }
-    delete("/devices/{id}") { if (!s.users.revokeDevice(call.userId(), call.uuidParam())) notFound("Dispositivo"); call.respond(OkResponse()) }
+    delete("/devices/{id}") {
+        if (!s.users.revokeDevice(call.userId(), call.uuidParam())) notFound("Dispositivo")
+        s.auth.forgetSessions()
+        call.respond(OkResponse())
+    }
 
     /** Lo que el teléfono necesita para programar alarmas locales y geovallas sin depender de push. */
     get("/sync/device") {
@@ -186,6 +194,7 @@ fun Route.systemRoutes(s: Services) {
             DeviceSync(
                 now, s.reminders.forDevice(userId), s.places.list(userId),
                 s.events.alerts(userId, now, now.plusSeconds(7L * 86400)), st.briefingEnabled, st.briefingTime,
+                s.notices.recentUnread(userId, now.minusSeconds(48L * 3600)), s.push.registeredDevices(userId) > 0,
             ),
         )
     }
@@ -208,6 +217,12 @@ fun Route.systemRoutes(s: Services) {
         post("/calendar") {
             val b = call.receiveBody<GoogleCalendarSelect>()
             s.google.setCalendar(call.userId(), b.calendarId)
+            call.respond(s.google.status(call.userId()))
+        }
+        /** Calendario de Google compartido con la familia para los eventos familiares (null = el principal). */
+        post("/family-calendar") {
+            val b = call.receiveBody<GoogleFamilyCalendarSelect>()
+            s.google.setFamilyCalendar(call.userId(), b.calendarId?.takeIf { it.isNotBlank() })
             call.respond(s.google.status(call.userId()))
         }
         delete { s.google.disconnect(call.userId()); call.respond(OkResponse()) }
