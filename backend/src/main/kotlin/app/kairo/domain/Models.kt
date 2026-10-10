@@ -128,6 +128,10 @@ data class Event(
     val updatedAt: Instant,
 )
 
+/** Aviso previo de un evento (según sus reminderMinutes). */
+@Serializable
+data class EventAlert(val eventId: UUID, val title: String, val startAt: Instant, val alertAt: Instant, val minutes: Int, val location: String)
+
 @Serializable
 data class Memory(
     val id: UUID,

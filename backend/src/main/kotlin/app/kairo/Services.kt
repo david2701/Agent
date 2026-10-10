@@ -71,7 +71,7 @@ class Services(val config: AppConfig, val db: Db, val nan: NanClient) {
     val agent = Agent(nan, tools, mcp, conversations, memories, places, lists, settings)
     val capture = CaptureService(agent, nan, files, settings)
     val recordings = RecordingService(recordingsRepo, voice, notes, tasks, settings, nan, bus, scope)
-    val schedulers = Schedulers(scope, reminders, users, settings, briefing, google, embedder, activity, bus, ntfy, config.googleEnabled)
+    val schedulers = Schedulers(scope, reminders, events, users, settings, briefing, google, embedder, activity, bus, ntfy, config.googleEnabled)
 
     fun close() {
         scope.cancel()

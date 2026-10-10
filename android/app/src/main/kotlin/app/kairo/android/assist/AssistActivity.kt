@@ -84,6 +84,11 @@ class AssistActivity : ComponentActivity() {
                         startActivity(Intent(this@AssistActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         finish(); return@LaunchedEffect
                     }
+                    if (intent?.action == ACTION_BRIEFING) {
+                        started = true
+                        runCatching { graph.api.briefing().text }.onSuccess { graph.voice.say(it) }.onFailure { finish() }
+                        return@LaunchedEffect
+                    }
                     if (graph.voice.hasMicPermission()) graph.voice.talk() else mic.launch(Manifest.permission.RECORD_AUDIO)
                     started = true
                 }
@@ -155,10 +160,12 @@ class AssistActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         trigger++
     }
 
     companion object {
         const val ACTION_TALK = "app.kairo.android.TALK"
+        const val ACTION_BRIEFING = "app.kairo.android.BRIEFING"
     }
 }

@@ -109,7 +109,7 @@ Cada evento es una línea `data: {json}` con `type`:
 - `GET /geocode?q=Medellín` -> `[{name, admin, country, latitude, longitude, timezone}]`
 - `GET /models` -> `{models: [...]}` (modelos disponibles en Nan)
 - `GET /devices` -> `[{id, name, platform, createdAt, lastSeenAt, current}]` · `DELETE /devices/{id}`
-- `GET /sync/device` -> `{serverTime, reminders[] (programados), places[]}` (para alarmas locales y geovallas)
+- `GET /sync/device` -> `{serverTime, reminders[] (programados), places[], eventAlerts[] (próximos 7 días: {eventId, title, startAt, alertAt, minutes, location}), briefingEnabled, briefingTime}` (para alarmas locales, avisos de eventos, resumen matinal y geovallas)
 - `GET /export` -> JSON con todos los datos
 - Google: `GET /integrations/google` -> `{available, connected, calendarId, lastSyncAt, lastError, redirectUri}`,
   `POST /integrations/google/auth-url` -> `{url}`, `POST /integrations/google/sync`, `GET /integrations/google/calendars`,
@@ -121,6 +121,7 @@ Cada evento es una línea `data: {json}` con `type`:
 `GET /ws?access_token=...` envía `{type, data}`:
 - `entity.changed` `{entity, id?, op}`: recargar esa colección.
 - `reminder.fire` `{id, text, fireAt, recurring}`: mostrar notificación (deduplicar por `id+fireAt` con la alarma local).
+- `event.alert` `{id, title, startAt, alertAt, minutes, location}`: aviso previo de un evento del calendario (deduplicar por `id+startAt+minutes` con la alarma local).
 - `briefing.ready` `{text, date}`
 - `recording.updated` `{id}`
 - `ping` cada 25 s (el cliente puede enviar `"ping"` y recibe `pong`).

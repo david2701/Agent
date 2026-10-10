@@ -62,6 +62,15 @@ class RealtimeHub(private val context: Context, private val api: KairoApi, priva
                 }
                 _changes.tryEmit("reminder")
             }
+            "event.alert" -> {
+                val key = "ev:${str("id")}:${str("startAt")}:${str("minutes")}"
+                val at = str("alertAt")?.toInstantOrNull()?.toEpochMilli() ?: System.currentTimeMillis()
+                if (FiredLog(context).markIfNew(key, at)) {
+                    val minutes = str("minutes")?.toIntOrNull() ?: 0
+                    val sub = (if (minutes == 0) "Empieza ahora" else "En $minutes min") + (str("location")?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+                    Notifications.show(context, key.hashCode(), Notifications.simple(context, Channels.REMINDERS, str("title") ?: "Evento", sub, destination = "calendar"))
+                }
+            }
             "briefing.ready" -> {
                 val text = str("text") ?: return
                 Notifications.show(context, Notifications.ID_BRIEFING, Notifications.simple(context, Channels.BRIEFING, "Tu día", text, destination = "home"))

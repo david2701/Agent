@@ -128,6 +128,7 @@
         <receiver android:name=".reminders.ReminderActionReceiver" android:exported="false" />
         <receiver android:name=".reminders.ProximityReceiver" android:exported="false" />
         <receiver android:name=".device.TimerReceiver" android:exported="false" />
+        <receiver android:name=".reminders.BriefingReceiver" android:exported="false" />
 
         <receiver android:name=".receivers.BootReceiver" android:exported="true">
             <intent-filter>

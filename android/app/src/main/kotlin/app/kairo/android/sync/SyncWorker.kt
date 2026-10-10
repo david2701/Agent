@@ -21,7 +21,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (g.session.current() == null) return Result.success()
         return try {
             val sync = g.api.deviceSync()
-            g.alarms.apply(sync.reminders)
+            g.alarms.apply(sync.reminders, sync.eventAlerts)
+            g.alarms.scheduleBriefing(sync.briefingEnabled, sync.briefingTime)
             g.geofences.apply(sync.reminders, sync.places)
             runCatching {
                 val today = g.api.today()

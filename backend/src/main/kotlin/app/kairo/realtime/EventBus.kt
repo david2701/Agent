@@ -16,6 +16,7 @@ data class ServerEvent(val type: String, val data: JsonObject = JsonObject(empty
 object EventTypes {
     const val ENTITY_CHANGED = "entity.changed"
     const val REMINDER_FIRE = "reminder.fire"
+    const val EVENT_ALERT = "event.alert"
     const val BRIEFING_READY = "briefing.ready"
     const val RECORDING_UPDATED = "recording.updated"
 }

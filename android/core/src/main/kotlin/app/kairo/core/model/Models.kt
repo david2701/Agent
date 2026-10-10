@@ -234,7 +234,17 @@ data class VoiceOption(val id: String, val name: String, val description: String
 data class VoicesResponse(val voices: List<VoiceOption>)
 
 @Serializable
-data class DeviceSync(val serverTime: String, val reminders: List<Reminder> = emptyList(), val places: List<Place> = emptyList())
+data class EventAlert(val eventId: String, val title: String, val startAt: String, val alertAt: String, val minutes: Int, val location: String = "")
+
+@Serializable
+data class DeviceSync(
+    val serverTime: String,
+    val reminders: List<Reminder> = emptyList(),
+    val places: List<Place> = emptyList(),
+    val eventAlerts: List<EventAlert> = emptyList(),
+    val briefingEnabled: Boolean = true,
+    val briefingTime: String = "07:00",
+)
 
 @Serializable
 data class BriefingResponse(val text: String)

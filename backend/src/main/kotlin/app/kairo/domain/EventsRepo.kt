@@ -70,6 +70,14 @@ class EventsRepo(private val db: Db, private val activity: ActivityRepo) {
 
     suspend fun get(userId: UUID, id: UUID): Event? = db.read { getTx(userId, id) }
 
+    /** Avisos de eventos cuya hora de aviso cae en [from, to). */
+    suspend fun alerts(userId: UUID, from: Instant, to: Instant): List<EventAlert> =
+        range(userId, from, to.plusSeconds(8L * 86400))
+            .filter { !it.allDay }
+            .flatMap { e -> e.reminderMinutes.map { m -> EventAlert(e.id, e.title, e.startAt, e.startAt.minusSeconds(m * 60L), m, e.location) } }
+            .filter { !it.alertAt.isBefore(from) && it.alertAt.isBefore(to) }
+            .sortedBy { it.alertAt }
+
     private fun Tx.getTx(userId: UUID, id: UUID): Event? =
         one("select * from events where user_id = ? and id = ? and deleted_at is null", userId, id) { map(it) }
 

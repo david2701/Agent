@@ -62,7 +62,14 @@ import java.util.UUID
 @Serializable data class GoogleAuthUrl(val url: String)
 @Serializable data class GoogleCalendarSelect(val calendarId: String)
 @Serializable data class SyncResult(val pushed: Int, val pulled: Int, val deleted: Int)
-@Serializable data class DeviceSync(val serverTime: Instant, val reminders: List<Reminder>, val places: List<Place>)
+@Serializable data class DeviceSync(
+    val serverTime: Instant,
+    val reminders: List<Reminder>,
+    val places: List<Place>,
+    val eventAlerts: List<app.kairo.domain.EventAlert>,
+    val briefingEnabled: Boolean,
+    val briefingTime: String,
+)
 @Serializable data class ModelsResponse(val models: List<String>)
 @Serializable data class HealthResponse(val status: String, val version: String)
 @Serializable data class SettingsResponse(val settings: UserSettings, val googleAvailable: Boolean, val ntfyAvailable: Boolean)
@@ -173,7 +180,14 @@ fun Route.systemRoutes(s: Services) {
     get("/sync/device") {
         val userId = call.userId()
         call.deviceId()?.let { s.users.touchDevice(it) }
-        call.respond(DeviceSync(Instant.now(), s.reminders.forDevice(userId), s.places.list(userId)))
+        val now = Instant.now()
+        val st = s.settings.get(userId)
+        call.respond(
+            DeviceSync(
+                now, s.reminders.forDevice(userId), s.places.list(userId),
+                s.events.alerts(userId, now, now.plusSeconds(7L * 86400)), st.briefingEnabled, st.briefingTime,
+            ),
+        )
     }
 
     // ------------------------------------------------------------ Archivos (URL firmada, sin cabecera de auth)

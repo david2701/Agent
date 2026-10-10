@@ -28,6 +28,7 @@ import java.time.LocalTime
 class Schedulers(
     private val scope: CoroutineScope,
     private val reminders: RemindersRepo,
+    private val events: app.kairo.domain.EventsRepo,
     private val users: UsersRepo,
     private val settings: SettingsService,
     private val briefing: BriefingService,
@@ -42,6 +43,7 @@ class Schedulers(
 
     fun start() {
         loop("recordatorios", 10_000) { fireReminders() }
+        loop("eventos", 30_000) { eventAlerts() }
         loop("resumen", 60_000) { briefings() }
         loop("embeddings", 10 * 60_000, initialDelay = 30_000) { embedder.backfill() }
         if (googleEnabled) loop("google", 5 * 60_000, initialDelay = 20_000) { googleSync() }
@@ -79,6 +81,29 @@ class Schedulers(
             activity.record(userId, Kinds.FIRED, EntityTypes.REMINDER, r.id, "Sonó: ${r.text}", "system")
             val s = settings.get(userId)
             ntfy.send(s.ntfyTopic, "Kairo", r.text, tags = listOf("alarm_clock"))
+        }
+    }
+
+    private var lastEventCheck: Instant = Instant.now().minusSeconds(60)
+    private val sentAlerts = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Avisos previos de eventos del calendario ("En 15 min: Cita con el dentista"). */
+    suspend fun eventAlerts() {
+        val now = Instant.now()
+        val from = lastEventCheck
+        lastEventCheck = now
+        sentAlerts.entries.removeIf { now.toEpochMilli() - it.value > 2 * 86_400_000L }
+        for (user in users.all()) {
+            val s = settings.get(user.id)
+            for (a in events.alerts(user.id, from, now)) {
+                val key = "${a.eventId}:${a.startAt.epochSecond}:${a.minutes}"
+                if (sentAlerts.putIfAbsent(key, now.toEpochMilli()) != null) continue
+                bus.publish(user.id, ServerEvent(EventTypes.EVENT_ALERT, buildJsonObject {
+                    put("id", a.eventId.toString()); put("title", a.title); put("startAt", a.startAt.toString())
+                    put("alertAt", a.alertAt.toString()); put("minutes", a.minutes); put("location", a.location)
+                }))
+                ntfy.send(s.ntfyTopic, a.title, if (a.minutes == 0) "Empieza ahora" else "Empieza en ${a.minutes} min", tags = listOf("calendar"))
+            }
         }
     }
 
