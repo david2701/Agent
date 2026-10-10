@@ -66,7 +66,7 @@ final class GeofenceService {
         for r in placeReminders.prefix(20) {
             guard let p = places.first(where: { $0.id == r.placeId }) else { continue }
             let trigger = r.placeTrigger ?? "arrive"
-            let id = "rem:\(r.id):\(trigger)"
+            let id = Self.conditionId(reminder: r.id, arrive: trigger == "arrive")
             wanted.insert(id)
             texts[id] = r.text
             if !current.contains(id) {
@@ -82,16 +82,25 @@ final class GeofenceService {
     }
 
     private func fired(_ identifier: String, satisfied: Bool) {
-        let parts = identifier.split(separator: ":")
-        guard parts.count == 3 else { return }
-        let arrive = parts[2] == "arrive"
-        guard arrive == satisfied else { return }
+        guard let (reminderId, arrive) = Self.parse(identifier), arrive == satisfied else { return }
         let text = texts[identifier] ?? "Recordatorio"
         NotificationService.showNow(
-            id: "geo:\(parts[1]):\(Int(Date().timeIntervalSince1970 / 600))", title: text,
-            body: arrive ? "Llegaste" : "Saliste", entityId: String(parts[1]),
+            id: "geo:\(reminderId):\(Int(Date().timeIntervalSince1970 / 600))", title: text,
+            body: arrive ? "Llegaste" : "Saliste", entityId: reminderId,
             category: NotificationService.categoryReminder, destination: "reminders"
         )
+    }
+
+    /// CoreLocation sólo admite letras y números en los nombres: "R" + id sin guiones + "A" (llegar) o "L" (salir).
+    static func conditionId(reminder: String, arrive: Bool) -> String {
+        "R" + reminder.filter { $0.isLetter || $0.isNumber } + (arrive ? "A" : "L")
+    }
+
+    static func parse(_ identifier: String) -> (String, Bool)? {
+        guard identifier.count == 34, identifier.first == "R", let last = identifier.last, last == "A" || last == "L" else { return nil }
+        let hex = Array(identifier.dropFirst().dropLast())
+        let uuid = [hex[0..<8], hex[8..<12], hex[12..<16], hex[16..<20], hex[20..<32]].map { String($0) }.joined(separator: "-")
+        return (uuid, last == "A")
     }
 }
 
