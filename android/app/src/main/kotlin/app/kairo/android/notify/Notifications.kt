@@ -13,6 +13,7 @@ import app.kairo.android.MainActivity
 import app.kairo.android.R
 import app.kairo.android.assist.AssistActivity
 import app.kairo.android.reminders.ReminderActionReceiver
+import app.kairo.android.sync.NoticeAlert
 
 object Channels {
     const val REMINDERS = "reminders"
@@ -21,6 +22,8 @@ object Channels {
     const val LISTENING = "listening"
     const val BRIEFING = "briefing"
     const val RECORDING = "recording"
+    const val FAMILY = "family"
+    const val CONNECTION = "connection"
 }
 
 object Notifications {
@@ -29,6 +32,9 @@ object Notifications {
     const val ID_ASSISTANT = 1003
     const val ID_BRIEFING = 1004
     const val ID_REARM = 1005
+    const val ID_CONNECTED = 1006
+    const val ID_FAMILY_SUMMARY = 1007
+    private const val GROUP_FAMILY = "app.kairo.android.FAMILY"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -61,16 +67,26 @@ object Notifications {
                     description = "Grabación de reuniones en curso"
                     setShowBadge(false)
                 },
+                NotificationChannel(Channels.FAMILY, "Familia", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Mensajes de tu familia, tareas que te asignan y cambios en lo compartido"
+                    enableVibration(true)
+                },
+                NotificationChannel(Channels.CONNECTION, "Conexión directa", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Indicador permanente mientras Kairo mantiene la conexión con tu servidor"
+                    setShowBadge(false)
+                },
             ),
         )
     }
 
-    fun openApp(context: Context, destination: String? = null): PendingIntent =
+    /** Abre la app en [destination]; con [noticeId], además marca ese aviso de la familia como leído. */
+    fun openApp(context: Context, destination: String? = null, noticeId: String? = null): PendingIntent =
         PendingIntent.getActivity(
-            context, destination.hashCode(),
+            context, (destination + (noticeId ?: "")).hashCode(),
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 destination?.let { putExtra(MainActivity.EXTRA_DESTINATION, it) }
+                noticeId?.let { putExtra(MainActivity.EXTRA_NOTICE, it) }
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -122,4 +138,45 @@ object Notifications {
             .build()
 
     fun reminderNotificationId(id: String) = id.hashCode()
+
+    /** Aviso de la familia; si ya hay otros en la bandeja, se agrupan bajo un resumen. */
+    fun showFamilyNotice(context: Context, n: NoticeAlert) {
+        val builder = NotificationCompat.Builder(context, Channels.FAMILY)
+            .setSmallIcon(R.drawable.ic_stat_kairo)
+            .setColor(0xFFF0A23B.toInt())
+            .setContentTitle(n.title)
+            .setCategory(if (n.kind == "message") NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_SOCIAL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(GROUP_FAMILY)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, n.destination, n.id))
+        if (n.body.isNotBlank()) builder.setContentText(n.body).setStyle(NotificationCompat.BigTextStyle().bigText(n.body))
+        show(context, n.notificationId, builder.build())
+
+        val nm = context.getSystemService(NotificationManager::class.java)
+        val active = runCatching { nm.activeNotifications.filter { it.notification.group == GROUP_FAMILY && it.id != ID_FAMILY_SUMMARY } }.getOrDefault(emptyList())
+        if (active.size >= 2) {
+            val titles = active.mapNotNull { it.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() }
+            show(context, ID_FAMILY_SUMMARY, familySummary(context, active.size, titles))
+        }
+    }
+
+    /**
+     * Resumen de varios avisos de la familia: encabeza el grupo en la bandeja o, con
+     * [groupSummary] en false, reemplaza a muchos avisos que trae de golpe la sincronización.
+     */
+    fun familySummary(context: Context, count: Int, titles: List<String>, groupSummary: Boolean = true): Notification {
+        val style = NotificationCompat.InboxStyle().setSummaryText("Familia")
+        titles.take(5).forEach { style.addLine(it) }
+        val builder = NotificationCompat.Builder(context, Channels.FAMILY)
+            .setSmallIcon(R.drawable.ic_stat_kairo)
+            .setColor(0xFFF0A23B.toInt())
+            .setContentTitle("$count avisos de la familia")
+            .setContentText(titles.take(3).joinToString(", "))
+            .setStyle(style)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, "family"))
+        if (groupSummary) builder.setGroup(GROUP_FAMILY).setGroupSummary(true)
+        return builder.build()
+    }
 }

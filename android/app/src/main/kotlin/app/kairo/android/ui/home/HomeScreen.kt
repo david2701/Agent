@@ -89,6 +89,13 @@ import app.kairo.android.ui.components.Pill
 import app.kairo.android.ui.components.PriorityTag
 import app.kairo.android.ui.components.SectionHeader
 import app.kairo.android.ui.components.SkeletonList
+import app.kairo.android.ui.components.rememberFamily
+import app.kairo.android.ui.components.sharedLabel
+import app.kairo.android.ui.family.FamilyHomeCard
+import app.kairo.android.sync.ServerEvents
+import app.kairo.core.model.FamilyInfo
+import app.kairo.core.model.Notice
+import app.kairo.core.model.NoticesResponse
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.android.voice.VoicePhase
 import app.kairo.android.voice.VoiceState
@@ -99,12 +106,23 @@ import app.kairo.core.util.timeLabel
 import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.launch
 
-class HomeViewModel(graph: AppGraph) : ResourceViewModel<TodayData>(graph, setOf("event", "task", "reminder", "note", "list")) {
-    override suspend fun load(): TodayData = graph.api.today().also {
-        runCatching { graph.prefs.saveTodayCache(graph.api.json.encodeToString(TodayData.serializer(), it)) }
+class HomeViewModel(graph: AppGraph) : ResourceViewModel<TodayData>(graph, setOf("event", "task", "reminder", "note", "list", "notice", "family")) {
+    /** Últimos avisos sin leer de la familia para la tarjeta "Familia". */
+    val notices = kotlinx.coroutines.flow.MutableStateFlow<NoticesResponse?>(null)
+
+    override suspend fun load(): TodayData {
+        runCatching { graph.api.notices(unread = true, limit = 3) }.onSuccess { notices.value = it }
+        return graph.api.today().also {
+            runCatching { graph.prefs.saveTodayCache(graph.api.json.encodeToString(TodayData.serializer(), it)) }
+        }
     }
 
     init { refresh() }
+
+    fun openNotice(n: Notice) {
+        notices.value = notices.value?.let { r -> NoticesResponse(r.notices.filter { it.id != n.id }, (r.unread - 1).coerceAtLeast(0)) }
+        mutate { graph.api.markNoticesRead(listOf(n.id)) }
+    }
 
     fun done(r: Reminder) = mutate("Hecho") { graph.api.reminderDone(r.id) }
     fun snooze(r: Reminder) = mutate("Te aviso en 10 minutos") { graph.api.reminderSnooze(r.id, 10) }
@@ -140,6 +158,12 @@ fun HomeScreen(graph: AppGraph, session: Session, navigate: (Destination) -> Uni
     }
 
     val name = session.user.displayName.split(' ').first()
+    val family = rememberFamily(graph)
+    val notices by vm.notices.collectAsState()
+    val familyCard = FamilyCardModel(family, notices) { n ->
+        vm.openNotice(n)
+        navigate(Destination.fromRoute(ServerEvents.destinationFor(n.entityType)) ?: Destination.Family)
+    }
 
     when {
         tabletop -> TabletopHome(voice, name, state.data, onTalk, onAsk = { graph.voice.ask(it, speak = false) }, onClear = graph.voice::clearResult, navigate = navigate)
@@ -150,10 +174,10 @@ fun HomeScreen(graph: AppGraph, session: Session, navigate: (Destination) -> Uni
                 VoicePanel(voice, onTalk, onAsk = { graph.voice.ask(it, speak = false) }, onClear = graph.voice::clearResult, navigate = navigate, orbSize = 240.dp)
             }
             Box(Modifier.weight(1.1f).fillMaxHeight()) {
-                TodayList(state.data, state.loading, state.error, vm, navigate, PaddingValues(top = 24.dp, end = 24.dp, bottom = 24.dp, start = 8.dp), header = null)
+                TodayList(state.data, state.loading, state.error, vm, navigate, familyCard, PaddingValues(top = 24.dp, end = 24.dp, bottom = 24.dp, start = 8.dp), header = null)
             }
         }
-        else -> TodayList(state.data, state.loading, state.error, vm, navigate, PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp), header = {
+        else -> TodayList(state.data, state.loading, state.error, vm, navigate, familyCard, PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp), header = {
             Column(Modifier.statusBarsPadding().padding(top = 16.dp)) {
                 Greeting(name, state.data)
                 Spacer(Modifier.height(16.dp))
@@ -305,6 +329,9 @@ internal fun TabletopHome(
     }
 }
 
+/** Lo que necesita la tarjeta "Familia" de Hoy. */
+private class FamilyCardModel(val family: FamilyInfo?, val notices: NoticesResponse?, val onNotice: (Notice) -> Unit)
+
 @Composable
 private fun TodayList(
     data: TodayData?,
@@ -312,6 +339,7 @@ private fun TodayList(
     error: String?,
     vm: HomeViewModel,
     navigate: (Destination) -> Unit,
+    familyCard: FamilyCardModel,
     padding: PaddingValues,
     header: (@Composable () -> Unit)?,
 ) {
@@ -335,6 +363,8 @@ private fun TodayList(
             items(d.firedReminders, key = { "f" + it.id }) { r -> ReminderRow(r, onDone = { vm.done(r) }, onSnooze = { vm.snooze(r) }, highlight = true) }
         }
 
+        item(key = "family") { FamilyHomeCard(familyCard.family, familyCard.notices, onOpen = { navigate(Destination.Family) }, onNotice = familyCard.onNotice) }
+
         item { SectionHeader("Agenda", action = "Calendario", onAction = { navigate(Destination.Calendar) }) }
         if (d.events.isEmpty()) {
             item { Text("Sin eventos hoy", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp)) }
@@ -347,7 +377,8 @@ private fun TodayList(
                     )
                     Column(Modifier.weight(1f)) {
                         Text(e.title, style = MaterialTheme.typography.bodyLarge)
-                        if (e.location.isNotBlank()) Text(e.location, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val meta = listOfNotNull(e.location.takeIf { it.isNotBlank() }, sharedLabel(e.shared, e.ownerId, familyCard.family)).joinToString(" · ")
+                        if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

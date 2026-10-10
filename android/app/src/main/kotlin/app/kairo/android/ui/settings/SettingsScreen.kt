@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -59,12 +60,17 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.kairo.android.AppGraph
 import app.kairo.android.BuildConfig
+import app.kairo.android.service.ConnectionService
 import app.kairo.android.service.ListeningService
+import app.kairo.android.ui.Destination
 import app.kairo.android.ui.common.ResourceViewModel
+import app.kairo.android.ui.common.friendly
 import app.kairo.android.ui.components.ErrorBanner
+import app.kairo.android.ui.components.rememberFamily
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.android.voice.WakeModelManager
 import app.kairo.core.model.Device
+import app.kairo.core.model.PushConfig
 import app.kairo.core.model.SettingsResponse
 import app.kairo.core.model.VoiceOption
 import app.kairo.core.net.KairoApi.Companion.obj
@@ -74,10 +80,13 @@ import app.kairo.core.util.toInstantOrNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
 
-data class SettingsData(val server: SettingsResponse, val voices: List<VoiceOption>, val devices: List<Device>)
+data class SettingsData(val server: SettingsResponse, val voices: List<VoiceOption>, val devices: List<Device>, val push: PushConfig?)
 
 class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph, setOf("settings")) {
-    override suspend fun load() = SettingsData(graph.api.settings(), runCatching { graph.api.voices().voices }.getOrDefault(emptyList()), graph.api.devices())
+    override suspend fun load() = SettingsData(
+        graph.api.settings(), runCatching { graph.api.voices().voices }.getOrDefault(emptyList()), graph.api.devices(),
+        runCatching { graph.api.pushConfig() }.getOrNull(),
+    )
     init { refresh() }
 
     fun patch(block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = mutate { graph.api.updateSettings(obj(block)) }
@@ -89,8 +98,33 @@ class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph
     fun revoke(d: Device) = mutate("Sesión cerrada en ${d.name}") { graph.api.revokeDevice(d.id) }
     fun logout() = viewModelScope.launch {
         ListeningService.stop(graph.app)
+        ConnectionService.stop(graph.app)
         graph.prefs.setWakeWord(false)
+        graph.prefs.setDirectConnection(false)
+        // El servidor olvida el endpoint de push antes de cerrar la sesión (necesita el token)
+        graph.push.unregister()
         graph.api.logout()
+    }
+
+    /** "Enviar prueba": un aviso sólo por push para comprobar que llega con la app cerrada. */
+    fun testPush() = viewModelScope.launch {
+        runCatching { graph.push.test() }
+            .onSuccess { n ->
+                say(
+                    when (n) {
+                        0 -> "Ningún teléfono tiene el push registrado todavía"
+                        1 -> "Prueba enviada: la aceptó 1 dispositivo"
+                        else -> "Prueba enviada: la aceptaron $n dispositivos"
+                    },
+                )
+                refresh(silent = true)
+            }
+            .onFailure { say(it.friendly()) }
+    }
+
+    fun setDirectConnection(on: Boolean) = viewModelScope.launch {
+        graph.prefs.setDirectConnection(on)
+        if (on) ConnectionService.start(graph.app) else ConnectionService.stop(graph.app)
     }
 
     /** Activa la escucha continua: descarga el modelo si falta y arranca el servicio. */
@@ -107,25 +141,30 @@ class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph
 }
 
 @Composable
-fun SettingsScreen(graph: AppGraph, session: Session) {
+fun SettingsScreen(graph: AppGraph, session: Session, navigate: (Destination) -> Unit = {}) {
     val vm: SettingsViewModel = viewModel { SettingsViewModel(graph) }
     val state by vm.state.collectAsState()
     val local by graph.prefs.settings.collectAsState(initial = app.kairo.android.data.LocalSettings())
     val modelStatus by graph.wakeModel.status.collectAsState()
     val context = LocalContext.current
+    val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
+    val family = rememberFamily(graph)
+    val push by graph.push.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     // Estado de permisos del sistema (se reevalúa al volver de Ajustes de Android)
     var tick by remember { mutableIntStateOf(0) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++; graph.push.refreshState() }
     val perms = remember(tick) { SystemStatus.read(context) }
 
     val wakePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         if (res[Manifest.permission.RECORD_AUDIO] == true) vm.enableWakeWord()
     }
     val locationPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
+    // La conexión directa funciona sin este permiso, pero sin él la notificación fija no se ve
+    val connectionPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.setDirectConnection(true) }
     var pickTime by remember { mutableStateOf(false) }
     var pickVoice by remember { mutableStateOf(false) }
 
@@ -202,6 +241,49 @@ fun SettingsScreen(graph: AppGraph, session: Session) {
                 }
             }
 
+            item {
+                Group("Avisos al instante, sin Firebase") {
+                    val label = push.distributorLabel ?: push.distributor
+                    StatusRow(
+                        "Push propio",
+                        when {
+                            label != null && push.registered -> "Activo con $label: los avisos llegan aunque Kairo esté cerrado."
+                            label != null && push.working -> "Registrando este teléfono con $label..."
+                            label != null -> "Usando $label. Toca Configurar para registrar este teléfono en tu servidor."
+                            push.installed.isNotEmpty() -> "Hay un distribuidor instalado. Toca Configurar para usarlo."
+                            else -> "No hay un distribuidor en este teléfono."
+                        },
+                        if (push.working) null else "Configurar",
+                    ) { activity?.let(graph.push::configure) }
+                    push.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    state.data?.push?.let { p ->
+                        Text(
+                            when (p.registeredDevices) {
+                                0 -> "Aún no hay teléfonos con push en tu cuenta."
+                                1 -> "1 teléfono con push en tu cuenta."
+                                else -> "${p.registeredDevices} teléfonos con push en tu cuenta."
+                            },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedButton(onClick = { vm.testPush() }) { Text("Enviar prueba") }
+                    Text(
+                        "Instala ntfy (F-Droid o Play Store), apúntalo a tu propio servidor ntfy (el del perfil push del docker compose de Kairo) y vuelve aquí para tocar Configurar.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Divider()
+                    ToggleRow(
+                        "Conexión directa con tu servidor",
+                        "Sin ntfy ni \"Oye Kairo\": Kairo queda conectado con una notificación fija. Gasta algo más de batería.",
+                        checked = local.directConnection,
+                    ) { on ->
+                        if (on && Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            connectionPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else vm.setDirectConnection(on)
+                    }
+                }
+            }
+
             if (s != null) item {
                 Group("Asistente") {
                     val voiceName = state.data?.voices?.firstOrNull { it.id == s.voice }?.name ?: s.voice
@@ -216,6 +298,17 @@ fun SettingsScreen(graph: AppGraph, session: Session) {
                     Divider()
                     Text("Modelo: ${s.chatModel} (respaldo ${s.fallbackModel})", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Ciudad para el clima: ${s.homeCity ?: "sin configurar (cámbiala en el dashboard)"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            item {
+                Group("Familia") {
+                    val subtitle = when {
+                        family == null -> "Miembros, invitaciones y avisos de tu hogar."
+                        family.others.isEmpty() && family.isAdmin -> "Solo estás tú. Invita a tu familia para compartir listas, eventos y tareas."
+                        else -> (if (family.members.size == 1) "1 miembro" else "${family.members.size} miembros") + if (family.isAdmin) " · administras la familia" else ""
+                    }
+                    StatusRow(family?.household?.name ?: "Familia", subtitle, "Abrir") { navigate(Destination.Family) }
                 }
             }
 

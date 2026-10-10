@@ -10,9 +10,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.kairo.android.ui.KairoAppUi
@@ -29,6 +40,8 @@ import app.kairo.core.model.EntityRef
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -88,12 +101,44 @@ class ScreenshotTest {
         return Json { ignoreUnknownKeys = true }.decodeFromString(AuthResponse.serializer(), body)
     }
 
-    private fun app(route: String, dark: Boolean, qualifiers: String, waitFor: String, name: String) {
+    /** Petición autenticada como el usuario de prueba (para preparar y limpiar datos de una captura). */
+    private fun call(method: String, path: String, body: String? = null): String {
+        val token = graph.session.accessToken ?: error("Sin sesión")
+        val c = URL("$server/api$path").openConnection() as HttpURLConnection
+        c.requestMethod = method
+        c.setRequestProperty("Authorization", "Bearer $token")
+        if (body != null) {
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray()) }
+        }
+        return (if (c.responseCode < 400) c.inputStream else c.errorStream).bufferedReader().readText()
+    }
+
+    private fun waitText(text: String) {
+        compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun settle() = repeat(8) { Thread.sleep(250); compose.waitForIdle() }
+
+    private fun app(route: String, dark: Boolean, qualifiers: String, waitFor: String, name: String, before: () -> Unit = {}) {
         RuntimeEnvironment.setQualifiers(qualifiers)
         compose.setContent { KairoTheme(dark = dark) { KairoAppUi(graph, route) {} } }
-        compose.waitUntil(30_000) { compose.onAllNodesWithText(waitFor, substring = true).fetchSemanticsNodes().isNotEmpty() }
-        repeat(8) { Thread.sleep(250); compose.waitForIdle() }
+        waitText(waitFor)
+        settle()
+        before()
         compose.onRoot().captureRoboImage("$out/$name.png")
+    }
+
+    /** Desplaza la lista principal hasta que [text] quede arriba, debajo de la barra de estado. */
+    private fun scrollTo(text: String) {
+        val list = compose.onAllNodes(hasScrollToNodeAction()).onFirst()
+        list.performScrollToNode(hasText(text))
+        compose.waitForIdle()
+        val top = compose.onAllNodesWithText(text).onFirst().fetchSemanticsNode().boundsInRoot.top
+        val margin = with(compose.density) { 40.dp.toPx() }
+        list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, top - margin) }
+        settle()
     }
 
     @Test fun homePhoneDark() = app("home", true, PHONE, "Tu día", "hoy-telefono-oscuro")
@@ -109,6 +154,76 @@ class ScreenshotTest {
     @Test fun memoryPhone() = app("memory", true, PHONE, "Sofía", "memoria-telefono")
     @Test fun settingsPhone() = app("settings", true, PHONE, "Para que funcione siempre", "ajustes-telefono")
     @Test fun activityPhone() = app("activity", false, PHONE, "Deshacer", "actividad-telefono-claro")
+
+    // --- Familia
+    @Test fun familyPhone() = app("family", true, PHONE, "Novedades", "familia-telefono")
+    @Test fun familyFoldOpen() = app("family", true, FOLD_OPEN, "Novedades", "familia-fold-abierto")
+    @Test fun homeFamilyPhone() = app("home", true, PHONE, "Tu día", "hoy-familia-telefono") { scrollTo("Familia") }
+    @Test fun settingsPushPhone() = app("settings", true, PHONE, "Para que funcione siempre", "ajustes-push-telefono") { scrollTo("Avisos al instante, sin Firebase") }
+
+    @Test
+    fun tasksFamilyPhone() = app("tasks", true, PHONE, "Por hacer", "tareas-familia-telefono") {
+        compose.onNodeWithText("Familiares").performClick()
+        settle()
+    }
+
+    @Test
+    fun calendarFamilyFoldOpen() = app("calendar", true, FOLD_OPEN, "Octubre", "calendario-familia-fold-abierto") {
+        // Un día con un evento familiar que agendó otro miembro
+        compose.onNodeWithContentDescription("Miércoles 14 de octubre", substring = true).performClick()
+        waitText("Reunión de padres")
+        settle()
+    }
+
+    @Test
+    fun taskAssigneePhone() = app("tasks", true, PHONE, "Recoger a Sofía", "tareas-responsable-telefono") {
+        compose.onNodeWithText("Recoger a Sofía en el colegio").performClick()
+        waitText("Responsable")
+        settle()
+    }
+
+    /** Invitación creada desde la app: el código grande y "Compartir invitación" (se revoca al terminar). */
+    @Test
+    fun inviteCodePhone() {
+        fun pendingIds() = (Json.parseToJsonElement(call("GET", "/family/invites")) as kotlinx.serialization.json.JsonArray)
+            .map { it.jsonObject }.filter { it["usedAt"]?.jsonPrimitive?.content in listOf(null, "null") }
+            .map { it["id"]!!.jsonPrimitive.content }.toSet()
+        val before = pendingIds()
+        try {
+            app("family", true, PHONE, "Novedades", "familia-invitar-telefono") {
+                compose.onNodeWithText("Invitar").performClick()
+                waitText("Invitar a la familia")
+                compose.onNodeWithTag("invite-name").performTextInput("Sofía")
+                compose.onNodeWithText("Crear invitación").performClick()
+                waitText("Compartir invitación")
+                settle()
+            }
+        } finally {
+            (pendingIds() - before).forEach { call("DELETE", "/family/invites/$it") }
+        }
+    }
+
+    /** Formulario para unirse tras revisar un código real (la invitación se revoca al terminar). */
+    @Test
+    fun joinPhone() {
+        val created = Json.parseToJsonElement(call("POST", "/family/invites", """{"name":"Sofía","role":"member"}""")).jsonObject
+        val code = created["code"]!!.jsonPrimitive.content
+        val inviteId = created["invitation"]!!.jsonObject["id"]!!.jsonPrimitive.content
+        try {
+            RuntimeEnvironment.setQualifiers(PHONE)
+            compose.setContent { KairoTheme(dark = true) { LoginScreen(graph) } }
+            compose.waitForIdle()
+            compose.onNodeWithText("Tengo un código").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithTag("invite-code").performTextInput(code.lowercase().replace("-", ""))
+            compose.onNodeWithText("Continuar").performClick()
+            waitText("Te invitaron")
+            settle()
+            compose.onRoot().captureRoboImage("$out/unirse-telefono.png")
+        } finally {
+            call("DELETE", "/family/invites/$inviteId")
+        }
+    }
 
     @Test
     fun loginPhone() {

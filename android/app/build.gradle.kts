@@ -46,6 +46,8 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.systemProperty("kairo.screenshots", rootProject.file("../docs/screenshots/android").absolutePath)
+                // Las capturas muestran las horas como las ve la familia de prueba (Medellín), no en UTC
+                it.systemProperty("user.timezone", System.getenv("KAIRO_TEST_TZ") ?: "America/Bogota")
                 System.getenv("ROBOLECTRIC_REPO")?.let { repo -> it.systemProperty("robolectric.dependency.repo.url", repo) }
                 it.maxHeapSize = "3g"
                 it.jvmArgs(
@@ -109,6 +111,9 @@ dependencies {
 
     implementation(libs.vosk.android)
     implementation("${libs.jna.get().module}:${libs.versions.jna.get()}@aar")
+
+    // Push propio sin Firebase (UnifiedPush; descifra Web Push RFC 8291 con Tink)
+    implementation(libs.unifiedpush.connector)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

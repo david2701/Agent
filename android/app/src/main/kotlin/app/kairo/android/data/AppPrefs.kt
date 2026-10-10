@@ -20,6 +20,8 @@ data class LocalSettings(
     val speakChatReplies: Boolean = false,
     /** Sonidos breves al empezar y terminar de escuchar. */
     val earcons: Boolean = true,
+    /** Servicio ligero que mantiene el WebSocket abierto para recibir avisos sin ntfy ni "Oye Kairo". */
+    val directConnection: Boolean = false,
 )
 
 /** Preferencias y cachés locales del teléfono (no viajan al servidor). */
@@ -31,6 +33,7 @@ class AppPrefs(private val context: Context) {
             followUp = it[FOLLOW] ?: true,
             speakChatReplies = it[SPEAK] ?: false,
             earcons = it[EARCONS] ?: true,
+            directConnection = it[DIRECT] ?: false,
         )
     }
 
@@ -40,6 +43,11 @@ class AppPrefs(private val context: Context) {
     suspend fun setFollowUp(v: Boolean) = context.appStore.edit { it[FOLLOW] = v }
     suspend fun setSpeakChatReplies(v: Boolean) = context.appStore.edit { it[SPEAK] = v }
     suspend fun setEarcons(v: Boolean) = context.appStore.edit { it[EARCONS] = v }
+    suspend fun setDirectConnection(v: Boolean) = context.appStore.edit { it[DIRECT] = v }
+
+    /** Última familia recibida: los nombres aparecen al instante, incluso sin conexión. */
+    suspend fun saveFamilyCache(json: String?) = context.appStore.edit { if (json == null) it.remove(FAMILY) else it[FAMILY] = json }
+    suspend fun familyCache(): String? = context.appStore.data.first()[FAMILY]
 
     /** Último "Hoy" recibido, para el widget. */
     suspend fun saveTodayCache(json: String) = context.appStore.edit { it[TODAY] = json }
@@ -57,6 +65,8 @@ class AppPrefs(private val context: Context) {
         private val FOLLOW = booleanPreferencesKey("follow_up")
         private val SPEAK = booleanPreferencesKey("speak_chat")
         private val EARCONS = booleanPreferencesKey("earcons")
+        private val DIRECT = booleanPreferencesKey("direct_connection")
+        private val FAMILY = stringPreferencesKey("family_cache")
         private val TODAY = stringPreferencesKey("today_cache")
         private val ALARMS = stringPreferencesKey("scheduled_alarms")
         private val GEOFENCES = stringPreferencesKey("geofences")
@@ -78,4 +88,7 @@ class FiredLog(context: Context) {
         editor.apply()
         return true
     }
+
+    /** Avisos de la familia: el mismo id llega por WebSocket, push y sincronización; se muestra una vez. */
+    fun markNoticeIfNew(noticeId: String): Boolean = markIfNew("notice:$noticeId", 0)
 }

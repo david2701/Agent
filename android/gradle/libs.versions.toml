@@ -19,6 +19,7 @@ coroutines = "1.11.0"
 coil = "3.6.3"
 vosk = "0.3.75"
 jna = "5.19.1"
+unifiedpush = "3.3.5"
 wearCompose = "1.7.1"
 junit = "4.13.2"
 robolectric = "4.17"
@@ -61,6 +62,7 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "vosk" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "unifiedpush" }
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
 wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
 junit = { module = "junit:junit", version.ref = "junit" }

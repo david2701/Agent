@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Conexión directa opcional con el servidor propio (sin Firebase ni ntfy) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -111,6 +113,26 @@
             android:name=".recording.MeetingRecorderService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- Conexión directa: solo mantiene el WebSocket con el servidor del usuario; se activa en Ajustes -->
+        <service
+            android:name=".service.ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:label="@string/connection_service_label">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a WebSocket open to the user's self-hosted Kairo server to deliver reminders and family notices without Firebase. Opt-in from settings." />
+        </service>
+
+        <!-- Push propio con UnifiedPush (ntfy u otro distribuidor); el conector lo enlaza internamente -->
+        <service
+            android:name=".push.KairoPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".tile.TalkTileService"

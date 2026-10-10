@@ -24,6 +24,7 @@ private val DESCRIPTIONS = mapOf(
     Destination.Reminders to "Avisos por hora y por lugar",
     Destination.Calendar to "Tu agenda y Google Calendar",
     Destination.Lists to "Súper, farmacia, viajes",
+    Destination.Family to "Miembros, invitaciones y avisos",
     Destination.Memory to "Lo que Kairo sabe de ti",
     Destination.Recordings to "Reuniones resumidas",
     Destination.Activity to "Historial y deshacer",

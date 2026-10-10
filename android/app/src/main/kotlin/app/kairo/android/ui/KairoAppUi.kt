@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.NotificationsNone
@@ -41,6 +42,7 @@ import app.kairo.android.AppGraph
 import app.kairo.android.ui.activity.ActivityScreen
 import app.kairo.android.ui.calendar.CalendarScreen
 import app.kairo.android.ui.chat.ChatScreen
+import app.kairo.android.ui.family.FamilyScreen
 import app.kairo.android.ui.home.HomeScreen
 import app.kairo.android.ui.lists.ListsScreen
 import app.kairo.android.ui.login.LoginScreen
@@ -61,6 +63,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
     Reminders("Recordatorios", Icons.Rounded.NotificationsNone),
     Calendar("Calendario", Icons.Rounded.CalendarMonth),
     Lists("Listas", Icons.Rounded.ShoppingBasket),
+    Family("Familia", Icons.Rounded.Groups),
     Memory("Memoria", Icons.Rounded.Psychology),
     Recordings("Grabaciones", Icons.Rounded.GraphicEq),
     Activity("Actividad", Icons.Rounded.History),
@@ -70,8 +73,8 @@ enum class Destination(val label: String, val icon: ImageVector) {
     companion object {
         val compactBar = listOf(Home, Chat, Tasks, Notes, More)
         val rail = listOf(Home, Chat, Tasks, Notes, Reminders, Calendar, Lists, More)
-        val inMore = listOf(Reminders, Calendar, Lists, Memory, Recordings, Activity, Settings)
-        val inMoreWide = listOf(Memory, Recordings, Activity, Settings)
+        val inMore = listOf(Reminders, Calendar, Lists, Family, Memory, Recordings, Activity, Settings)
+        val inMoreWide = listOf(Family, Memory, Recordings, Activity, Settings)
 
         fun fromRoute(route: String?): Destination? = when (route) {
             "home", "rearm" -> Home
@@ -81,6 +84,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
             "reminders" -> Reminders
             "calendar" -> Calendar
             "lists" -> Lists
+            "family" -> Family
             "memory" -> Memory
             "recordings" -> Recordings
             "activity" -> Activity
@@ -96,6 +100,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
             "event" -> Calendar
             "memory" -> Memory
             "recording" -> Recordings
+            "family", "notice" -> Family
             else -> Home
         }
     }
@@ -159,7 +164,8 @@ private fun MainScaffold(graph: AppGraph, session: Session, deepLink: String?, o
                 Destination.Memory -> MemoryScreen(graph)
                 Destination.Recordings -> RecordingsScreen(graph, navigate)
                 Destination.Activity -> ActivityScreen(graph)
-                Destination.Settings -> SettingsScreen(graph, session)
+                Destination.Family -> FamilyScreen(graph, session, navigate)
+                Destination.Settings -> SettingsScreen(graph, session, navigate)
                 Destination.More -> MoreScreen(navigate, if (wide) Destination.inMoreWide else Destination.inMore)
             }
         }

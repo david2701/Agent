@@ -15,6 +15,7 @@ normales, plegables (Galaxy Z Fold/Flip, Pixel Fold) y tablets, y trae una app p
    de depuración para instalación directa; para publicar en Play Store define tu propio keystore.
 2. Instala en el teléfono (`adb install app-release.apk` o abriendo el archivo).
 3. Abre Kairo, escribe la URL de tu servidor (`https://kairo.tudominio.com`), tu correo y contraseña.
+   Si te invitaron a una familia (o te dieron un código de acceso), toca **Tengo un código**.
 
 ## Primeros pasos recomendados (Ajustes)
 
@@ -26,6 +27,8 @@ normales, plegables (Galaxy Z Fold/Flip, Pixel Fold) y tablets, y trae una app p
 | **Alarmas exactas** | Los recordatorios suenan a la hora exacta incluso sin internet. |
 | **Ubicación "todo el tiempo"** | Opcional, para avisos al llegar o salir de lugares guardados. |
 | **Vincular reloj** | Genera un código de 6 dígitos para iniciar sesión en Wear OS. |
+| **Avisos al instante, sin Firebase** | Conecta Kairo con la app ntfy (UnifiedPush) para recibir avisos con la app cerrada. |
+| **Familia** | Miembros, invitaciones y avisos del hogar (también en *Más > Familia*). |
 
 Otros accesos: **tile** de ajustes rápidos "Kairo", **widget** con tu día y botón de hablar,
 **atajo** al mantener pulsado el ícono, y **Compartir > Guardar en Kairo** desde cualquier app
@@ -45,23 +48,65 @@ Reglas de Android que debes conocer:
   Kairo muestra una notificación; tócala (o abre la app) y vuelve a quedar atento.
 - La detección de voz por hardware del sistema (la de "Ok Google") está reservada a apps del sistema; por eso Kairo usa su propio detector.
 
+## Familia
+
+Un hogar con varios perfiles. Cada quien tiene lo suyo y comparte lo que marca como **familiar**:
+eventos, listas, tareas, notas y lugares. Lo personal es privado, también para quien administra.
+
+- **Unirse**: en el login, *Tengo un código* revisa el código (`XXXX-XXXX`, da igual mayúsculas, espacios o guion)
+  y muestra "Te invitaron a Familia ...": nombre (ya escrito), correo y contraseña de al menos 10 caracteres.
+  Con un **código de acceso** (contraseña olvidada) pide solo la contraseña nueva y cierra las otras sesiones.
+- **Pantalla Familia** (*Más* o *Ajustes*): nombre del hogar, miembros con su rol y "Tú", invitaciones pendientes,
+  "Avisar a la familia" (mensaje que llega como notificación) y **Novedades** con "Marcar todo leído".
+  Quien administra invita (nombre y rol), ve el código en grande con **Compartir invitación** (hoja de compartir de
+  Android con el enlace y el código), revoca invitaciones, genera códigos de acceso, cambia roles y quita miembros
+  (se borra su cuenta y lo personal; lo que había compartido pasa a quien lo quita).
+- **En cada pantalla**: Notas (filtro Todas, Mías, Familiares e insignia "Familiar" o "de Valentina"), Tareas
+  (Familiar, **Responsable** con iniciales en la tarjeta y el tablero, filtro "Asignadas a mí"), Listas, Calendario
+  ("Evento familiar" al crear o editar y "agendado por"), Recordatorios (**Para**: tú u otro miembro; "Para X" o "De X")
+  y Lugares (en Recordatorios). Solo quien creó algo puede dejar de compartirlo.
+- **Hoy** muestra una tarjeta "Familia" con los últimos avisos sin leer (no aparece si estás solo; a quien
+  administra le propone invitar).
+- La familia se guarda en caché para mostrar nombres al instante y se recarga al abrir la app, al iniciar sesión
+  y cuando el servidor avisa un cambio (`entity.changed: family`).
+
 ## Avisos sin Firebase
 
-Kairo no usa Firebase ni servicios de Google para notificar:
-1. **Alarmas locales exactas**: el teléfono programa tus recordatorios (y los recurrentes) y suenan sin conexión.
-2. **WebSocket** con tu servidor mientras la app está abierta o la escucha activa: avisos al instante y
-   todo se actualiza en vivo (si creas algo en el dashboard, aparece en el teléfono).
-3. **Sincronización** cada 15 minutos con WorkManager.
-4. Opcional: **ntfy** autoalojado (`NTFY_URL`, `NTFY_TOPIC`) como canal adicional.
+Kairo no usa Firebase ni servicios de Google para notificar. Hay tres niveles y conviven: cada aviso tiene un id
+y el teléfono no lo muestra dos veces (sin importar si llegó por push, WebSocket, alarma local o sincronización).
+
+| Nivel | Cuándo llega | Qué hace falta |
+|---|---|---|
+| **1. Push propio (UnifiedPush)** | Al instante, con Kairo cerrado y sin gastar batería extra | La app **ntfy** (F-Droid o Play Store) apuntando a tu ntfy (perfil `push` del `docker-compose.yml`) |
+| **2. Conexión directa o "Oye Kairo"** | Al instante mientras el servicio corre | Activar *Conexión directa con tu servidor* (o la escucha); usa algo más de batería |
+| **3. Alarmas locales y sincronización** | Recordatorios, avisos de eventos y resumen a su hora aunque no haya internet; el resto en la siguiente sincronización (15 min) | Nada |
+
+1. **Push propio**: en *Ajustes > Avisos al instante, sin Firebase* toca **Configurar**; Kairo usa el distribuidor
+   instalado (ntfy) y le pide un endpoint con la clave VAPID de tu servidor. El endpoint y las claves de cifrado
+   (`p256dh`, `auth`) se registran en `POST /api/push/register`. El servidor cifra cada aviso para este teléfono
+   (RFC 8291) y el conector lo descifra; el contenido es el mismo `{type, data}` del WebSocket y pasa por el mismo
+   manejador. **Enviar prueba** dice cuántos dispositivos aceptaron el aviso. Al abrir la app y al iniciar sesión
+   se renueva el registro; al cerrar sesión se borra. Detalles del servidor en [PUSH.md](PUSH.md).
+2. **Conexión directa**: servicio en primer plano ligero (tipo `specialUse`) que solo mantiene abierto el WebSocket,
+   con la notificación fija "Kairo conectado". Nunca arranca solo: lo activas tú y vuelve tras reiniciar.
+   El servicio de "Oye Kairo" también mantiene esta conexión, igual que la app abierta.
+3. **Alarmas locales exactas** para recordatorios (también los recurrentes y los que otro miembro te programó,
+   con "De Valentina") y avisos de eventos, más la **sincronización** con WorkManager: `/sync/device` trae además
+   los avisos de la familia sin leer de las últimas 48 h, y el teléfono muestra los que aún no vio.
+
+Canales de notificación: Recordatorios, Familia (mensajes, tareas asignadas y cambios en lo compartido), Resumen del
+día, Conexión directa, Escucha continua, Grabaciones y Temporizadores. Tocar un aviso de la familia abre la pantalla
+relacionada (o Familia) y lo marca como leído.
 
 Los recordatorios por lugar usan las alertas de proximidad del sistema (sin Google Play Services).
+Aparte, el servidor puede publicar en un tema de **ntfy** (`NTFY_URL`, `NTFY_TOPIC`) como canal adicional.
 
 ## Plegables
 
 | Postura | Diseño |
 |---|---|
 | Teléfono o Fold cerrado | Barra inferior; listas y detalle en pantallas separadas. |
-| Fold abierto (vertical) | Riel lateral; Hoy en dos columnas; Notas, Chat y Listas con lista y detalle lado a lado. |
+| Fold abierto (vertical) | Riel lateral; Hoy en dos columnas; Notas, Chat y Listas con lista y detalle lado a lado; Familia con miembros a la izquierda y avisos a la derecha. |
 | Fold abierto (horizontal) / tablet | Tareas como tablero de 3 columnas; calendario mensual con agenda. |
 | Modo mesa (semiabierto) | El orbe y la respuesta arriba del pliegue; teclado y micrófono abajo. |
 
@@ -75,6 +120,10 @@ Se generan sin emulador con Roborazzi contra un backend local:
 cd android
 ./gradlew :app:recordRoborazziDebug     # salida en docs/screenshots/android
 ```
+
+Usa el backend de `KAIRO_TEST_SERVER` (por defecto `http://localhost:8088`) con un solo inicio de sesión por
+ejecución. Las horas se muestran en `America/Bogota` (cámbialo con `KAIRO_TEST_TZ`). Las capturas de familia
+crean una invitación temporal y la revocan al terminar.
 
 ## Privacidad y seguridad en el teléfono
 

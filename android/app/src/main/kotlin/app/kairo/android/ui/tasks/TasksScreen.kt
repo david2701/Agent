@@ -74,8 +74,19 @@ import app.kairo.android.AppGraph
 import app.kairo.android.ui.common.ResourceViewModel
 import app.kairo.android.ui.components.EmptyState
 import app.kairo.android.ui.components.ErrorBanner
+import app.kairo.android.ui.components.MemberAvatar
 import app.kairo.android.ui.components.PriorityTag
+import app.kairo.android.ui.components.SharedBadge
+import app.kairo.android.ui.components.ShareRow
+import app.kairo.android.ui.components.SharedInfoRow
 import app.kairo.android.ui.components.SkeletonList
+import app.kairo.android.ui.components.firstNameOf
+import app.kairo.android.ui.components.hasOthers
+import app.kairo.android.ui.components.owns
+import app.kairo.android.ui.components.rememberFamily
+import app.kairo.android.ui.components.sharedLabel
+import app.kairo.android.family.FamilyStore
+import app.kairo.core.model.FamilyInfo
 import app.kairo.android.ui.theme.MonoStyle
 import app.kairo.core.model.Project
 import app.kairo.core.model.Task
@@ -92,9 +103,18 @@ import java.time.ZoneOffset
 data class TasksData(val tasks: List<Task>, val projects: List<Project>)
 
 class TasksViewModel(graph: AppGraph) : ResourceViewModel<TasksData>(graph, setOf("task", "project")) {
-    override suspend fun load() = TasksData(graph.api.tasks(includeDone = true), graph.api.projects())
+    /** Filtro "Asignadas a mí": lo resuelve el servidor (`GET /tasks?assignee=me`). */
+    val assignedToMe = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    override suspend fun load() = TasksData(graph.api.tasks(includeDone = true, assignee = if (assignedToMe.value) "me" else null), graph.api.projects())
 
     init { refresh() }
+
+    fun setAssignedToMe(on: Boolean) {
+        if (assignedToMe.value == on) return
+        assignedToMe.value = on
+        refresh()
+    }
 
     fun setStatus(t: Task, status: String) {
         updateData { d -> d.copy(tasks = d.tasks.map { if (it.id == t.id) it.copy(status = status) else it }) }
@@ -103,13 +123,16 @@ class TasksViewModel(graph: AppGraph) : ResourceViewModel<TasksData>(graph, setO
 
     fun delete(t: Task) = mutate("Tarea eliminada. Puedes deshacerlo en Actividad.") { graph.api.deleteTask(t.id) }
 
-    fun save(existing: Task?, title: String, notes: String, priority: String, due: LocalDate?, project: String?) = mutate(if (existing == null) "Tarea creada" else "Tarea guardada") {
+    fun save(existing: Task?, edit: TaskEdit) = mutate(if (existing == null) "Tarea creada" else "Tarea guardada") {
+        val (title, notes, priority, due, project) = edit
         val body = obj {
             put("title", title)
             put("notes", notes)
             put("priority", priority)
             put("dueDate", due?.let { JsonPrimitive(it.toString()) } ?: JsonNull)
             if (!project.isNullOrBlank()) put("project", project)
+            if (edit.shared) put("shared", true)
+            edit.assigneeId?.let { put("assigneeId", it) }
         }
         if (existing == null) {
             graph.api.createTask(body)
@@ -122,10 +145,24 @@ class TasksViewModel(graph: AppGraph) : ResourceViewModel<TasksData>(graph, setO
                 put("title", title); put("notes", notes); put("priority", priority)
                 put("dueDate", due?.let { JsonPrimitive(it.toString()) } ?: JsonNull)
                 put("projectId", projectId?.let { JsonPrimitive(it) } ?: JsonNull)
+                // Solo lo que cambió: compartir y asignar generan avisos para la familia
+                if (edit.shared != existing.shared) put("shared", edit.shared)
+                if (edit.assigneeId != existing.assigneeId) put("assigneeId", edit.assigneeId?.let { JsonPrimitive(it) } ?: JsonNull)
             })
         }
     }
 }
+
+/** Lo que guarda el editor de tareas. */
+data class TaskEdit(
+    val title: String,
+    val notes: String,
+    val priority: String,
+    val due: LocalDate?,
+    val project: String?,
+    val shared: Boolean = false,
+    val assigneeId: String? = null,
+)
 
 private val COLUMNS = listOf("todo" to "Por hacer", "doing" to "En curso", "done" to "Hecho")
 
@@ -139,10 +176,13 @@ fun TasksScreen(graph: AppGraph) {
 
     var tab by rememberSaveable { mutableStateOf("todo") }
     var project by rememberSaveable { mutableStateOf<String?>(null) }
+    var onlyFamily by rememberSaveable { mutableStateOf(false) }
+    val assignedToMe by vm.assignedToMe.collectAsState()
     var editing by remember { mutableStateOf<Task?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
+    val family = rememberFamily(graph)
 
-    val all = state.data?.tasks.orEmpty().filter { project == null || it.projectId == project }
+    val all = state.data?.tasks.orEmpty().filter { (project == null || it.projectId == project) && (!onlyFamily || it.shared) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -160,9 +200,14 @@ fun TasksScreen(graph: AppGraph) {
         Column(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {
             Text("Tareas", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp))
             val projects = state.data?.projects.orEmpty()
-            if (projects.isNotEmpty()) {
+            val familyFilters = family.hasOthers || state.data?.tasks.orEmpty().any { it.shared }
+            if (projects.isNotEmpty() || familyFilters) {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { FilterChip(selected = project == null, onClick = { project = null }, label = { Text("Todas") }) }
+                    item { FilterChip(selected = project == null && !onlyFamily && !assignedToMe, onClick = { project = null; onlyFamily = false; vm.setAssignedToMe(false) }, label = { Text("Todas") }) }
+                    if (familyFilters) {
+                        item { FilterChip(selected = assignedToMe, onClick = { vm.setAssignedToMe(!assignedToMe) }, label = { Text("Asignadas a mí") }) }
+                        item { FilterChip(selected = onlyFamily, onClick = { onlyFamily = !onlyFamily }, label = { Text("Familiares") }) }
+                    }
                     items(projects, key = { it.id }) { p -> FilterChip(selected = project == p.id, onClick = { project = if (project == p.id) null else p.id }, label = { Text(p.name) }) }
                 }
             }
@@ -178,7 +223,7 @@ fun TasksScreen(graph: AppGraph) {
                                     Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                     Text("${items.size}", style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                TaskColumn(items, vm, onEdit = { editing = it }, board = true)
+                                TaskColumn(items, vm, family, onEdit = { editing = it }, board = true)
                             }
                         }
                     }
@@ -194,7 +239,7 @@ fun TasksScreen(graph: AppGraph) {
                             )
                         }
                     }
-                    TaskColumn(all.filter { it.status == tab }, vm, onEdit = { editing = it }, board = false)
+                    TaskColumn(all.filter { it.status == tab }, vm, family, onEdit = { editing = it }, board = false)
                 }
             }
         }
@@ -204,9 +249,10 @@ fun TasksScreen(graph: AppGraph) {
         TaskEditor(
             task = editing,
             projects = state.data?.projects.orEmpty(),
+            family = family,
             onDismiss = { creating = false; editing = null },
-            onSave = { title, notes, priority, due, proj ->
-                vm.save(editing, title, notes, priority, due, proj)
+            onSave = { edit ->
+                vm.save(editing, edit)
                 creating = false; editing = null
             },
             onDelete = editing?.let { t -> { vm.delete(t); editing = null } },
@@ -215,18 +261,18 @@ fun TasksScreen(graph: AppGraph) {
 }
 
 @Composable
-private fun TaskColumn(tasks: List<Task>, vm: TasksViewModel, onEdit: (Task) -> Unit, board: Boolean) {
+private fun TaskColumn(tasks: List<Task>, vm: TasksViewModel, family: FamilyInfo?, onEdit: (Task) -> Unit, board: Boolean) {
     if (tasks.isEmpty()) {
         EmptyState(Icons.Rounded.TaskAlt, "Nada por aquí", if (board) "Arrastra el día a día a Kairo: \"agrega a mis tareas...\"" else "Dile a Kairo \"tengo que...\" y aparecerá aquí.")
         return
     }
     LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(tasks, key = { it.id }) { t -> TaskRow(t, vm, onEdit) }
+        items(tasks, key = { it.id }) { t -> TaskRow(t, vm, family, onEdit) }
     }
 }
 
 @Composable
-private fun TaskRow(t: Task, vm: TasksViewModel, onEdit: (Task) -> Unit) {
+private fun TaskRow(t: Task, vm: TasksViewModel, family: FamilyInfo?, onEdit: (Task) -> Unit) {
     val today = LocalDate.now()
     val due = t.dueDate?.toLocalDateOrNull()
     val overdue = due != null && due.isBefore(today) && t.status != "done"
@@ -245,13 +291,20 @@ private fun TaskRow(t: Task, vm: TasksViewModel, onEdit: (Task) -> Unit) {
                     textDecoration = if (t.status == "done") TextDecoration.LineThrough else null,
                     color = if (t.status == "done") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 )
-                if (due != null || t.projectName != null || t.priority == "urgent" || t.priority == "high" || t.priority == "low") {
-                    Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val badge = sharedLabel(t.shared, t.ownerId, family)
+                if (due != null || t.projectName != null || badge != null || t.priority == "urgent" || t.priority == "high" || t.priority == "low") {
+                    // FlowRow: en las columnas angostas del tablero los datos bajan de línea en vez de apretarse
+                    FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                         PriorityTag(t.priority)
-                        due?.let { Text(it.dayLabel(today).replaceFirstChar { c -> c.uppercase() }, style = MonoStyle, color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        badge?.let { SharedBadge(it) }
+                        due?.let { Text(it.dayLabel(today).replaceFirstChar { c -> c.uppercase() }, style = MonoStyle, maxLines = 1, softWrap = false, color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
                         t.projectName?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
+            }
+            // Responsable: iniciales (el nombre completo lo lee TalkBack)
+            family?.member(t.assigneeId)?.let { m ->
+                MemberAvatar(m.displayName, Modifier.padding(start = 6.dp), size = 28.dp, description = "Responsable: ${m.displayName}")
             }
             if (t.status != "done") {
                 IconButton(onClick = { vm.setStatus(t, if (t.status == "todo") "doing" else "done") }) {
@@ -267,8 +320,9 @@ private fun TaskRow(t: Task, vm: TasksViewModel, onEdit: (Task) -> Unit) {
 private fun TaskEditor(
     task: Task?,
     projects: List<Project>,
+    family: FamilyInfo?,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, LocalDate?, String?) -> Unit,
+    onSave: (TaskEdit) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -277,7 +331,12 @@ private fun TaskEditor(
     var priority by rememberSaveable { mutableStateOf(task?.priority ?: "medium") }
     var due by remember { mutableStateOf(task?.dueDate?.toLocalDateOrNull()) }
     var project by rememberSaveable { mutableStateOf(task?.projectName ?: "") }
+    var shared by rememberSaveable { mutableStateOf(task?.shared ?: false) }
+    var assignee by rememberSaveable { mutableStateOf(task?.assigneeId) }
     var pickDate by remember { mutableStateOf(false) }
+    // Asignarla a otro miembro la vuelve familiar; dejar de compartir es solo de quien la creó
+    val assignedToOther = assignee != null && assignee != family?.me
+    val canUnshare = family.owns(task?.ownerId)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -309,12 +368,32 @@ private fun TaskEditor(
                     }
                 }
             }
+            if (family != null && (family.hasOthers || task?.shared == true)) {
+                Labeled("Responsable") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = assignee == null, onClick = { assignee = null }, label = { Text("Nadie") })
+                        family.members.forEach { m ->
+                            FilterChip(
+                                selected = assignee == m.id,
+                                onClick = { assignee = m.id; if (m.id != family.me) shared = true },
+                                label = { Text(if (m.id == family.me) "Yo" else FamilyStore.firstNameOf(m.displayName)) },
+                                leadingIcon = { MemberAvatar(m.displayName, size = 20.dp) },
+                            )
+                        }
+                    }
+                }
+                when {
+                    assignedToOther -> SharedInfoRow("Al asignarla a ${family.firstNameOf(assignee) ?: "otra persona"} se comparte con la familia y le llega un aviso.")
+                    !canUnshare && task?.shared == true -> SharedInfoRow("La compartió ${family.firstNameOf(task.ownerId) ?: "otro miembro"}; solo esa persona puede dejar de compartirla.")
+                    else -> ShareRow(shared, { shared = it }, title = "Familiar", body = "La ven y editan todos en ${family.household.name}.")
+                }
+            }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 onDelete?.let { TextButton(onClick = it) { Icon(Icons.Rounded.DeleteOutline, null); Spacer(Modifier.width(6.dp)); Text("Eliminar") } }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDismiss) { Text("Cancelar") }
                 Button(
-                    onClick = { if (title.isNotBlank()) onSave(title.trim(), notes, priority, due, project.trim().ifBlank { null }) },
+                    onClick = { if (title.isNotBlank()) onSave(TaskEdit(title.trim(), notes, priority, due, project.trim().ifBlank { null }, shared || assignedToOther, assignee)) },
                     enabled = title.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
                 ) { Text("Guardar") }

@@ -8,6 +8,10 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import app.kairo.android.notify.Notifications
 import app.kairo.android.sync.SyncWorker
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 open class KairoApplication : Application() {
     lateinit var graph: AppGraph
@@ -33,5 +37,10 @@ open class KairoApplication : Application() {
             }
             override fun onStop(owner: LifecycleOwner) = graph.realtime.release()
         })
+
+        // Push propio: al abrir la app y tras iniciar sesión, renueva el registro si hay distribuidor elegido
+        graph.scope.launch {
+            graph.session.session.map { it?.user?.id }.distinctUntilChanged().filterNotNull().collect { graph.push.registerIfAcknowledged() }
+        }
     }
 }

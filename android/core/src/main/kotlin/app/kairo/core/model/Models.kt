@@ -14,6 +14,10 @@ data class User(
     val displayName: String,
     val timezone: String,
     val createdAt: String,
+    val householdId: String? = null,
+    /** admin | member (de la familia) */
+    val role: String = "member",
+    val color: String? = null,
 )
 
 @Serializable
@@ -40,6 +44,9 @@ data class Note(
     val createdAt: String,
     val updatedAt: String,
     val score: Double? = null,
+    /** Familiar: lo ven y editan todos los miembros del hogar. */
+    val shared: Boolean = false,
+    val ownerId: String? = null,
 )
 
 @Serializable
@@ -62,6 +69,10 @@ data class Task(
     val completedAt: String? = null,
     val createdAt: String,
     val updatedAt: String,
+    val shared: Boolean = false,
+    val ownerId: String? = null,
+    /** Responsable (miembro de la familia); asignarla a otro la vuelve familiar. */
+    val assigneeId: String? = null,
 )
 
 @Serializable
@@ -73,6 +84,8 @@ data class Place(
     val radiusM: Int = 150,
     val address: String? = null,
     val createdAt: String,
+    val shared: Boolean = false,
+    val ownerId: String? = null,
 )
 
 @Serializable
@@ -92,6 +105,10 @@ data class Reminder(
     val source: String = "",
     val createdAt: String,
     val updatedAt: String,
+    /** A quién le suena (si es distinto de ti, lo programaste para otro miembro). */
+    val ownerId: String? = null,
+    /** Quién lo programó, cuando fue otro miembro; null si lo creó el dueño. */
+    val createdBy: String? = null,
 )
 
 @Serializable
@@ -105,6 +122,8 @@ data class ShoppingList(
     val items: List<ListItem> = emptyList(),
     val createdAt: String,
     val updatedAt: String,
+    val shared: Boolean = false,
+    val ownerId: String? = null,
 )
 
 @Serializable
@@ -124,6 +143,8 @@ data class Event(
     val googleEventId: String? = null,
     val createdAt: String,
     val updatedAt: String,
+    val shared: Boolean = false,
+    val ownerId: String? = null,
 )
 
 @Serializable
@@ -234,7 +255,7 @@ data class VoiceOption(val id: String, val name: String, val description: String
 data class VoicesResponse(val voices: List<VoiceOption>)
 
 @Serializable
-data class EventAlert(val eventId: String, val title: String, val startAt: String, val alertAt: String, val minutes: Int, val location: String = "")
+data class EventAlert(val eventId: String, val title: String, val startAt: String, val alertAt: String, val minutes: Int, val location: String = "", val shared: Boolean = false)
 
 @Serializable
 data class DeviceSync(
@@ -244,7 +265,75 @@ data class DeviceSync(
     val eventAlerts: List<EventAlert> = emptyList(),
     val briefingEnabled: Boolean = true,
     val briefingTime: String = "07:00",
+    /** Avisos de la familia sin leer (últimas 48 h), por si no llegaron por push. */
+    val notices: List<Notice> = emptyList(),
+    /** Algún teléfono de la cuenta tiene push propio registrado. */
+    val pushRegistered: Boolean = false,
 )
+
+// ------------------------------------------------------------ Familia
+
+@Serializable
+data class Household(val id: String, val name: String, val createdAt: String)
+
+@Serializable
+data class Member(
+    val id: String,
+    val displayName: String,
+    val email: String,
+    /** admin | member */
+    val role: String = "member",
+    val joinedAt: String,
+)
+
+@Serializable
+data class FamilyInfo(val household: Household, val members: List<Member> = emptyList(), val me: String, val isAdmin: Boolean = false) {
+    fun member(id: String?): Member? = id?.let { m -> members.firstOrNull { it.id == m } }
+
+    /** Los demás miembros (sin ti). */
+    val others: List<Member> get() = members.filter { it.id != me }
+}
+
+@Serializable
+data class Invitation(
+    val id: String,
+    /** invite (miembro nuevo) | reset (código de acceso de un miembro existente) */
+    val kind: String,
+    val name: String = "",
+    val role: String = "member",
+    val targetUserId: String? = null,
+    val createdAt: String,
+    val expiresAt: String,
+    val usedAt: String? = null,
+)
+
+@Serializable
+data class InviteCreated(val invitation: Invitation, val code: String, val link: String)
+
+/** Lo que abre un código antes de unirse (`GET /auth/invite/{code}`). */
+@Serializable
+data class InvitePreview(val kind: String, val householdName: String, val name: String = "", val email: String? = null)
+
+/** Aviso de la familia. Llega por `GET /notices`, `family.notice` (WebSocket o push) y `/sync/device`. */
+@Serializable
+data class Notice(
+    val id: String,
+    /** shared | updated | assigned | reminder | message (y "test" en la prueba de push) */
+    val kind: String = "message",
+    val title: String,
+    val body: String = "",
+    val actorId: String? = null,
+    val entityType: String? = null,
+    val entityId: String? = null,
+    val createdAt: String = "",
+    val readAt: String? = null,
+)
+
+@Serializable
+data class NoticesResponse(val notices: List<Notice> = emptyList(), val unread: Int = 0)
+
+@Serializable
+data class PushConfig(val vapidPublicKey: String, val registeredDevices: Int = 0)
 
 @Serializable
 data class BriefingResponse(val text: String)

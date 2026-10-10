@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
 class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
-    suspend fun apply(reminders: List<Reminder>, eventAlerts: List<app.kairo.core.model.EventAlert> = emptyList()) {
+    /** [from] traduce `createdBy` a nombre para el subtítulo "De Valentina" de lo que otro te programó. */
+    suspend fun apply(reminders: List<Reminder>, eventAlerts: List<app.kairo.core.model.EventAlert> = emptyList(), from: (String?) -> String? = { null }) {
         val now = System.currentTimeMillis()
         val horizon = now + 35L * 86_400_000
         val wanted = reminders.filter { it.status == "scheduled" }
@@ -41,7 +42,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
             .filter { (_, at) -> at in (now - 60_000)..horizon }.take(100)
         val wantedIds = wanted.map { it.first.id }.toSet() + events.map { eventKey(it.first) }
         prefs.scheduledAlarms().filter { it !in wantedIds }.forEach { cancel(it) }
-        wanted.forEach { (r, at) -> schedule(r, at) }
+        wanted.forEach { (r, at) -> schedule(r, at, from(r.createdBy)?.let { "De $it" }) }
         events.forEach { (a, at) -> scheduleEvent(a, at) }
         prefs.setScheduledAlarms(wantedIds)
     }
@@ -50,7 +51,7 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
 
     private fun scheduleEvent(a: app.kairo.core.model.EventAlert, at: Long) {
         val key = eventKey(a)
-        val subtitle = (if (a.minutes == 0) "Empieza ahora" else "En ${a.minutes} min") + (a.location.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+        val subtitle = app.kairo.android.sync.ServerEventHandler.eventSubtitle(a.minutes, a.location, a.shared)
         val pi = PendingIntent.getBroadcast(
             context, key.hashCode(),
             Intent(context, ReminderReceiver::class.java).putExtra(EXTRA_ID, key).putExtra(EXTRA_TEXT, a.title).putExtra(EXTRA_AT, at)
@@ -74,14 +75,15 @@ class AlarmScheduler(private val context: Context, private val prefs: AppPrefs) 
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.toInstant().toEpochMilli(), pi)
     }
 
-    private fun intent(id: String, text: String = "", at: Long = 0) = PendingIntent.getBroadcast(
+    private fun intent(id: String, text: String = "", at: Long = 0, subtitle: String? = null) = PendingIntent.getBroadcast(
         context, id.hashCode(),
-        Intent(context, ReminderReceiver::class.java).putExtra(EXTRA_ID, id).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_AT, at),
+        Intent(context, ReminderReceiver::class.java).putExtra(EXTRA_ID, id).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_AT, at)
+            .apply { subtitle?.let { putExtra(EXTRA_SUBTITLE, it) } },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun schedule(r: Reminder, at: Long) {
-        val pi = intent(r.id, r.text, at)
+    private fun schedule(r: Reminder, at: Long, subtitle: String?) {
+        val pi = intent(r.id, r.text, at, subtitle)
         val trigger = maxOf(at, System.currentTimeMillis() + 1_000)
         if (alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
@@ -138,7 +140,7 @@ class ReminderReceiver : BroadcastReceiver() {
             return
         }
         if (FiredLog(context).markIfNew(id, at)) {
-            Notifications.show(context, Notifications.reminderNotificationId(id), Notifications.reminder(context, id, text, at))
+            Notifications.show(context, Notifications.reminderNotificationId(id), Notifications.reminder(context, id, text, at, intent.getStringExtra(AlarmScheduler.EXTRA_SUBTITLE)))
         }
         // Reprograma la siguiente ocurrencia de los recurrentes
         SyncWorker.runNow(context, delaySeconds = 90)

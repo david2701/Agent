@@ -66,10 +66,20 @@ import app.kairo.android.AppGraph
 import app.kairo.android.ui.common.ResourceViewModel
 import app.kairo.android.ui.components.EmptyState
 import app.kairo.android.ui.components.ErrorBanner
+import app.kairo.android.ui.components.SharedBadge
+import app.kairo.android.ui.components.ShareRow
 import app.kairo.android.ui.components.SkeletonList
+import app.kairo.android.ui.components.firstNameOf
+import app.kairo.android.ui.components.hasOthers
+import app.kairo.android.ui.components.owns
+import app.kairo.android.ui.components.rememberFamily
+import app.kairo.android.ui.components.sharedLabel
 import app.kairo.android.ui.theme.MonoStyle
+import app.kairo.core.model.FamilyInfo
 import app.kairo.core.model.ShoppingList
+import app.kairo.core.net.KairoApi.Companion.obj
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.put
 
 class ListsViewModel(graph: AppGraph) : ResourceViewModel<List<ShoppingList>>(graph, setOf("list")) {
     override suspend fun load() = graph.api.lists()
@@ -85,7 +95,11 @@ class ListsViewModel(graph: AppGraph) : ResourceViewModel<List<ShoppingList>>(gr
     fun add(list: ShoppingList, text: String) = mutate { replace(graph.api.addItems(list.id, text.split(',').map { it.trim() }.filter { it.isNotEmpty() })) }
     fun remove(list: ShoppingList, itemId: String) = mutate { replace(graph.api.deleteItem(list.id, itemId)) }
     fun clearChecked(list: ShoppingList) = mutate("Marcados eliminados") { replace(graph.api.clearChecked(list.id)) }
-    fun create(name: String) = mutate("Lista creada") { graph.api.createList(name) }
+    fun create(name: String, shared: Boolean) = mutate(if (shared) "Lista familiar creada" else "Lista creada") { graph.api.createList(name, shared) }
+    fun share(list: ShoppingList, shared: Boolean) {
+        replace(list.copy(shared = shared))
+        mutate(if (shared) "Lista compartida con la familia" else "La lista vuelve a ser solo tuya") { replace(graph.api.updateList(list.id, obj { put("shared", shared) })) }
+    }
     fun delete(list: ShoppingList) = mutate("Lista eliminada. Puedes deshacerlo en Actividad.") { graph.api.deleteList(list.id) }
 }
 
@@ -101,6 +115,7 @@ fun ListsScreen(graph: AppGraph) {
     BackHandler(navigator.canNavigateBack()) { scope.launch { navigator.navigateBack() } }
     val lists = state.data.orEmpty()
     val selectedId = navigator.currentDestination?.contentKey
+    val family = rememberFamily(graph)
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { inner ->
         ListDetailPaneScaffold(
@@ -121,7 +136,10 @@ fun ListsScreen(graph: AppGraph) {
                                     color = if (selectedId == l.id) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow) {
                                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(l.name, style = MaterialTheme.typography.titleMedium)
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text(l.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+                                                sharedLabel(l.shared, l.ownerId, family)?.let { SharedBadge(it) }
+                                            }
                                             Text(l.items.filter { !it.checked }.take(4).joinToString(", ") { it.text }.ifBlank { "Todo listo" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                         }
                                         Text("$pending", style = MonoStyle, color = MaterialTheme.colorScheme.primary)
@@ -139,7 +157,7 @@ fun ListsScreen(graph: AppGraph) {
                 AnimatedPane {
                     val list = lists.firstOrNull { it.id == selectedId }
                     if (list == null) EmptyState(Icons.Rounded.ShoppingBasket, "Elige una lista", "Verás sus elementos aquí.", Modifier.fillMaxSize())
-                    else ListDetail(list, vm, navigator.canNavigateBack()) { scope.launch { navigator.navigateBack() } }
+                    else ListDetail(list, vm, family, navigator.canNavigateBack()) { scope.launch { navigator.navigateBack() } }
                 }
             },
         )
@@ -147,18 +165,24 @@ fun ListsScreen(graph: AppGraph) {
 
     if (creating) {
         var name by rememberSaveable { mutableStateOf("") }
+        var shared by rememberSaveable { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { creating = false },
             title = { Text("Nueva lista") },
-            text = { OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true) },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.create(name.trim()); creating = false } }) { Text("Crear") } },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
+                    if (family.hasOthers) ShareRow(shared, { shared = it }, title = "Familiar", body = "Todos pueden agregar y marcar.")
+                }
+            },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { vm.create(name.trim(), shared); creating = false } }) { Text("Crear") } },
             dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancelar") } },
         )
     }
 }
 
 @Composable
-private fun ListDetail(list: ShoppingList, vm: ListsViewModel, showBack: Boolean, onBack: () -> Unit) {
+private fun ListDetail(list: ShoppingList, vm: ListsViewModel, family: FamilyInfo?, showBack: Boolean, onBack: () -> Unit) {
     var text by rememberSaveable(list.id) { mutableStateOf("") }
     val pending = list.items.filter { !it.checked }
     val checked = list.items.filter { it.checked }
@@ -168,6 +192,17 @@ private fun ListDetail(list: ShoppingList, vm: ListsViewModel, showBack: Boolean
             Text(list.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f).padding(start = 8.dp))
             if (checked.isNotEmpty()) IconButton(onClick = { vm.clearChecked(list) }) { Icon(Icons.Rounded.DeleteSweep, "Quitar marcados") }
             IconButton(onClick = { vm.delete(list); onBack() }) { Icon(Icons.Rounded.DeleteOutline, "Eliminar lista") }
+        }
+        when {
+            !family.owns(list.ownerId) -> Text(
+                "Lista de ${family.firstNameOf(list.ownerId) ?: "otro miembro"}, compartida con la familia.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 10.dp),
+            )
+            family.hasOthers || list.shared -> ShareRow(
+                list.shared, { vm.share(list, it) }, Modifier.padding(start = 24.dp, end = 16.dp, bottom = 6.dp),
+                title = "Familiar", body = if (list.shared) "Todos en la familia pueden agregar y marcar." else "Solo tú la ves.",
+            )
         }
         TextField(
             value = text, onValueChange = { text = it },

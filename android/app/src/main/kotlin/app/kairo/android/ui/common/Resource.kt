@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 data class Loadable<T>(val data: T? = null, val loading: Boolean = true, val error: String? = null)
 
 fun Throwable.friendly(): String = when (this) {
-    is ApiException -> message
+    is ApiException -> if (status == 429) "Demasiados intentos seguidos. Espera un minuto y vuelve a probar." else message
     is java.net.UnknownHostException -> "No hay conexión con el servidor"
     is java.net.ConnectException -> "No hay conexión con el servidor"
     is java.net.SocketTimeoutException -> "El servidor tardó demasiado"

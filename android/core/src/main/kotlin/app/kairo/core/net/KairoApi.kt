@@ -9,9 +9,17 @@ import app.kairo.core.model.Conversation
 import app.kairo.core.model.Device
 import app.kairo.core.model.DeviceSync
 import app.kairo.core.model.Event
+import app.kairo.core.model.FamilyInfo
+import app.kairo.core.model.Household
+import app.kairo.core.model.InviteCreated
+import app.kairo.core.model.InvitePreview
+import app.kairo.core.model.Invitation
+import app.kairo.core.model.Member
 import app.kairo.core.model.Memory
 import app.kairo.core.model.Note
+import app.kairo.core.model.NoticesResponse
 import app.kairo.core.model.Place
+import app.kairo.core.model.PushConfig
 import app.kairo.core.model.Project
 import app.kairo.core.model.Recording
 import app.kairo.core.model.Reminder
@@ -119,6 +127,42 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         return auth.user
     }
 
+    /** Qué abre un código de familia (público): invitación nueva o código de acceso de un miembro. */
+    suspend fun invitePreview(serverUrl: String, code: String): InvitePreview {
+        val base = normalizeServer(serverUrl)
+        val resp = http.request("$base/api/auth/invite/${normalizeCode(code).encodeURLParameter()}") {
+            method = HttpMethod.Get
+            header("X-Kairo-Client", ctx.clientKind)
+        }
+        if (resp.status.value == 404) throw ApiException(404, "Ese código no existe o ya venció")
+        return decode(resp)
+    }
+
+    /**
+     * Usa un código de familia: con una invitación crea la cuenta del miembro nuevo (pide [email]);
+     * con un código de acceso define una contraseña nueva. Guarda la sesión como un login normal.
+     */
+    suspend fun join(serverUrl: String, code: String, email: String?, password: String, displayName: String?, deviceName: String): User {
+        val base = normalizeServer(serverUrl)
+        val resp = http.request("$base/api/auth/join") {
+            method = HttpMethod.Post
+            contentType(ContentType.Application.Json)
+            header("X-Kairo-Client", ctx.clientKind)
+            setBody(buildJsonObject {
+                put("code", normalizeCode(code))
+                email?.trim()?.takeIf { it.isNotEmpty() }?.let { put("email", it) }
+                put("password", password)
+                displayName?.trim()?.takeIf { it.isNotEmpty() }?.let { put("displayName", it) }
+                put("deviceName", deviceName)
+                put("platform", ctx.clientKind)
+                put("timezone", java.time.ZoneId.systemDefault().id)
+            }.toString())
+        }
+        val auth: AuthResponse = decode(resp)
+        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: error("El servidor no devolvió refresh token"), auth.accessToken)
+        return auth.user
+    }
+
     /** Vincula este dispositivo (reloj) con un código generado en el teléfono o el dashboard. */
     suspend fun pair(serverUrl: String, code: String, deviceName: String): User {
         val base = normalizeServer(serverUrl)
@@ -171,13 +215,17 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         ctx.location()?.let { (lat, lon) -> header("X-Kairo-Location", "$lat,$lon") }
     }
 
-    /** Ejecuta la petición; si el access token expiró, refresca una vez y reintenta. */
-    suspend fun raw(method: HttpMethod, path: String, build: HttpRequestBuilder.() -> Unit = {}): HttpResponse {
+    /**
+     * Ejecuta la petición; si el access token expiró, refresca una vez y reintenta.
+     * Ojo: el parámetro no puede llamarse `build`, porque dentro del bloque `build()` resolvería a
+     * `HttpRequestBuilder.build()` y el cuerpo nunca se pondría.
+     */
+    suspend fun raw(method: HttpMethod, path: String, configure: HttpRequestBuilder.() -> Unit = {}): HttpResponse {
         if (session.accessToken == null) refresh()
         val url = base() + path
-        var resp = http.request(url) { this.method = method; common(); build() }
+        var resp = http.request(url) { this.method = method; common(); configure() }
         if (resp.status.value == 401 && refresh()) {
-            resp = http.request(url) { this.method = method; common(); build() }
+            resp = http.request(url) { this.method = method; common(); configure() }
         }
         if (resp.status.value == 401) throw ApiException(401, "Tu sesión expiró. Inicia sesión de nuevo.")
         return resp
@@ -239,7 +287,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         }))
     }
 
-    private fun stream(path: String, build: HttpRequestBuilder.() -> Unit): Flow<AgentEvent> = flow {
+    private fun stream(path: String, configure: HttpRequestBuilder.() -> Unit): Flow<AgentEvent> = flow {
         if (session.accessToken == null) refresh()
         var attempt = 0
         while (true) {
@@ -249,7 +297,7 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
                 method = HttpMethod.Post
                 timeout { requestTimeoutMillis = 180_000; socketTimeoutMillis = 120_000 }
                 common()
-                build()
+                configure()
             }.execute { resp ->
                 if (resp.status.value == 401 && attempt == 0 && refresh()) {
                     retry = true
@@ -305,12 +353,14 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun notes(q: String? = null): List<Note> = send(HttpMethod.Get, "/api/notes" + (q?.let { "?q=${it.encodeURLParameter()}" } ?: ""))
     suspend fun searchNotes(q: String): List<Note> = send(HttpMethod.Get, "/api/notes/search?q=${q.encodeURLParameter()}")
     suspend fun note(id: String): Note = send(HttpMethod.Get, "/api/notes/$id")
-    suspend fun createNote(title: String, content: String, tags: List<String> = emptyList()): Note =
-        send(HttpMethod.Post, "/api/notes", obj { put("title", title); put("content", content); put("tags", strings(tags)) })
+    suspend fun createNote(title: String, content: String, tags: List<String> = emptyList(), shared: Boolean = false): Note =
+        send(HttpMethod.Post, "/api/notes", obj { put("title", title); put("content", content); put("tags", strings(tags)); if (shared) put("shared", true) })
     suspend fun updateNote(id: String, patch: JsonObject): Note = send(HttpMethod.Patch, "/api/notes/$id", patch)
     suspend fun deleteNote(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/notes/$id") }
 
-    suspend fun tasks(includeDone: Boolean = true): List<Task> = send(HttpMethod.Get, "/api/tasks?includeDone=$includeDone")
+    /** [assignee]: `me` o el id de un miembro (tareas de las que es responsable). */
+    suspend fun tasks(includeDone: Boolean = true, assignee: String? = null): List<Task> =
+        send(HttpMethod.Get, "/api/tasks?includeDone=$includeDone" + (assignee?.let { "&assignee=${it.encodeURLParameter()}" } ?: ""))
     suspend fun createTask(body: JsonObject): Task = send(HttpMethod.Post, "/api/tasks", body)
     suspend fun updateTask(id: String, patch: JsonObject): Task = send(HttpMethod.Patch, "/api/tasks/$id", patch)
     suspend fun deleteTask(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/tasks/$id") }
@@ -326,12 +376,14 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun deleteReminder(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/reminders/$id") }
 
     suspend fun places(): List<Place> = send(HttpMethod.Get, "/api/places")
-    suspend fun savePlace(name: String, lat: Double, lon: Double, radius: Int): Place =
-        send(HttpMethod.Post, "/api/places", obj { put("name", name); put("latitude", lat); put("longitude", lon); put("radiusM", radius) })
+    suspend fun savePlace(name: String, lat: Double, lon: Double, radius: Int, shared: Boolean = false): Place =
+        send(HttpMethod.Post, "/api/places", obj { put("name", name); put("latitude", lat); put("longitude", lon); put("radiusM", radius); if (shared) put("shared", true) })
+    suspend fun sharePlace(id: String, shared: Boolean): Place = send(HttpMethod.Patch, "/api/places/$id", obj { put("shared", shared) })
     suspend fun deletePlace(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/places/$id") }
 
     suspend fun lists(): List<ShoppingList> = send(HttpMethod.Get, "/api/lists")
-    suspend fun createList(name: String): ShoppingList = send(HttpMethod.Post, "/api/lists", obj { put("name", name) })
+    suspend fun createList(name: String, shared: Boolean = false): ShoppingList = send(HttpMethod.Post, "/api/lists", obj { put("name", name); if (shared) put("shared", true) })
+    suspend fun updateList(id: String, patch: JsonObject): ShoppingList = send(HttpMethod.Patch, "/api/lists/$id", patch)
     suspend fun deleteList(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/lists/$id") }
     suspend fun addItems(listId: String, items: List<String>): ShoppingList = send(HttpMethod.Post, "/api/lists/$listId/items", obj { put("items", strings(items)) })
     suspend fun setItem(listId: String, itemId: String, checked: Boolean): ShoppingList =
@@ -379,6 +431,35 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
     suspend fun revokeDevice(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/devices/$id") }
     suspend fun deviceSync(): DeviceSync = send(HttpMethod.Get, "/api/sync/device")
 
+    // ------------------------------------------------------------ Familia
+
+    suspend fun family(): FamilyInfo = send(HttpMethod.Get, "/api/family")
+    suspend fun renameFamily(name: String): Household = send(HttpMethod.Patch, "/api/family", obj { put("name", name) })
+    suspend fun invites(): List<Invitation> = send(HttpMethod.Get, "/api/family/invites")
+    suspend fun createInvite(name: String, role: String = "member"): InviteCreated =
+        send(HttpMethod.Post, "/api/family/invites", obj { put("name", name); put("role", role) })
+    suspend fun revokeInvite(id: String) { send<JsonObject>(HttpMethod.Delete, "/api/family/invites/$id") }
+    suspend fun accessCode(memberId: String): InviteCreated = send(HttpMethod.Post, "/api/family/members/$memberId/access-code")
+    suspend fun setMemberRole(memberId: String, role: String): Member = send(HttpMethod.Patch, "/api/family/members/$memberId", obj { put("role", role) })
+    suspend fun removeMember(memberId: String) { send<JsonObject>(HttpMethod.Delete, "/api/family/members/$memberId") }
+
+    /** Aviso a la familia; sin [to], a todos menos a ti. Devuelve a cuántos les llegó. */
+    suspend fun familyMessage(text: String, to: List<String>? = null): Int =
+        send<SentCount>(HttpMethod.Post, "/api/family/message", obj { put("text", text); to?.let { put("to", strings(it)) } }).sent
+
+    suspend fun notices(unread: Boolean = false, limit: Int = 50): NoticesResponse = send(HttpMethod.Get, "/api/notices?unread=$unread&limit=$limit")
+    /** Marca avisos como leídos; sin [ids], todos. */
+    suspend fun markNoticesRead(ids: List<String>? = null) { send<JsonObject>(HttpMethod.Post, "/api/notices/read", obj { ids?.let { put("ids", strings(it)) } }) }
+
+    // ------------------------------------------------------------ Push propio (UnifiedPush)
+
+    suspend fun pushConfig(): PushConfig = send(HttpMethod.Get, "/api/push")
+    suspend fun registerPush(endpoint: String, p256dh: String, auth: String): PushConfig =
+        send(HttpMethod.Post, "/api/push/register", obj { put("endpoint", endpoint); put("p256dh", p256dh); put("auth", auth) })
+    suspend fun unregisterPush() { send<JsonObject>(HttpMethod.Delete, "/api/push/register") }
+    /** Envía un `family.notice` de prueba sólo por push; devuelve cuántos dispositivos lo aceptaron. */
+    suspend fun testPush(): Int = send<Delivered>(HttpMethod.Post, "/api/push/test").delivered
+
     /** URL absoluta para archivos firmados (adjuntos e imágenes). */
     suspend fun absolute(url: String): String = if (url.startsWith("http")) url else base() + url
 
@@ -418,6 +499,12 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
             return s.removeSuffix("/api")
         }
 
+        /** Códigos de familia `XXXX-XXXX`: acepta minúsculas, espacios y sin guion. */
+        fun normalizeCode(raw: String): String {
+            val clean = raw.uppercase().filter { it.isLetterOrDigit() }
+            return if (clean.length == 8) clean.take(4) + "-" + clean.drop(4) else clean
+        }
+
         inline fun obj(block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit): JsonObject = buildJsonObject(block)
         fun strings(values: List<String>) = kotlinx.serialization.json.JsonArray(values.map { JsonPrimitive(it) })
     }
@@ -431,3 +518,9 @@ data class CreatedCount(val created: Int)
 
 @Serializable
 data class PairCode(val code: String, val expiresIn: Int = 300)
+
+@Serializable
+data class SentCount(val sent: Int)
+
+@Serializable
+data class Delivered(val delivered: Int)
