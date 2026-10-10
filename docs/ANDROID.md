@@ -58,7 +58,7 @@ sign in. Build with `KAIRO_SERVER_URL=https://kairo.example.com ./gradlew assemb
 | **Exact alarms** | Reminders ring at the exact time, even with no internet. |
 | **"All the time" location** | Optional. Needed for alerts when you arrive at or leave a saved place. |
 | **Pair watch** | Generates a 6-digit code to sign in on Wear OS. |
-| **Instant alerts without Firebase** | Connects Kairo to the ntfy app (UnifiedPush) so notifications arrive with the app closed. |
+| **Instant notices, no Firebase** | Connects Kairo to the ntfy app (UnifiedPush) so notifications arrive with the app closed. |
 | **Family** | Members, invitations and household notices (also under *More > Family*). |
 
 Other ways in: a **Quick Settings tile** called "Kairo", a **widget** with your day and a talk button, a
@@ -118,7 +118,7 @@ alarm or sync.
 | **2. Direct connection or "Hey Kairo"** | Instantly while the service runs | Turn on *Direct connection to your server* (or listening). It uses a bit more battery. |
 | **3. Local alarms and sync** | Reminders, event alerts and the briefing at their time even with no internet. Everything else on the next sync (15 min). | Nothing |
 
-1. **Self-hosted push**: in *Settings > Instant alerts without Firebase*, tap **Set up**. Kairo uses the installed
+1. **Self-hosted push**: in *Settings > Instant notices, no Firebase*, tap **Set up**. Kairo uses the installed
    distributor (ntfy) and asks it for an endpoint, using your server's VAPID key. The endpoint and the encryption keys
    (`p256dh`, `auth`) are registered with `POST /api/push/register`. The server encrypts each notification for this
    phone (RFC 8291) and the connector decrypts it. The content is the same `{type, data}` as the WebSocket and goes
@@ -152,16 +152,16 @@ Nothing is lost when you fold or unfold the device. State lives in ViewModels.
 
 ## Screenshots
 
-The screenshots are generated without an emulator, using Roborazzi against a local backend:
+The screenshots are generated without an emulator or a backend, using Roborazzi and made-up English sample data
+served by an in-process HTTP server (`ScreenshotFixtures.kt`):
 
 ```bash
 cd android
-./gradlew :app:recordRoborazziDebug     # output goes to docs/screenshots/android
+./gradlew :app:recordRoborazziDebug                       # output goes to docs/screenshots/android
+KAIRO_SCREENSHOT_LOCALE=es ./gradlew :app:recordRoborazziDebug   # Spanish interface, into docs/screenshots/android/es
 ```
 
-It uses the backend at `KAIRO_TEST_SERVER` (default `http://localhost:8088`) with a single sign-in per run. Times
-are shown in `America/Bogota` (change this with `KAIRO_TEST_TZ`). The family screenshots create a temporary invitation
-and revoke it when they finish.
+A normal `testDebugUnitTest` run skips them.
 
 ## Privacy and security on the phone
 

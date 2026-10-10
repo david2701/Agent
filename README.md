@@ -4,218 +4,269 @@
 
 <h1 align="center">Kairo</h1>
 
-<p align="center">Tu asistente personal por voz, siempre atento. Funciona con los modelos de <b>Nan</b> y vive en tu propio servidor.</p>
+<p align="center"><b>A self-hosted personal and family assistant you talk to.</b><br>
+Notes, tasks, reminders, calendar, lists and memory, by voice or text, on your own server.</p>
 
----
+<p align="center"><b>English</b> · <a href="README.es.md">Español</a></p>
 
-*Kairós* es el momento oportuno: Kairo te avisa justo cuando lo necesitas. El ícono es un anillo
-abierto (el ciclo del tiempo) con un punto ámbar (el instante preciso), que también funciona como orbe
-de voz animado dentro de la app.
+<p align="center">
+  <img src="docs/screenshots/dashboard/today-desktop-dark.png" alt="Kairo dashboard: Today" width="860">
+</p>
 
-## Qué hace
+*Kairós* is the opportune moment: Kairo tells you right when you need it. The icon is an open ring (the cycle of time)
+with an amber dot (the precise instant), which doubles as the animated voice orb inside the apps.
 
-Le hablas ("Oye Kairo...") o le escribes, y actúa:
+## Why Kairo
 
-| Área | Ejemplos |
+Most assistants are a chat box that forgets you and lives in someone else's cloud. Kairo is different:
+
+- **You own it.** One Docker Compose stack on your server: Kotlin backend, PostgreSQL, a web dashboard. Your notes,
+  tasks and memory live in your database. Only the text and audio needed to answer go to the AI provider.
+- **It acts, it doesn't just talk.** Say "remind me to call mom at 6" or "add milk to the shopping list" and it
+  creates the reminder or list item, shows you what it did, and lets you **undo** it.
+- **Made for families.** Everyone gets their own account on the same server. Personal things stay private (even from
+  the admin); family things (shared lists, events, tasks, notices) are visible to everyone at home.
+- **Native apps everywhere.** Android and Wear OS, iPhone, iPad and Apple Watch, and a web dashboard. Reminders ring
+  exactly on time, offline, from the device itself.
+- **No Firebase, no Google services required.** Push goes through your own server (UnifiedPush/ntfy, Web Push, APNs).
+- **English and Spanish** out of the box, following your device language. Adding a language is a single file.
+- **Open source** under the Apache License 2.0.
+
+## What it does
+
+Talk to it ("Hey Kairo...") or type, and it acts:
+
+| Area | Examples |
 |---|---|
-| **Notas** | "Anota que la clave del wifi de la oficina es..." · búsqueda semántica ("¿qué anoté sobre el seguro?") · notas desde fotos |
-| **Recordatorios** | por hora, recurrentes ("todos los lunes a las 8"), por lugar ("cuando llegue a casa"), posponer |
-| **Tareas** | proyectos, prioridades, fechas, tablero Kanban, subtareas por voz |
-| **Calendario** | crear, mover y consultar eventos; avisos previos; sincronización bidireccional con Google Calendar |
-| **Listas** | compras y checklists por voz ("agrega leche y huevos a la lista del súper") |
-| **Memoria** | recuerda tus preferencias y datos ("mi hija se llama...") y los usa en las respuestas |
-| **Resumen del día** | cada mañana, con agenda, tareas, recordatorios y clima, leído en voz alta |
-| **Grabaciones** | graba reuniones o notas de voz largas: transcripción, resumen, puntos clave y tareas |
-| **Temporizadores y alarmas** | "pon un temporizador de 10 minutos" (en el teléfono) |
-| **Compartir con Kairo** | textos, enlaces o fotos desde cualquier app (una factura se convierte en nota + recordatorio) |
-| **Herramientas externas (MCP)** | conecta servidores MCP y Kairo usa sus herramientas |
-| **Deshacer** | todo lo que hace Kairo queda en *Actividad* y se puede deshacer |
-| **Familia** | cada persona con su cuenta en el mismo servidor; lo familiar lo ven todos: "agenda una cita compartida", "nuestra lista del súper", "recuérdale a Sam...", "avísale a todos que..." |
+| **Notes** | "Note that the wifi password at the office is..." · semantic search ("what did I write about the insurance?") · notes from photos |
+| **Reminders** | at a time, recurring ("every Monday at 8"), by place ("when I get home"), snooze |
+| **Tasks** | projects, priorities, due dates, Kanban board, subtasks by voice |
+| **Calendar** | create, move and query events; alerts; two-way sync with Google Calendar |
+| **Lists** | shopping lists and checklists by voice ("add milk and eggs to the shopping list") |
+| **Memory** | remembers your preferences and facts ("my daughter is called...") and uses them in answers |
+| **Morning briefing** | every morning: agenda, tasks, reminders and weather, read aloud |
+| **Recordings** | record meetings or long voice notes: transcript, summary, key points and tasks |
+| **Timers and alarms** | "set a 10 minute timer" (on the phone) |
+| **Save to Kairo** | share text, links or photos from any app (an invoice becomes a note plus a reminder) |
+| **External tools (MCP)** | connect MCP servers and Kairo uses their tools |
+| **Undo** | everything Kairo does is logged in *Activity* and can be undone |
+| **Family** | "schedule a shared appointment", "our shopping list", "remind Sam to...", "tell everyone dinner is ready" |
 
-Lo personal es privado (incluso para quien administra) y lo familiar se comparte con todos en casa.
-Detalles en [`docs/FAMILIA.md`](docs/FAMILIA.md).
+Personal items are private and family items are shared with everyone at home. See [`docs/FAMILY.md`](docs/FAMILY.md).
 
-## Arquitectura
+## Screenshots
+
+| Dashboard | Phone | Foldable (open) |
+|---|---|---|
+| ![Today](docs/screenshots/dashboard/today-desktop-dark.png) | ![Today](docs/screenshots/android/today-phone-dark.png) | ![Today on a foldable](docs/screenshots/android/today-fold-open.png) |
+| ![Chat](docs/screenshots/dashboard/chat-desktop-dark.png) | ![Tasks](docs/screenshots/android/tasks-phone.png) | ![Notes on a foldable](docs/screenshots/android/notes-fold-open.png) |
+| ![Tasks](docs/screenshots/dashboard/tasks-desktop-light.png) | ![Reminders](docs/screenshots/android/reminders-phone-light.png) | ![Tabletop mode](docs/screenshots/android/tabletop-mode.png) |
+
+| iPhone | iPhone (dark) | Tasks | Family |
+|---|---|---|---|
+| ![Today on iPhone](docs/screenshots/ios/iphone-today-light.png) | ![Today on iPhone, dark](docs/screenshots/ios/iphone-today-dark.png) | ![Tasks on iPhone](docs/screenshots/ios/iphone-tasks-light.png) | ![Family on iPhone](docs/screenshots/ios/iphone-family-dark.png) |
+
+More screenshots in [`docs/screenshots/`](docs/screenshots). All screenshots use a made-up sample family.
+
+## Status
+
+| Part | State |
+|---|---|
+| Backend, dashboard | Complete and tested (automated tests plus end-to-end checks). |
+| Android and Wear OS | Complete. Built and unit-tested in CI and exercised in screenshot tests; real-device testing is under way. |
+| iPhone, iPad, Apple Watch | Feature-complete and compiling in CI (Xcode 27), tested in the simulator only. **Beta**: not yet verified on physical devices. |
+| macOS app | Planned, not started. See the [roadmap](docs/ROADMAP.md). |
+
+## Architecture
 
 ```
- Android (Kotlin)          iPhone, iPad, Watch (SwiftUI)     Wear OS        Navegador
-   "Oye Kairo" offline       widgets, Live Activities,       voz +          Dashboard (React)
-   alarmas locales exactas   Siri, AlarmKit, compartir       tarjetas            │
+ Android (Kotlin)          iPhone, iPad, Watch (SwiftUI)     Wear OS        Browser
+   "Hey Kairo" offline       widgets, Live Activities,        voice +        Dashboard (React)
+   exact local alarms        Siri, AlarmKit, share            cards               │
           │  HTTPS + WebSocket          │                       │                │
           └─────────────────────────────┴───────────┬───────────┴────────────────┘
                                  ▼
-                     Caddy (tu subdominio, HTTPS)
+                     Caddy (your subdomain, HTTPS)
                                  ▼
-          ┌──────────── contenedor kairo (Kotlin + Ktor) ─────────────┐
-          │  API REST · SSE (streaming) · WebSocket · Dashboard web   │
-          │  Agente · familia · planificadores · Google sync · push   │
+          ┌──────────── kairo container (Kotlin + Ktor) ──────────────┐
+          │  REST API · SSE (streaming) · WebSocket · web dashboard   │
+          │  Agent · family · schedulers · Google sync · push         │
           └──────┬────────────────────────┬─────────────────────┬─────┘
                  ▼                        ▼                     ▼
-   PostgreSQL 18 + pgvector     Nan (api.nan.builders)    ntfy (opcional)
-   notas, tareas, embeddings    chat, voz, visión,        push cifrado a los
-                                embeddings                teléfonos, sin Firebase
+   PostgreSQL 18 + pgvector     Nan (api.nan.builders)    ntfy (optional)
+   notes, tasks, embeddings     chat, voice, vision,      encrypted push to
+                                embeddings                phones, no Firebase
 ```
 
-| Carpeta | Contenido |
+| Folder | Contents |
 |---|---|
-| `backend/` | Kotlin 2.4 + Ktor 3.6, PostgreSQL + pgvector, Flyway. Agente con más de 30 herramientas. |
-| `dashboard/` | Vite + React + TypeScript + Tailwind v4. Se compila dentro de la imagen y lo sirve el backend. |
-| `android/app` | App nativa: Compose, Material 3 Expressive, adaptable a plegables y tablets. |
-| `android/wear` | App de Wear OS (independiente, se vincula con un código de 6 dígitos). |
-| `android/core` | Cliente de la API y modelos compartidos entre teléfono y reloj. |
-| `ios/` | App para iPhone, iPad (y iPhone Duo) y Apple Watch en SwiftUI (iOS 27), con widgets, Live Activities, controles, Siri y compartir. Paquete `KairoKit` (SPM). |
-| `design/` | Sistema de diseño (`DESIGN.md`), ícono en SVG y fuentes Geist. |
-| `docs/` | Despliegue, API, Android, iOS, familia, push sin Firebase, Google Calendar y capturas. |
-| `.claude/skills/` | Skill de diseño Taste usada para la UI. |
+| `backend/` | Kotlin 2.4 + Ktor 3.6, PostgreSQL + pgvector, Flyway. Agent with 30+ tools. |
+| `dashboard/` | Vite + React + TypeScript + Tailwind v4. Built into the image and served by the backend. |
+| `android/app` | Native app: Compose, Material 3 Expressive, adaptive for foldables and tablets. |
+| `android/wear` | Wear OS app (standalone, pairs with a 6-digit code). |
+| `android/core` | API client and models shared by phone and watch. |
+| `ios/` | iPhone, iPad (and iPhone Duo) and Apple Watch app in SwiftUI (iOS 27) with widgets, Live Activities, controls, Siri and sharing. `KairoKit` Swift package. |
+| `design/` | Design system (`DESIGN.md`), SVG icon and Geist fonts. |
+| `docs/` | Deployment, API, Android, iOS, family, push without Firebase, Google Calendar, roadmap and screenshots. |
 
-### Modelos de Nan elegidos
+### AI models
 
-Revisé y probé todos los modelos disponibles en tu cuenta:
+Kairo talks to [Nan](https://api.nan.builders) through its OpenAI-compatible API. Defaults, all changeable in
+*Settings > Assistant*:
 
-| Uso | Modelo | Por qué |
+| Use | Model | Why |
 |---|---|---|
-| Agente (chat y acciones) | `deepseek-v4-flash` | El más rápido y preciso llamando herramientas (5 acciones encadenadas en ~10 s). |
-| Respaldo | `qwen3.8-flash` | Si el principal falla o tarda, Kairo reintenta con este. |
-| Visión (fotos, facturas, capturas) | `gemma4` | Lee texto de imágenes con buena precisión. |
-| Voz a texto | `whisper` | Transcripción en español. |
-| Texto a voz | `kokoro` | Voces en español: `ef_dora` (por defecto), `em_alex`, `em_santa`. |
-| Búsqueda semántica | `qwen3-embedding` (1024 dims) + `rerank` | Encuentra notas y memorias por significado. |
-| Imágenes | `flux-2-klein` / `qwen-image-2.1` | Cuando le pides generar una imagen. |
+| Agent (chat and actions) | `deepseek-v4-flash` | The fastest and most accurate at chaining tool calls (5 chained actions in ~10 s). |
+| Fallback | `qwen3.8-flash` | If the main model fails or is slow, Kairo retries with this one. |
+| Vision (photos, invoices, screenshots) | `gemma4` | Reads text from images accurately. |
+| Speech to text | `whisper` | Multilingual transcription; follows your language setting. |
+| Text to speech | `kokoro` | Voices per language, chosen in *Settings > Assistant*. |
+| Semantic search | `qwen3-embedding` (1024 dims) + `rerank` | Finds notes and memories by meaning. |
+| Images | `flux-2-klein` / `qwen-image-2.1` | When you ask it to generate an image. |
 
-Todos se pueden cambiar en *Ajustes > Asistente* del dashboard. `minimax-h3` respondió 401 (sin acceso con tu clave).
+You need a Nan API key. Other OpenAI-compatible providers are not tested.
 
-## Desplegar en tu servidor
+## Quick start
 
-Guía completa paso a paso, con la lista de pruebas en los dispositivos: [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
-
-Requisitos: Docker con Compose y Caddy (que ya tienes).
+Requirements: a Linux server with Docker and Docker Compose, a domain pointing to it, and Caddy (or any reverse
+proxy) for HTTPS. Full step-by-step guide with a device test checklist: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ```bash
-git clone <este repo> kairo && cd kairo
-./scripts/generate-env.sh          # crea .env con secretos aleatorios y te muestra la contraseña inicial
-nano .env                          # completa NAN_API_KEY, KAIRO_OWNER_EMAIL, KAIRO_PUBLIC_URL, KAIRO_TIMEZONE
+git clone https://github.com/david2701/Agent.git kairo && cd kairo
+./scripts/generate-env.sh          # creates .env with random secrets and shows the initial password
+nano .env                          # set NAN_API_KEY, KAIRO_OWNER_EMAIL, KAIRO_PUBLIC_URL, KAIRO_TIMEZONE
 docker compose up -d --build
-docker compose logs -f kairo       # espera "Kairo escuchando en :8080"
+docker compose logs -f kairo       # wait for the "listening" line
 ```
 
-Luego agrega a tu Caddyfile el bloque de [`deploy/Caddyfile.example`](deploy/Caddyfile.example) y ejecuta `caddy reload`:
+Then add the block from [`deploy/Caddyfile.example`](deploy/Caddyfile.example) to your Caddyfile and run `caddy reload`:
 
 ```
-kairo.tudominio.com {
+kairo.yourdomain.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
 
-Abre `https://kairo.tudominio.com`, entra con tu correo y la contraseña inicial y cámbiala en *Ajustes > Seguridad*.
+Open `https://kairo.yourdomain.com`, sign in with your email and the initial password, and change it in
+*Settings > Security*. The default language is English (`KAIRO_DEFAULT_LANGUAGE=es` in `.env` switches the owner
+account to Spanish; every person can change theirs in *Settings*).
 
-- El contenedor sólo escucha en `127.0.0.1:8080`; el acceso público pasa por Caddy. Cambia el puerto con `KAIRO_HOST_PORT`.
-- Push para los teléfonos (opcional): `docker compose --profile push up -d` levanta ntfy; ver [`docs/PUSH.md`](docs/PUSH.md).
-- Familia: entra al dashboard como administrador y usa *Familia > Invitar a alguien*; ver [`docs/FAMILIA.md`](docs/FAMILIA.md).
-- Datos persistentes en el volumen `kairo-db`. **Copias de seguridad automáticas**: el servicio `backup` guarda cada día
-  (a las `BACKUP_TIME`, 03:30 por defecto) una copia completa en `./backups` y borra las de más de `BACKUP_KEEP_DAYS` (14).
-  Copia esa carpeta fuera del servidor de vez en cuando y guarda tu `.env` en un lugar seguro (sin él no se descifran los
-  tokens guardados). Copia manual: `docker compose exec backup /backup.sh now`. Restaurar:
-  `./scripts/restore-backup.sh backups/kairo-AAAAMMDD-HHMM.dump`. También puedes exportar todo en JSON desde *Ajustes > Datos*.
-- Actualizar: `git pull && docker compose up -d --build`. Las migraciones de la base de datos se aplican solas.
-- Si al compilar Maven Central responde `429 Too Many Requests`, usa un espejo:
+- The container only listens on `127.0.0.1:8080`; public access goes through your proxy. Change the port with `KAIRO_HOST_PORT`.
+- Optional push for phones: `docker compose --profile push up -d` starts ntfy; see [`docs/PUSH.md`](docs/PUSH.md).
+- Family: sign in as admin and use *Family > Invite someone*; see [`docs/FAMILY.md`](docs/FAMILY.md).
+- **Automatic backups**: the `backup` service saves a full copy to `./backups` every day (at `BACKUP_TIME`, 03:30 by
+  default) and deletes copies older than `BACKUP_KEEP_DAYS` (14). Copy that folder off the server now and then, and keep
+  your `.env` somewhere safe (without it the stored tokens cannot be decrypted). Manual backup:
+  `docker compose exec backup /backup.sh now`. Restore: `./scripts/restore-backup.sh backups/kairo-YYYYMMDD-HHMM.dump`.
+  You can also export everything as JSON from *Settings > Data*.
+- Update: `git pull && docker compose up -d --build`. Database migrations run automatically.
+- If Maven Central answers `429 Too Many Requests` while building, use a mirror:
   `MAVEN_MIRROR=https://maven-central.storage-download.googleapis.com/maven2/ docker compose build`.
-- La CI publica la imagen en `ghcr.io/<tu-usuario>/kairo` en cada push a `main`, por si prefieres no compilar en el servidor.
+- CI publishes the image to `ghcr.io/<your-user>/kairo` on every push to `main`, in case you prefer not to build on the server.
 
-### Google Calendar (opcional)
+### Google Calendar (optional)
 
-Sigue [`docs/GOOGLE_CALENDAR.md`](docs/GOOGLE_CALENDAR.md): creas un cliente OAuth en Google Cloud, pones
-`GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` en `.env` y conectas desde *Ajustes > Google Calendar*. Los
-cambios viajan en ambos sentidos cada pocos minutos.
+Follow [`docs/GOOGLE_CALENDAR.md`](docs/GOOGLE_CALENDAR.md): create an OAuth client in Google Cloud, put
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` and connect from *Settings > Google Calendar*. Changes sync
+both ways every few minutes.
 
-## Instalar la app
+## Install the apps
 
-### Android
+### Android and Wear OS
 
-Detalles completos en [`docs/ANDROID.md`](docs/ANDROID.md).
+Details in [`docs/ANDROID.md`](docs/ANDROID.md).
 
-1. Descarga `app-release.apk` (teléfono) y `wear-release.apk` (reloj) de *Actions > CI > kairo-apk*, o compílalos con `cd android && ./gradlew assembleRelease`.
-2. Instala, abre Kairo y escribe la URL de tu servidor, tu correo y tu contraseña.
-3. En *Ajustes* activa **Oye Kairo**, **batería sin restricciones** y **alarmas exactas**. Opcional: elige Kairo como asistente digital del sistema.
-4. Reloj: en el teléfono, *Ajustes > Vincular reloj* muestra un código de 6 dígitos que escribes en el reloj.
+1. Download `app-release.apk` (phone) and `wear-release.apk` (watch) from *Actions > CI > kairo-apk*, or build them with
+   `cd android && KAIRO_SERVER_URL=https://kairo.yourdomain.com ./gradlew assembleRelease`. Sign them with your own
+   keystore (see the docs).
+2. Install, open Kairo and enter your server URL, email and password.
+3. In *Settings* turn on **Hey Kairo**, **unrestricted battery** and **exact alarms**. Optional: pick Kairo as the
+   system digital assistant.
+4. Watch: on the phone, *Settings > Pair watch* shows a 6-digit code to type on the watch.
 
-### iPhone, iPad y Apple Watch
+### iPhone, iPad and Apple Watch
 
-Detalles completos en [`docs/IOS.md`](docs/IOS.md).
+Details in [`docs/IOS.md`](docs/IOS.md).
 
-1. En un Mac con **Xcode 27**, pon tu Team ID y tus identificadores en `ios/Config/Signing.xcconfig`.
-2. Abre `ios/Kairo.xcodeproj`, elige tu iPhone y pulsa ▶ (no hay dependencias externas que instalar).
-3. Abre Kairo y escribe la URL de tu servidor, tu correo y tu contraseña, o *Tengo un código de invitación*.
-4. Reloj: se instala con la app del iPhone y se vincula solo con el iPhone cerca.
+1. On a Mac with **Xcode 27**, set your Team ID and identifiers in `ios/Config/Signing.xcconfig`.
+2. Open `ios/Kairo.xcodeproj`, pick your iPhone and press ▶ (there are no external dependencies to install).
+3. Open Kairo and enter your server URL, email and password, or *I have an invite code*.
+4. Watch: it installs with the iPhone app and pairs by itself when the iPhone is nearby.
 
-## Avisos sin Firebase
+## Notifications without Firebase
 
-Sí, Kairo tiene su propio sistema de avisos y no usa Firebase ni servicios de Google:
+Kairo has its own notification system and does not use Firebase or any Google service:
 
-1. **Push propio con UnifiedPush**: tu servidor envía cada aviso cifrado de punta a punta a un ntfy que también es
-   tuyo (`docker compose --profile push up -d`), y la app ntfy del teléfono se lo entrega a Kairo, con la app cerrada.
-2. **Conexión directa** con tu servidor (WebSocket) mientras la app está abierta, "Oye Kairo" está activo o activas
-   *Conexión directa*: avisos al instante y todo se actualiza en vivo entre dashboard, teléfonos y reloj.
-3. **Alarmas locales exactas y sincronización cada 15 min**: recordatorios, avisos de eventos y el resumen matinal
-   suenan aunque no haya internet.
+1. **Your own push with UnifiedPush**: your server sends each notice, end-to-end encrypted, to an ntfy instance that is
+   also yours (`docker compose --profile push up -d`), and the ntfy app on the phone hands it to Kairo, even with the
+   app closed.
+2. **Direct connection** to your server (WebSocket) while the app is open, "Hey Kairo" is active or *Direct connection*
+   is on: instant notices, and everything updates live across dashboard, phones and watch.
+3. **Exact local alarms and a sync every 15 min**: reminders, event alerts and the morning briefing ring even with no
+   internet.
 
-Los recordatorios por lugar usan las alertas de proximidad de Android, sin Google Play Services.
-En iPhone, los recordatorios y eventos se programan en el propio teléfono, y para los avisos de la familia
-con la app cerrada puedes activar el push de Apple (APNs) en tu servidor; es opcional.
-Cómo configurarlo, en [`docs/PUSH.md`](docs/PUSH.md).
+Place-based reminders use Android's proximity alerts, without Google Play Services. On iPhone, reminders and events are
+scheduled on the phone itself, and for family notices with the app closed you can enable Apple push (APNs) on your
+server; it is optional. How to set it up: [`docs/PUSH.md`](docs/PUSH.md).
 
-## Seguridad y privacidad
+## Security and privacy
 
-- **Tus datos son tuyos**: todo vive en tu servidor y tu base de datos. Sólo el texto y el audio necesarios para responder se envían a Nan.
-- **"Oye Kairo" es offline**: la frase se detecta dentro del teléfono con Vosk; el audio no sale del dispositivo hasta que la dices.
-- Contraseñas con bcrypt, sesiones con tokens de acceso cortos y tokens de renovación rotativos por dispositivo (puedes cerrar sesión en cualquier dispositivo desde *Ajustes > Dispositivos*).
-- Tokens de Google y cabeceras de servidores MCP cifrados con AES-256-GCM; los adjuntos se sirven con enlaces firmados que caducan.
-- Límite de intentos en el inicio de sesión, contenedor sin privilegios de root, cabeceras de seguridad, puerto sólo en localhost.
-- En el teléfono, los tokens se guardan cifrados con Android Keystore; en el iPhone, en el llavero.
-- Acciones destructivas por voz quedan registradas y se pueden deshacer.
-- En familia, lo personal de cada uno es privado; los códigos de invitación son de un solo uso y vencen; al quitar a
-  alguien sus sesiones dejan de valer al instante.
-- El push va cifrado para cada teléfono (RFC 8291) y firmado (VAPID): el servidor ntfy no puede leerlo.
+See [`SECURITY.md`](SECURITY.md) for the threat model and how to report a vulnerability.
 
-## Desarrollo local
+- **Your data is yours**: everything lives on your server and in your database. Only the text and audio needed to answer go to Nan.
+- **"Hey Kairo" works offline**: the phrase is detected inside the phone with Vosk; audio does not leave the device until you say it.
+- **Prompt-injection protection**: text from other people, links or MCP servers reaches the AI as data, not as instructions.
+  If after reading it the AI wants to delete, share or notify someone, Kairo asks you for a "yes" first.
+- **Network protection (SSRF)**: Kairo does not fetch links, MCP servers or push endpoints on your internal network.
+- Passwords with bcrypt, short-lived access tokens and rotating refresh tokens per device (sign out any device from
+  *Settings > Devices*), login and pairing brute-force limits, per-person AI rate limits.
+- Google tokens and MCP server headers encrypted with AES-256-GCM; attachments are served with expiring signed links.
+- Unprivileged container, security headers, port bound to localhost only.
+- On the phone, tokens are stored encrypted with the Android Keystore; on iPhone, in the keychain.
+- Destructive actions by voice are logged and can be undone.
+- Within a family, personal items stay private; invite codes are single-use and expire; when someone is removed their
+  sessions stop working instantly.
+- Push is encrypted for each phone (RFC 8291) and signed (VAPID): the ntfy server cannot read it.
+
+## Local development
 
 ```bash
-# Base de datos
+# Database
 docker compose up -d db
 # Backend (http://localhost:8080)
 cd backend && set -a && . ../.env && set +a && KAIRO_DB_URL=jdbc:postgresql://localhost:5432/kairo ./gradlew run
-# Dashboard con recarga en vivo (http://localhost:5173, redirige /api al backend)
+# Dashboard with live reload (http://localhost:5173, proxies /api to the backend)
 cd dashboard && npm install && npm run dev
-# Pruebas
+# Tests
 cd backend && ./gradlew test
 cd android && ./gradlew :app:testDebugUnitTest
 cd ios/KairoKit && swift test
 ```
 
-Para exponer la base de datos en local añade `ports: ["127.0.0.1:5432:5432"]` al servicio `db`.
-El contrato completo de la API está en [`docs/API.md`](docs/API.md).
+To expose the database locally add `ports: ["127.0.0.1:5432:5432"]` to the `db` service. The full API contract is in
+[`docs/API.md`](docs/API.md).
 
-## Diseño
+## Roadmap
 
-La interfaz sigue la skill [Taste](https://www.tasteskill.dev/), instalada en `.claude/skills/` con
-`npx skills add Leonxlnx/taste-skill` (detalles en [`.claude/skills/README.md`](.claude/skills/README.md)): un solo
-acento ámbar `#F0A23B` sobre grises neutros, tipografía Geist, sin degradados ni emojis, estados
-completos (cargando, vacío, error) y animaciones que respetan "reducir movimiento". Tokens en
-[`design/DESIGN.md`](design/DESIGN.md). En Android se traduce a Material 3 Expressive y en iOS a
-SwiftUI con Liquid Glass.
+Next up is a **native macOS app** (menu bar, global hotkey, Spotlight and App Intents, sharing `KairoKit` with iOS).
+It is planned but **not started and not part of this release**. Other ideas: more languages, TestFlight and F-Droid
+distribution, an SDK for custom agent tools, optional local models. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-| Dashboard | Teléfono | Fold abierto |
-|---|---|---|
-| ![Hoy](docs/screenshots/dashboard/hoy-desktop-dark.png) | ![Hoy](docs/screenshots/android/hoy-telefono-oscuro.png) | ![Hoy en Fold](docs/screenshots/android/hoy-fold-abierto.png) |
-| ![Chat](docs/screenshots/dashboard/chat-desktop-dark.png) | ![Tareas](docs/screenshots/android/tareas-telefono.png) | ![Notas en Fold](docs/screenshots/android/notas-fold-abierto.png) |
-| ![Tareas](docs/screenshots/dashboard/tareas-desktop-light.png) | ![Recordatorios](docs/screenshots/android/recordatorios-telefono-claro.png) | ![Modo mesa](docs/screenshots/android/modo-mesa.png) |
+## Contributing
 
-| iPhone | iPhone oscuro | Tareas | Familia |
-|---|---|---|---|
-| ![Hoy en iPhone](docs/screenshots/ios/iphone-today-light.png) | ![Hoy en iPhone, oscuro](docs/screenshots/ios/iphone-today-dark.png) | ![Tareas en iPhone](docs/screenshots/ios/iphone-tasks-light.png) | ![Familia en iPhone](docs/screenshots/ios/iphone-family-dark.png) |
+Contributions are welcome, especially translations and real-device testing. Read [`CONTRIBUTING.md`](CONTRIBUTING.md)
+(build and test commands per part, how to add a language, code style).
 
-Más capturas en [`docs/screenshots/`](docs/screenshots).
+## Design
 
-## Licencias
+The interface follows the [Taste](https://www.tasteskill.dev/) skill, installed in `.claude/skills/` with
+`npx skills add Leonxlnx/taste-skill` (details in [`.claude/skills/README.md`](.claude/skills/README.md)): a single amber
+accent `#F0A23B` over neutral grays, Geist typography, no gradients or emoji, complete states (loading, empty, error)
+and animations that respect "reduce motion". Tokens in [`design/DESIGN.md`](design/DESIGN.md). On Android it translates
+to Material 3 Expressive and on iOS to SwiftUI with Liquid Glass.
 
-Fuentes Geist bajo SIL OFL 1.1 (`design/fonts/OFL-LICENSE.txt`). Skill Taste bajo MIT. Modelo de voz Vosk
-(se descarga en el teléfono) bajo Apache 2.0.
+## License
+
+Kairo is released under the [Apache License 2.0](LICENSE), which includes an express patent grant from every
+contributor. Geist fonts are under the SIL OFL 1.1 (`design/fonts/OFL-LICENSE.txt`), the Taste skill under MIT, and the
+Vosk speech model (downloaded on the phone) under Apache 2.0. See [`NOTICE`](NOTICE).

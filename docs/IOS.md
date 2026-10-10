@@ -125,9 +125,11 @@ environment. TestFlight and App Store builds use *production*. The app registers
   notices. They run on macOS and on Linux.
 - The [`ios.yml`](../.github/workflows/ios.yml) workflow builds the app, the widgets, the extension and the watch
   app with Xcode 27 on every change (about 3 minutes).
-- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml) is triggered by hand (*Actions > iOS capturas > Run
-  workflow*). It takes screenshots in the iPhone simulator (and the iPad one if you check the box) against a test
-  server (`ios/ci/mock_server.py`) and leaves them in the *capturas-ios* artifact.
+- [`ios-capturas.yml`](../.github/workflows/ios-capturas.yml) (named *iOS screenshots* in GitHub) is triggered by
+  hand (*Actions > iOS screenshots > Run workflow*) or when `ios/ci/screenshots.sh` changes. It takes screenshots in
+  the iPhone simulator (and the iPad one if you check the box) against a test server (`ios/ci/mock_server.py`, a
+  made-up "Rivera family") and leaves them in the *ios-screenshots* artifact. Pick the language with the workflow
+  input (English by default).
 
 ## Known limitations
 

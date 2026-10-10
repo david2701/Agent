@@ -43,7 +43,7 @@ Kairo (your server) --encrypted Web Push--> ntfy (your server) --phone connectio
 3. On each family phone:
    - Install **ntfy** (F-Droid or Play Store).
    - In ntfy, set *Settings > Default server* to `https://ntfy.example.com`.
-   - In Kairo, open *Settings > Instant alerts without Firebase > Set up*, choose ntfy and tap *Send test*.
+   - In Kairo, open *Settings > Instant notices, no Firebase > Set up*, choose ntfy and tap *Send test*.
 
 You do not need to create topics or subscriptions by hand. Kairo and ntfy manage them.
 
