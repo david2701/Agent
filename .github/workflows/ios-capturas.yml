@@ -1,10 +1,12 @@
 name: iOS capturas
 
 # Capturas de la app en el simulador de iPhone y iPad contra un servidor de prueba (ios/ci).
-# Tarda varios minutos (arrancar los simuladores), así que sólo corre cuando lo lanzas a mano:
-# Actions > iOS capturas > Run workflow.
+# Tarda varios minutos (arrancar los simuladores), así que no corre en cada cambio: se lanza a mano
+# (Actions > iOS capturas > Run workflow) o al cambiar los scripts de ios/ci.
 on:
   workflow_dispatch:
+  push:
+    paths: ["ios/ci/**"]
 
 permissions:
   contents: read
