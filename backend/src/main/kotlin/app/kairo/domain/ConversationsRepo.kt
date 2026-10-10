@@ -57,7 +57,9 @@ class ConversationsRepo(private val db: Db) {
     suspend fun messages(userId: UUID, conversationId: UUID, limit: Int = 200): List<StoredMessage> = db.read {
         query(
             """select m.* from messages m join conversations c on c.id = m.conversation_id
-               where c.user_id = ? and m.conversation_id = ? order by m.created_at limit ?""",
+               where c.user_id = ? and m.conversation_id = ?
+                 and not (m.role = 'assistant' and btrim(m.content) = '' and m.tool_calls is not null)
+               order by m.created_at limit ?""",
             userId, conversationId, limit,
         ) {
             StoredMessage(

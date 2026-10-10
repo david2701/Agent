@@ -72,7 +72,7 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
         val profile = db.read {
             query("select * from memories where user_id = ? and deleted_at is null and category = 'perfil' order by updated_at desc limit 8", userId) { map(it) }
         }
-        val vec = query?.takeIf { it.isNotBlank() }?.let { embedder.embed(it) }
+        val vec = query?.takeIf { it.isNotBlank() }?.let { embedder.embedQuery(it, Embedder.MEMORY_INSTRUCTION) }
         val similar = if (vec == null) {
             db.read { query("select * from memories where user_id = ? and deleted_at is null order by updated_at desc limit ?", userId, k) { map(it) } }
         } else {
@@ -83,13 +83,13 @@ class MemoriesRepo(private val db: Db, private val activity: ActivityRepo, priva
                        order by embedding <=> ? limit ?""",
                     Vec(vec), userId, Vec(vec), k,
                 ) { map(it) }
-            }.filter { (it.score ?: 0.0) > 0.35 }
+            }.filter { (it.score ?: 0.0) > 0.3 }
         }
         return (profile + similar).distinctBy { it.id }
     }
 
     suspend fun search(userId: UUID, query: String, k: Int = 8): List<Memory> {
-        val vec = embedder.embed(query) ?: return list(userId).filter { it.content.contains(query, ignoreCase = true) }.take(k)
+        val vec = embedder.embedQuery(query, Embedder.MEMORY_INSTRUCTION) ?: return list(userId).filter { it.content.contains(query, ignoreCase = true) }.take(k)
         return db.read {
             query(
                 """select *, 1 - (embedding <=> ?) as score from memories

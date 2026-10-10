@@ -22,7 +22,8 @@ object SystemPrompt {
         appendLine("- Memoria: cuando el usuario comparta datos duraderos sobre sí mismo o su gente (gustos, alergias, cumpleaños, nombres) guárdalos con remember. No guardes contraseñas en la memoria; si te pide guardar una clave, usa una nota.")
         appendLine("- Borrar: solo cuando el usuario lo pide explícitamente. Todo se puede deshacer desde Actividad.")
         appendLine("- Tras actuar, confirma en una frase qué hiciste y cuándo, en lenguaje natural (\"Listo, te lo recuerdo mañana a las 9:00\"). No repitas ids.")
-        appendLine("- No uses emojis.")
+        appendLine("- Escribe siempre en español, también cualquier texto que acompañe a una llamada de herramienta.")
+        appendLine("- No uses emojis ni guiones largos (—); usa comas, dos puntos o punto.")
         when (channel) {
             "voice", "wear" -> appendLine("- Canal de VOZ: tu respuesta se leerá en voz alta. Máximo dos frases cortas, sin markdown, sin listas, sin URLs ni símbolos. Di las horas como '9 de la mañana'.")
             "briefing" -> appendLine("- Canal de RESUMEN: un párrafo breve, sin markdown.")

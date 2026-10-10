@@ -9,6 +9,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
 import org.slf4j.LoggerFactory
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
@@ -80,12 +81,29 @@ class AuthService(private val cfg: AppConfig, private val users: UsersRepo) {
         return user to TokenPair(access(user.id, deviceId), refresh, ACCESS_TTL, deviceId)
     }
 
-    suspend fun refresh(refreshToken: String): Pair<User, TokenPair> {
-        val (deviceId, userId) = users.deviceByRefresh(Crypto.sha256(refreshToken)) ?: throw AuthException("Sesión expirada")
+    /**
+     * Rotaciones recientes: si dos peticiones llegan con el mismo refresh token (dos pestañas que
+     * abren a la vez, una red que reintenta), la segunda recibe el mismo token nuevo en lugar de
+     * cerrar la sesión. Sólo vale durante [REFRESH_GRACE_MS] y mientras ese token nuevo siga vigente.
+     */
+    private val recentRotations = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
+    private val refreshLock = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun refresh(refreshToken: String): Pair<User, TokenPair> = refreshLock.withLock {
+        val now = System.currentTimeMillis()
+        recentRotations.entries.removeIf { it.value.second < now }
+        val oldHash = Crypto.sha256(refreshToken)
+        val (deviceId, userId, next) = recentRotations[oldHash]?.first
+            ?.let { cached -> users.deviceByRefresh(Crypto.sha256(cached))?.let { Triple(it.first, it.second, cached) } }
+            ?: run {
+                val (deviceId, userId) = users.deviceByRefresh(oldHash) ?: throw AuthException("Sesión expirada")
+                val next = Crypto.randomToken(48)
+                users.rotateRefresh(deviceId, Crypto.sha256(next))
+                recentRotations[oldHash] = next to now + REFRESH_GRACE_MS
+                Triple(deviceId, userId, next)
+            }
         val user = users.byId(userId) ?: throw AuthException("Sesión expirada")
-        val next = Crypto.randomToken(48)
-        users.rotateRefresh(deviceId, Crypto.sha256(next))
-        return user to TokenPair(access(userId, deviceId), next, ACCESS_TTL, deviceId)
+        user to TokenPair(access(userId, deviceId), next, ACCESS_TTL, deviceId)
     }
 
     suspend fun changePassword(userId: UUID, current: String, new: String) {
@@ -109,5 +127,6 @@ class AuthService(private val cfg: AppConfig, private val users: UsersRepo) {
         const val ISSUER = "kairo"
         const val AUDIENCE = "kairo-clients"
         const val ACCESS_TTL = 3600L
+        const val REFRESH_GRACE_MS = 60_000L
     }
 }

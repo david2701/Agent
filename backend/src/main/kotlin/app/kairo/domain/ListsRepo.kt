@@ -48,7 +48,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo) {
     suspend fun rename(userId: UUID, id: UUID, name: String?, icon: String?): ShoppingList? = db.tx {
         exec("update lists set name = coalesce(?, name), icon = coalesce(?, icon), updated_at = now() where user_id = ? and id = ?", name?.trim(), icon, userId, id)
         getTx(userId, id)
-    }
+    }.also { if (it != null) activity.notify(userId, EntityTypes.LIST, id, Kinds.UPDATED) }
 
     suspend fun addItems(userId: UUID, listId: UUID, texts: List<String>, source: String): ShoppingList? {
         val clean = texts.map { it.trim() }.filter { it.isNotEmpty() }
@@ -125,7 +125,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo) {
         getTx(userId, listId) ?: return@tx null
         exec("delete from list_items where id = ? and list_id = ?", itemId, listId)
         getTx(userId, listId)
-    }
+    }.also { if (it != null) activity.notify(userId, EntityTypes.LIST, listId, Kinds.UPDATED) }
 
     suspend fun delete(userId: UUID, id: UUID, source: String): ShoppingList? {
         val list = get(userId, id) ?: return null

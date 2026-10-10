@@ -116,6 +116,10 @@ fun Application.kairoModule(s: Services) {
             rateLimiter(limit = 10, refillPeriod = 1.minutes)
             requestKey { call -> call.request.origin.remoteAddress }
         }
+        register(RateLimitName("refresh")) {
+            rateLimiter(limit = 60, refillPeriod = 1.minutes)
+            requestKey { call -> call.request.origin.remoteAddress }
+        }
     }
     install(StatusPages) {
         exception<ApiException> { call, e -> call.respond(e.status, ApiError(e.message)) }

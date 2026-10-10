@@ -67,7 +67,10 @@ fun Route.authRoutes(s: Services) {
                 }
                 call.respondTokens(user, tokens, web = false, s.config.publicUrl.startsWith("https"))
             }
+        }
 
+        // Límite propio: cada carga de página renueva la sesión y no debe agotar el de inicio de sesión.
+        rateLimit(RateLimitName("refresh")) {
             post("/refresh") {
                 val body = runCatching { call.receiveBody<RefreshRequest>() }.getOrNull()
                 val token = body?.refreshToken ?: call.request.cookies[COOKIE] ?: throw ApiException(HttpStatusCode.Unauthorized, "Sin sesión")

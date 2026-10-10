@@ -133,7 +133,7 @@ fun Route.systemRoutes(s: Services) {
         get { call.respond(s.recordingsRepo.list(call.userId())) }
         post {
             val b = runCatching { call.receiveBody<RecordingCreate>() }.getOrDefault(RecordingCreate())
-            call.respond(HttpStatusCode.Created, s.recordingsRepo.create(call.userId(), b.title, "app"))
+            call.respond(HttpStatusCode.Created, s.recordingsRepo.create(call.userId(), b.title, if (call.request.headers["X-Kairo-Client"]?.lowercase() in setOf("android", "wear")) "app" else "dashboard"))
         }
         get("/{id}") { call.respond(s.recordingsRepo.get(call.userId(), call.uuidParam()) ?: notFound("Grabación")) }
         post("/{id}/segments") {

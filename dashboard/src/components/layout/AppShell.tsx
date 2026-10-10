@@ -1,0 +1,418 @@
+import {
+  CaretLineLeft,
+  CaretLineRight,
+  DotsThreeOutline,
+  MagnifyingGlass,
+  Monitor,
+  Moon,
+  SignOut,
+  Sun,
+} from '@phosphor-icons/react'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { KairoMark } from '@/components/KairoMark'
+import { RecordingPill } from '@/components/RecordingPill'
+import { IconButton } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/feedback'
+import { Menu } from '@/components/ui/menu'
+import { Kbd } from '@/components/ui/misc'
+import { Toaster } from '@/components/ui/toast'
+import { setClientLocation } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { cn } from '@/lib/cn'
+import { useRealtime, useRealtimeState } from '@/lib/realtime'
+import { useTheme, type ThemeMode } from '@/lib/theme'
+import { ALL_NAV, MOBILE_PRIMARY, NAV_GROUPS, SETTINGS_ITEM, type NavItem } from './nav'
+
+interface ShellContextValue {
+  openPalette: (prefill?: string) => void
+}
+
+const ShellContext = createContext<ShellContextValue>({ openPalette: () => undefined })
+export const useShell = () => useContext(ShellContext)
+
+const CommandPalette = lazy(() => import('./CommandPalette').then((m) => ({ default: m.CommandPalette })))
+
+const SIDEBAR_KEY = 'kairo-sidebar'
+
+function initialCollapsed() {
+  try {
+    const v = localStorage.getItem(SIDEBAR_KEY)
+    if (v === 'collapsed') return true
+    if (v === 'expanded') return false
+  } catch {
+    /* nada */
+  }
+  return window.matchMedia('(max-width: 1023px)').matches
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+export const MOD_KEY = isMac ? '⌘' : 'Ctrl'
+
+export function AppShell() {
+  const navigate = useNavigate()
+  const [collapsed, setCollapsed] = useState(initialCollapsed)
+  const [palette, setPalette] = useState<{ open: boolean; prefill: string }>({ open: false, prefill: '' })
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [paletteLoaded, setPaletteLoaded] = useState(false)
+  const location = useLocation()
+
+  const goHome = useCallback(() => navigate('/'), [navigate])
+  useRealtime(true, goHome)
+
+  // Ubicación aproximada para clima y lugares, solo si ya fue concedida.
+  useEffect(() => {
+    if (!navigator.permissions || !navigator.geolocation) return
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((p) => {
+        if (p.state === 'granted') {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => setClientLocation(pos.coords.latitude, pos.coords.longitude),
+            () => undefined,
+            { maximumAge: 10 * 60_000, timeout: 8000 },
+          )
+        }
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPalette((p) => ({ open: !p.open, prefill: '' }))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    setMoreOpen(false)
+  }, [location.pathname])
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(SIDEBAR_KEY, c ? 'expanded' : 'collapsed')
+      } catch {
+        /* nada */
+      }
+      return !c
+    })
+  }
+
+  useEffect(() => {
+    if (palette.open) setPaletteLoaded(true)
+  }, [palette.open])
+
+  const shell = useMemo<ShellContextValue>(() => ({ openPalette: (prefill = '') => setPalette({ open: true, prefill }) }), [])
+
+  return (
+    <ShellContext.Provider value={shell}>
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-control bg-surface px-3 py-2 text-base focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Saltar al contenido
+      </a>
+      <div className="flex min-h-[100dvh]">
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onAsk={() => shell.openPalette()} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MobileTopBar onAsk={() => shell.openPalette()} />
+          <main id="main" className="min-w-0 flex-1 pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0">
+            <Suspense fallback={<PageFallback />}>
+              <Outlet />
+            </Suspense>
+          </main>
+        </div>
+      </div>
+      <BottomNav onMore={() => setMoreOpen(true)} />
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+      {(paletteLoaded || palette.open) && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={palette.open}
+            prefill={palette.prefill}
+            onClose={() => setPalette((p) => ({ ...p, open: false }))}
+          />
+        </Suspense>
+      )}
+      <RecordingPill />
+      <Toaster />
+    </ShellContext.Provider>
+  )
+}
+
+function PageFallback() {
+  return (
+    <div className="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8 md:py-8" aria-busy="true" aria-label="Cargando">
+      <Skeleton className="h-8 w-48" />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Skeleton className="h-64 rounded-card" />
+        <Skeleton className="h-64 rounded-card" />
+      </div>
+    </div>
+  )
+}
+
+function NavEntry({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
+  const Icon = item.icon
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === '/'}
+      onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
+      className={({ isActive }) =>
+        cn(
+          'group relative flex h-9 items-center gap-3 rounded-control text-base transition-colors duration-200',
+          collapsed ? 'justify-center px-0' : 'px-2.5',
+          isActive ? 'bg-surface-2 font-medium text-fg' : 'text-muted hover:bg-surface-2/60 hover:text-fg',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon className={cn('size-[18px] shrink-0', isActive ? 'text-accent-strong' : 'text-faint group-hover:text-muted')} />
+          <span className={cn(collapsed && 'sr-only')}>{item.label}</span>
+        </>
+      )}
+    </NavLink>
+  )
+}
+
+function Sidebar({ collapsed, onToggle, onAsk }: { collapsed: boolean; onToggle: () => void; onAsk: () => void }) {
+  const live = useRealtimeState()
+  return (
+    <aside
+      className={cn(
+        'sticky top-0 hidden h-[100dvh] shrink-0 flex-col border-r border-line bg-bg md:flex',
+        collapsed ? 'w-[68px]' : 'w-[244px]',
+      )}
+      aria-label="Navegación principal"
+    >
+      <div className={cn('flex h-16 items-center', collapsed ? 'justify-center' : 'justify-between pr-2 pl-4')}>
+        <NavLink to="/" className="flex items-center gap-2.5 rounded-control" aria-label="Kairo, ir a Hoy">
+          <KairoMark className="size-7" />
+          {!collapsed && <span className="text-md font-semibold tracking-tight">Kairo</span>}
+        </NavLink>
+        {!collapsed && (
+          <IconButton label="Contraer barra lateral" size="sm" onClick={onToggle}>
+            <CaretLineLeft className="size-4" />
+          </IconButton>
+        )}
+      </div>
+
+      <div className={cn('px-3 pb-2', collapsed && 'flex flex-col items-center gap-1 px-0')}>
+        {collapsed ? (
+          <>
+            <IconButton label="Expandir barra lateral" size="sm" onClick={onToggle}>
+              <CaretLineRight className="size-4" />
+            </IconButton>
+            <IconButton label={`Preguntar o buscar (${MOD_KEY} K)`} onClick={onAsk}>
+              <MagnifyingGlass className="size-[18px]" />
+            </IconButton>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onAsk}
+            className="flex h-9 w-full items-center gap-2 rounded-control border border-line bg-surface px-2 text-base text-muted transition-colors hover:border-[color-mix(in_srgb,var(--text-faint)_45%,var(--border))] hover:text-fg active:scale-[0.99]"
+          >
+            <MagnifyingGlass className="size-4 text-faint" />
+            <span className="min-w-0 flex-1 truncate text-left text-sm">Preguntar o buscar</span>
+            <Kbd className="shrink-0 px-1">{MOD_KEY} K</Kbd>
+          </button>
+        )}
+      </div>
+
+      <nav className={cn('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-2 pb-3', collapsed ? 'px-2.5' : 'px-3')}>
+        {NAV_GROUPS.map((group, i) => (
+          <div key={i} className="grid gap-0.5">
+            {group.map((item) => (
+              <NavEntry key={item.to} item={item} collapsed={collapsed} />
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      <div className={cn('grid grid-cols-1 gap-1 border-t border-line py-3', collapsed ? 'px-2.5' : 'px-3')}>
+        {live === 'offline' && !collapsed && (
+          <p className="px-2.5 pb-1 text-xs text-faint" role="status">
+            Reconectando con el servidor…
+          </p>
+        )}
+        <NavEntry item={SETTINGS_ITEM} collapsed={collapsed} />
+        <UserRow collapsed={collapsed} />
+      </div>
+    </aside>
+  )
+}
+
+const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: ReactNode }[] = [
+  { mode: 'light', label: 'Tema claro', icon: <Sun className="size-4" /> },
+  { mode: 'dark', label: 'Tema oscuro', icon: <Moon className="size-4" /> },
+  { mode: 'system', label: 'Según el sistema', icon: <Monitor className="size-4" /> },
+]
+
+function ThemeIcon() {
+  const { mode, resolved } = useTheme()
+  if (mode === 'system') return <Monitor className="size-[18px]" />
+  return resolved === 'dark' ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />
+}
+
+function UserRow({ collapsed }: { collapsed: boolean }) {
+  const { user, logout } = useAuth()
+  const { setMode } = useTheme()
+  const name = user?.displayName || 'Tú'
+  const themeItems = THEME_OPTIONS.map((o) => ({ label: o.label, icon: o.icon, onSelect: () => setMode(o.mode) }))
+  return (
+    <div className={cn('flex min-w-0 items-center gap-0.5', collapsed ? 'flex-col' : 'pl-1')}>
+      {!collapsed && (
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 py-1">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm font-medium text-fg" aria-hidden>
+            {name.charAt(0).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-fg">{name}</span>
+            <span className="block truncate text-xs text-faint">{user?.email}</span>
+          </span>
+        </div>
+      )}
+      <Menu
+        align={collapsed ? 'start' : 'end'}
+        items={themeItems}
+        trigger={(p) => (
+          <IconButton label="Cambiar tema" size="sm" {...p}>
+            <ThemeIcon />
+          </IconButton>
+        )}
+      />
+      <IconButton label="Cerrar sesión" size="sm" tone="danger" onClick={() => void logout()}>
+        <SignOut className="size-[18px]" />
+      </IconButton>
+    </div>
+  )
+}
+
+function MobileTopBar({ onAsk }: { onAsk: () => void }) {
+  return (
+    <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-bg px-4 md:hidden">
+      <NavLink to="/" className="flex items-center gap-2" aria-label="Kairo, ir a Hoy">
+        <KairoMark className="size-6" />
+        <span className="text-md font-semibold tracking-tight">Kairo</span>
+      </NavLink>
+      <IconButton label="Preguntar o buscar" onClick={onAsk}>
+        <MagnifyingGlass className="size-5" />
+      </IconButton>
+    </div>
+  )
+}
+
+function BottomNav({ onMore }: { onMore: () => void }) {
+  const location = useLocation()
+  const items = MOBILE_PRIMARY.map((to) => ALL_NAV.find((n) => n.to === to)!)
+  const inPrimary = items.some((i) => (i.to === '/' ? location.pathname === '/' : location.pathname.startsWith(i.to)))
+  return (
+    <nav
+      aria-label="Navegación"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+    >
+      <div className="grid h-16 grid-cols-5">
+        {items.map((item) => {
+          const Icon = item.icon
+          const label = item.to === '/chat' ? 'Chat' : item.label
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                cn(
+                  'flex flex-col items-center justify-center gap-1 text-xs transition-colors active:scale-95',
+                  isActive ? 'font-medium text-fg' : 'text-faint',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon className={cn('size-[22px]', isActive && 'text-accent-strong')} weight={isActive ? 'fill' : 'regular'} />
+                  {label}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
+        <button
+          type="button"
+          onClick={onMore}
+          className={cn('flex flex-col items-center justify-center gap-1 text-xs active:scale-95', inPrimary ? 'text-faint' : 'font-medium text-fg')}
+        >
+          <DotsThreeOutline className={cn('size-[22px]', !inPrimary && 'text-accent-strong')} weight={inPrimary ? 'regular' : 'fill'} />
+          Más
+        </button>
+      </div>
+    </nav>
+  )
+}
+
+function MoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { mode, setMode } = useTheme()
+  const { logout } = useAuth()
+  const rest = ALL_NAV.filter((n) => !MOBILE_PRIMARY.includes(n.to))
+  return (
+    <Dialog open={open} onClose={onClose} title="Más secciones" size="sm">
+      <div className="grid grid-cols-2 gap-2">
+        {rest.map((item) => {
+          const Icon = item.icon
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  'flex h-12 items-center gap-3 rounded-control border px-3 text-base transition-colors active:scale-[0.98]',
+                  isActive ? 'border-line bg-surface-2 font-medium' : 'border-line bg-surface',
+                )
+              }
+            >
+              <Icon className="size-5 text-muted" />
+              {item.label}
+            </NavLink>
+          )
+        })}
+      </div>
+      <div className="mt-5 grid gap-2">
+        <p className="text-sm font-medium text-muted">Tema</p>
+        <div className="grid grid-cols-3 gap-2">
+          {THEME_OPTIONS.map((o) => (
+            <button
+              key={o.mode}
+              type="button"
+              onClick={() => setMode(o.mode)}
+              aria-pressed={mode === o.mode}
+              className={cn(
+                'flex h-10 items-center justify-center gap-2 rounded-control border text-sm transition-colors',
+                mode === o.mode ? 'border-accent bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-fg' : 'border-line text-muted',
+              )}
+            >
+              {o.icon}
+              {o.mode === 'light' ? 'Claro' : o.mode === 'dark' ? 'Oscuro' : 'Sistema'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => void logout()}
+        className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-control border border-line text-base text-danger active:scale-[0.98]"
+      >
+        <SignOut className="size-4" />
+        Cerrar sesión
+      </button>
+    </Dialog>
+  )
+}

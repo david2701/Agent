@@ -151,7 +151,7 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo) {
 
     suspend fun createProject(userId: UUID, name: String, color: String?): Project = db.tx {
         one("insert into projects(user_id, name, color) values (?, ?, ?) returning *", userId, name.trim(), color) { mapProject(it) }!!
-    }
+    }.also { activity.notify(userId, EntityTypes.PROJECT, it.id, Kinds.CREATED) }
 
     suspend fun updateProject(userId: UUID, id: UUID, name: String?, color: String?, sort: Double?): Project? = db.tx {
         one(
@@ -159,12 +159,12 @@ class TasksRepo(private val db: Db, private val activity: ActivityRepo) {
                where user_id = ? and id = ? and deleted_at is null returning *""",
             name?.trim(), color, sort, userId, id,
         ) { mapProject(it) }
-    }
+    }.also { if (it != null) activity.notify(userId, EntityTypes.PROJECT, id, Kinds.UPDATED) }
 
     suspend fun deleteProject(userId: UUID, id: UUID): Boolean = db.tx {
         exec("update tasks set project_id = null where user_id = ? and project_id = ?", userId, id)
         exec("update projects set deleted_at = now() where user_id = ? and id = ?", userId, id) > 0
-    }
+    }.also { if (it) activity.notify(userId, EntityTypes.PROJECT, id, Kinds.DELETED) }
 
     private fun mapProject(rs: ResultSet) = Project(rs.uuid("id"), rs.str("name"), rs.strOrNull("color"), rs.getDouble("sort"), rs.instant("created_at"))
 

@@ -104,7 +104,7 @@ class NotesRepo(
     suspend fun search(userId: UUID, query: String, limit: Int = 5): List<Note> {
         val q = query.trim()
         if (q.isEmpty()) return list(userId, limit = limit)
-        val vec = embedder.embed(q)
+        val vec = embedder.embedQuery(q)
         val candidates = LinkedHashMap<UUID, Note>()
         db.read {
             if (vec != null) {
@@ -129,8 +129,14 @@ class NotesRepo(
         val docs = candidates.values.toList()
         val hits = runCatching { nan.rerank(q, docs.map { "${it.title}\n${it.content}" }) }.getOrNull()
             ?: return docs.take(limit)
+        // El reranker es muy estricto con sinónimos ("impuestos" frente a "declaración de renta"):
+        // también se conservan las notas muy cercanas en significado y las que contienen el texto literal.
         return hits.sortedByDescending { it.score }
-            .filter { it.score > 0.01 || hits.size <= limit }
+            .filter { h ->
+                val d = docs[h.index]
+                h.score > 0.01 || hits.size <= limit || (d.score ?: 0.0) >= 0.4 ||
+                    "${d.title}\n${d.content}".contains(q, ignoreCase = true)
+            }
             .take(limit)
             .map { docs[it.index].copy(score = it.score) }
     }

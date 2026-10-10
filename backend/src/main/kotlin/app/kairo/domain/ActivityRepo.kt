@@ -43,6 +43,10 @@ class ActivityRepo(private val db: Db, private val bus: EventBus) {
         bus.entityChanged(userId, entityType, entityId, kind)
     }
 
+    /** Avisa a los clientes conectados de un cambio menor que no se guarda en el historial. */
+    suspend fun notify(userId: UUID, entityType: String, entityId: UUID?, kind: String) =
+        bus.entityChanged(userId, entityType, entityId, kind)
+
     suspend fun list(userId: UUID, limit: Int = 50, before: Instant? = null): List<Activity> = db.read {
         query(
             """select * from activity where user_id = ? and (?::timestamptz is null or created_at < ?)

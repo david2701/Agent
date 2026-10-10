@@ -153,11 +153,12 @@ class Agent(
                 val msg = result.message
                 val calls = msg.toolCalls.orEmpty()
                 if (calls.isEmpty() || forceAnswer) {
-                    finalText = msg.text.trim()
+                    finalText = tidy(msg.text)
                     break
                 }
                 messages += msg
-                conversations.append(conv.id, msg.copy(reasoningContent = null))
+                // El texto previo a las herramientas ("voy a revisar...") no aporta al historial y a veces sale en inglés.
+                conversations.append(conv.id, msg.copy(content = null, reasoningContent = null))
                 for (call in calls) {
                     val tool = byName[call.function.name]
                     send(AgentEvent.ToolStart(call.id, call.function.name, tool?.label ?: "Trabajando"))
@@ -189,6 +190,13 @@ class Agent(
             send(AgentEvent.Error(friendlyError(e)))
         }
     }
+
+    /** Normaliza la respuesta final: sin guiones largos (la guía de estilo de Kairo no los usa). */
+    private fun tidy(text: String): String = text.trim()
+        .replace(Regex("(?m)^([ \\t]*)\u2014[ \\t]*"), "$1- ")
+        .replace(Regex("[ \\t]*\u2014[ \\t]*(?=\\S)"), ", ")
+        .replace("\u2014", "")
+        .replace(Regex(",\\s*,"), ",")
 
     /** Ejecuta una ronda en streaming; si el modelo principal falla antes de emitir texto, reintenta con el de respaldo. */
     private suspend fun streamStep(

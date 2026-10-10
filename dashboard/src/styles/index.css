@@ -1,0 +1,406 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../assets/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Tokens de DESIGN.md. Claro por defecto, oscuro con la clase .dark en <html>. */
+:root {
+  --bg: #f3f4f5;
+  --surface: #fcfcfd;
+  --surface-2: #eef0f2;
+  --border: #dfe2e6;
+  --text: #14161a;
+  --text-muted: #5b616a;
+  --text-faint: #858b94;
+  --accent: #e0901f;
+  --accent-strong: #8f5300;
+  --on-accent: #1a1206;
+  --danger: #c2412f;
+  --success: #2e8a57;
+  --mark: #14161a;
+  --scrim: rgb(20 22 26 / 0.32);
+  --shadow-tint: 20 22 26;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0e1013;
+  --surface: #15181c;
+  --surface-2: #1c2025;
+  --border: #262b31;
+  --text: #ecedee;
+  --text-muted: #9ba1a9;
+  --text-faint: #6b717a;
+  --accent: #f0a23b;
+  --accent-strong: #f5b65e;
+  --on-accent: #1a1206;
+  --danger: #f0705f;
+  --success: #5bc48a;
+  --scrim: rgb(5 6 8 / 0.6);
+  --mark: #ece8e1;
+  --shadow-tint: 0 0 0;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-scrim: var(--scrim);
+  --color-mark: var(--mark);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Escala web: 12 / 13 / 14 (cuerpo) / 16 / 20 / 28 / 40 */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.75rem;
+  --text-xl--line-height: 2.125rem;
+  --text-2xl: 2.5rem;
+  --text-2xl--line-height: 2.75rem;
+
+  /* Radios: controles 10px, tarjetas 16px, píldoras completas */
+  --radius-control: 10px;
+  --radius-card: 16px;
+
+  --ease-kairo: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-pop: 0 12px 32px -12px rgb(var(--shadow-tint) / 0.28), 0 2px 6px -2px rgb(var(--shadow-tint) / 0.12);
+  --shadow-lift: 0 18px 40px -16px rgb(var(--shadow-tint) / 0.35);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-bg font-sans text-base text-fg;
+    font-feature-settings: 'ss01' on;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  ::placeholder {
+    color: var(--text-faint);
+    opacity: 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-semibold tracking-tight;
+  }
+
+  dialog {
+    color: inherit;
+  }
+
+  /* Los elementos de una grilla pueden encogerse: evita que un texto truncado ensanche la columna. */
+  .grid > * {
+    min-width: 0;
+  }
+
+  dialog::backdrop {
+    background: var(--scrim);
+  }
+
+  /* Barra de desplazamiento discreta */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+@layer components {
+  /* Diálogos nativos con entrada/salida suave (CSS, sin JS) */
+  .k-dialog {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+    transition:
+      opacity 220ms var(--ease-kairo),
+      transform 280ms var(--ease-kairo),
+      overlay 280ms allow-discrete,
+      display 280ms allow-discrete;
+  }
+  .k-dialog[open] {
+    opacity: 1;
+    transform: none;
+  }
+  @starting-style {
+    .k-dialog[open] {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+  }
+  .k-dialog::backdrop {
+    opacity: 0;
+    transition:
+      opacity 220ms var(--ease-kairo),
+      overlay 220ms allow-discrete,
+      display 220ms allow-discrete;
+  }
+  .k-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .k-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+
+  .k-skeleton {
+    background: var(--surface-2);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .k-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 55%, transparent), transparent);
+    animation: k-shimmer 1.6s var(--ease-kairo) infinite;
+  }
+
+  /* Markdown de Kairo y de las notas */
+  .k-prose {
+    @apply text-base leading-relaxed text-fg;
+    overflow-wrap: anywhere;
+  }
+  .k-prose > * + * {
+    margin-top: 0.7em;
+  }
+  .k-prose h1,
+  .k-prose h2,
+  .k-prose h3,
+  .k-prose h4 {
+    @apply font-semibold tracking-tight text-fg;
+    margin-top: 1.2em;
+  }
+  .k-prose h1 {
+    @apply text-lg;
+  }
+  .k-prose h2 {
+    @apply text-md;
+  }
+  .k-prose h3,
+  .k-prose h4 {
+    @apply text-base;
+  }
+  .k-prose > :first-child {
+    margin-top: 0;
+  }
+  .k-prose a {
+    color: var(--accent-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  .k-prose strong {
+    @apply font-semibold;
+  }
+  .k-prose ul,
+  .k-prose ol {
+    padding-left: 1.25em;
+  }
+  .k-prose ul {
+    list-style: disc;
+  }
+  .k-prose ol {
+    list-style: decimal;
+  }
+  .k-prose li + li {
+    margin-top: 0.25em;
+  }
+  .k-prose li::marker {
+    color: var(--text-faint);
+  }
+  .k-prose li:has(> input[type='checkbox']) {
+    list-style: none;
+    margin-left: -1.25em;
+  }
+  .k-prose input[type='checkbox'] {
+    accent-color: var(--accent);
+    margin-right: 0.5em;
+    vertical-align: -1px;
+  }
+  .k-prose code {
+    @apply font-mono text-sm;
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 0.1em 0.35em;
+  }
+  .k-prose pre {
+    @apply font-mono text-sm;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75em 1em;
+    overflow-x: auto;
+  }
+  .k-prose pre code {
+    background: none;
+    padding: 0;
+  }
+  .k-prose blockquote {
+    border-left: 2px solid var(--border);
+    padding-left: 0.9em;
+    color: var(--text-muted);
+  }
+  .k-prose hr {
+    border-color: var(--border);
+  }
+  .k-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    @apply text-sm;
+  }
+  .k-prose th,
+  .k-prose td {
+    text-align: left;
+    padding: 0.4em 0.6em;
+    border-bottom: 1px solid var(--border);
+  }
+  .k-prose th {
+    @apply font-medium text-muted;
+  }
+  .k-prose img {
+    border-radius: 10px;
+    max-width: 100%;
+  }
+}
+
+/* Línea de herramienta en curso: brillo que recorre el texto (solo mientras trabaja) */
+.k-shimmer-text {
+  background: linear-gradient(90deg, var(--text-muted) 20%, var(--text) 50%, var(--text-muted) 80%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: k-text-shimmer 1.9s linear infinite;
+}
+
+/* Cursor fijo al final del texto que llega en streaming */
+.k-streaming > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.45em;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.17em;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes k-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes k-text-shimmer {
+  from {
+    background-position: 110% 0;
+  }
+  to {
+    background-position: -110% 0;
+  }
+}
+
+@keyframes k-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .k-skeleton::after {
+    display: none;
+  }
+  .k-shimmer-text {
+    animation: none;
+    color: var(--text-muted);
+    background: none;
+  }
+}

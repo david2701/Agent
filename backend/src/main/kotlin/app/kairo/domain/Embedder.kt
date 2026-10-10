@@ -16,6 +16,12 @@ class Embedder(private val nan: NanClient, private val db: Db, private val scope
         .onFailure { log.warn("Fallo al calcular embedding: {}", it.message) }
         .getOrNull()
 
+    /**
+     * Embedding de una consulta. qwen3-embedding separa mucho mejor lo relevante de lo que no lo es
+     * cuando la consulta lleva una instrucción (los documentos se guardan sin ella).
+     */
+    suspend fun embedQuery(query: String, instruction: String = NOTES_INSTRUCTION): FloatArray? = embed("Instruct: $instruction\nQuery: $query")
+
     fun scheduleNote(id: UUID, title: String, content: String) = schedule("notes", id, "$title\n$content")
 
     fun scheduleMemory(id: UUID, content: String) = schedule("memories", id, content)
@@ -42,5 +48,10 @@ class Embedder(private val nan: NanClient, private val db: Db, private val scope
                 db.tx { chunk.zip(vectors).forEach { (row, v) -> exec("update $table set embedding = ? where id = ?", Vec(v), row.first) } }
             }
         }
+    }
+
+    companion object {
+        const val NOTES_INSTRUCTION = "Dada una consulta, encuentra las notas personales que la responden o tratan del tema"
+        const val MEMORY_INSTRUCTION = "Dada una consulta del usuario, encuentra los datos personales sobre él que sean relevantes"
     }
 }
