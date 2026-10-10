@@ -27,7 +27,8 @@ class PlacesRepo(private val db: Db, private val activity: ActivityRepo) {
             ?: all.firstOrNull { Text.normalize(it.name).contains(target) || target.contains(Text.normalize(it.name)) }
     }
 
-    suspend fun upsert(userId: UUID, name: String, lat: Double, lon: Double, radiusM: Int, address: String?, source: String, shared: Boolean? = null): Place {
+    suspend fun upsert(userId: UUID, rawName: String, lat: Double, lon: Double, radiusM: Int, address: String?, source: String, shared: Boolean? = null): Place {
+        val name = Text.cleanName(rawName).ifEmpty { "Lugar" }
         val existing = findByName(userId, name)?.takeIf { Text.normalize(it.name) == Text.normalize(name) }
         val place = db.tx {
             if (existing != null) {
@@ -81,6 +82,13 @@ class PlacesRepo(private val db: Db, private val activity: ActivityRepo) {
 }
 
 object Text {
+    /** Largo máximo del nombre de una lista o un lugar (lo ven otros miembros y llega al prompt del agente). */
+    const val NAME_MAX = 60
+
+    /** Nombre en una sola línea: sin saltos ni caracteres de control o invisibles, espacios colapsados y recortado a [max]. */
+    fun cleanName(raw: String, max: Int = NAME_MAX): String =
+        raw.replace(Regex("\\p{Cf}"), "").replace(Regex("[\\p{Cc}\\p{Zl}\\p{Zp}]"), " ").replace(Regex("\\s+"), " ").trim().take(max).trim()
+
     /** Minúsculas sin tildes ni artículos/prefijos comunes ("la lista del súper" -> "super"). */
     fun normalize(s: String): String {
         val noAccents = java.text.Normalizer.normalize(s.lowercase().trim(), java.text.Normalizer.Form.NFD)

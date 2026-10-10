@@ -68,7 +68,7 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
         val list = db.tx {
             exec(
                 "update lists set name = coalesce(?, name), icon = coalesce(?, icon), shared = coalesce(?, shared), updated_at = now() where ${visibleTo()} and id = ?",
-                name?.trim()?.takeIf { it.isNotEmpty() }, icon, shared, userId, userId, id,
+                name?.let { Text.cleanName(it) }?.takeIf { it.isNotEmpty() }, icon, shared, userId, userId, id,
             )
             getTx(userId, id)
         } ?: return null
@@ -185,12 +185,14 @@ class ListsRepo(private val db: Db, private val activity: ActivityRepo, private 
     private fun mapItem(rs: ResultSet) = ListItem(rs.uuid("id"), rs.str("text"), rs.getBoolean("checked"), rs.getDouble("sort"), rs.instant("created_at"))
 
     companion object {
+        /** Nombre para mostrar: una línea, máximo [Text.NAME_MAX] caracteres ("lista del súper" -> "Supermercado"). */
         fun prettyName(raw: String): String {
-            val n = raw.trim().removePrefix("lista de ").removePrefix("Lista de ").removePrefix("lista del ").removePrefix("Lista del ")
-            return when (Text.normalize(n)) {
+            val n = Text.cleanName(raw, Int.MAX_VALUE).removePrefix("lista de ").removePrefix("Lista de ").removePrefix("lista del ").removePrefix("Lista del ")
+            val pretty = when (Text.normalize(n)) {
                 "super", "supermercado", "mercado", "compras" -> "Supermercado"
-                else -> n.replaceFirstChar { it.uppercase() }
+                else -> n.trim().replaceFirstChar { it.uppercase() }
             }
+            return Text.cleanName(pretty).ifEmpty { "Lista" }
         }
     }
 }

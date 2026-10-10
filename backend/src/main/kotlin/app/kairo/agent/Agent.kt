@@ -18,6 +18,7 @@ import app.kairo.nan.ChatResult
 import app.kairo.nan.NanClient
 import app.kairo.nan.NanException
 import app.kairo.nan.ToolCall
+import app.kairo.nan.ToolCallFunction
 import app.kairo.nan.ToolSpec
 import app.kairo.util.KairoJson
 import app.kairo.util.UUIDSerializer
@@ -31,6 +32,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -85,6 +87,10 @@ data class AgentRequest(
 /**
  * Bucle del agente: modelo de Nan con tool calling en streaming, hasta [MAX_STEPS] rondas.
  * Persiste toda la conversación (incluidas las llamadas a herramientas) para mantener el contexto.
+ *
+ * Contra la inyección de instrucciones: si el turno leyó contenido de otras personas o externo
+ * ([ToolContext.tainted]), las acciones sensibles quedan pendientes en [confirmations] y solo se
+ * ejecutan si el siguiente mensaje humano de la conversación es un «sí» ([Affirmative]).
  */
 class Agent(
     private val nan: NanClient,
@@ -96,6 +102,7 @@ class Agent(
     private val lists: ListsRepo,
     private val settings: SettingsService,
     private val family: FamilyRepo,
+    private val confirmations: Confirmations = Confirmations(),
 ) {
     private val log = LoggerFactory.getLogger(Agent::class.java)
     private val builtinTools = builtin.all()
@@ -112,7 +119,7 @@ class Agent(
             val (ctxData, extra) = coroutineScope {
                 val m = async { runCatching { memories.relevant(user.id, req.text) }.getOrDefault(emptyList()) }
                 val p = async { places.list(user.id) }
-                val l = async { lists.all(user.id).map { if (it.shared) "${it.name} (familiar)" else it.name } }
+                val l = async { lists.all(user.id) }
                 val f = async { runCatching { family.info(user.id) }.getOrNull() }
                 val x = async { runCatching { mcp.tools(user.id) }.getOrDefault(emptyList()) }
                 Quad(m.await(), p.await(), l.await(), f.await()) to x.await()
@@ -123,9 +130,13 @@ class Agent(
             val specs: List<ToolSpec> = tools.map { it.spec }
 
             val history = conversations.history(conv.id)
+            // Lo pendiente de confirmación sale siempre con este mensaje: o es un «sí» humano, o se descarta.
+            val pending = confirmations.take(conv.id, user.id)
+            val confirmed = pending.isNotEmpty() && isHumanReply(req) && Affirmative.matches(req.text)
+            if (pending.isNotEmpty() && !confirmed) log.info("Acciones pendientes descartadas en {}: {}", conv.id, pending.map { it.tool })
             val userText = buildString {
                 append(req.text)
-                req.hiddenContext?.let { append("\n\n[Contexto adjunto]\n").append(it) }
+                req.hiddenContext?.let { append("\n\n[Contexto adjunto]\n").append(Untrusted.wrap(it)) }
             }
             conversations.append(
                 conv.id, ChatMessage.user(req.displayText ?: req.text),
@@ -144,11 +155,50 @@ class Agent(
                 user, zone, s, req.channel, conv.id, req.location, req.capabilities, req.attachments.map { it.id }.toMutableList(),
                 familyMembers = fam?.members.orEmpty(),
             )
+            // Contenido externo en este mensaje, o datos ajenos que el modelo aún ve en el historial.
+            if (req.hiddenContext != null) ctx.taint("contenido compartido desde otra app, una página web o una imagen")
+            if (history.any { it.role == "tool" && it.text.contains(Untrusted.OPEN) }) ctx.taint(ToolPolicy.DEFAULT_TAINT_REASON)
             val opts = ChatOptions(
                 model = s.chatModel,
                 maxTokens = if (req.channel == "voice") 700 else 1800,
                 reasoningEffort = if (s.fastMode || req.channel == "voice") "none" else null,
             )
+            /** Resúmenes de lo que quedó pendiente en este turno; el servidor los añade a la respuesta. */
+            val pendingNow = ArrayList<String>()
+
+            suspend fun runCall(call: ToolCall, confirmedByUser: Boolean, destructiveInStep: Int) {
+                val tool = byName[call.function.name]
+                send(AgentEvent.ToolStart(call.id, call.function.name, tool?.label ?: "Trabajando"))
+                val res = if (confirmedByUser) execute(tool, call, ctx) else guarded(tool, call, ctx, destructiveInStep, pendingNow)
+                send(AgentEvent.ToolEnd(call.id, call.function.name, res.ok, res.summary, res.entity))
+                res.deviceAction?.let { send(AgentEvent.DeviceAction(it)) }
+                res.attachment?.let { send(AgentEvent.Attachment(it)) }
+                res.untrusted?.let { ctx.taint(it) }
+                // El modelo ve lo ajeno entre delimitadores; las tarjetas de la UI salen de `meta`, que no cambia.
+                val content = res.content.toString().let { if (res.untrusted != null) Untrusted.wrap(it) else it }
+                val toolMsg = ChatMessage.tool(call.id, call.function.name, content)
+                messages += toolMsg
+                conversations.append(
+                    conv.id, toolMsg,
+                    meta = buildJsonObject {
+                        put("summary", res.summary)
+                        put("ok", res.ok)
+                        res.entity?.let { put("entity", KairoJson.encodeToJsonElement(it)) }
+                        res.attachment?.let { put("attachment", KairoJson.encodeToJsonElement(it)) }
+                        if (confirmedByUser) put("confirmed", true)
+                    },
+                )
+            }
+
+            if (confirmed) {
+                // La persona dijo «sí»: el servidor ejecuta lo guardado (no el modelo) y el agente sigue con ese contexto.
+                val calls = pending.map { ToolCall(newCallId(), function = ToolCallFunction(it.tool, it.args.toString())) }
+                val msg = ChatMessage("assistant", JsonPrimitive(""), calls)
+                messages += msg
+                conversations.append(conv.id, msg.copy(content = null))
+                log.info("Acciones confirmadas por {} en {}: {}", user.id, conv.id, pending.map { it.tool })
+                calls.forEach { runCall(it, confirmedByUser = true, destructiveInStep = 1) }
+            }
 
             var finalText = ""
             var step = 0
@@ -166,26 +216,14 @@ class Agent(
                 messages += msg
                 // El texto previo a las herramientas ("voy a revisar...") no aporta al historial y a veces sale en inglés.
                 conversations.append(conv.id, msg.copy(content = null, reasoningContent = null))
-                for (call in calls) {
-                    val tool = byName[call.function.name]
-                    send(AgentEvent.ToolStart(call.id, call.function.name, tool?.label ?: "Trabajando"))
-                    val res = execute(tool, call, ctx)
-                    send(AgentEvent.ToolEnd(call.id, call.function.name, res.ok, res.summary, res.entity))
-                    res.deviceAction?.let { send(AgentEvent.DeviceAction(it)) }
-                    res.attachment?.let { send(AgentEvent.Attachment(it)) }
-                    val toolMsg = ChatMessage.tool(call.id, call.function.name, res.content.toString())
-                    messages += toolMsg
-                    conversations.append(
-                        conv.id, toolMsg,
-                        meta = buildJsonObject {
-                            put("summary", res.summary)
-                            put("ok", res.ok)
-                            res.entity?.let { put("entity", KairoJson.encodeToJsonElement(it)) }
-                            res.attachment?.let { put("attachment", KairoJson.encodeToJsonElement(it)) }
-                        },
-                    )
-                }
+                val destructive = calls.count { c -> parseArgs(c)?.let { ToolPolicy.isDestructive(c.function.name, it) } == true }
+                for (call in calls) runCall(call, confirmedByUser = false, destructiveInStep = destructive)
                 step++
+            }
+            // La pregunta de confirmación la redacta el servidor: no depende de lo que diga el modelo.
+            if (pendingNow.isNotEmpty()) {
+                val ask = Confirmations.prompt(pendingNow)
+                finalText = if (finalText.isEmpty()) ask else "$finalText\n\n$ask"
             }
             if (finalText.isEmpty()) finalText = "Listo."
             val id = conversations.append(conv.id, ChatMessage.assistant(finalText))
@@ -236,10 +274,55 @@ class Agent(
         }
     }
 
+    private fun parseArgs(call: ToolCall): JsonObject? =
+        runCatching { KairoJson.parseToJsonElement(call.function.arguments.ifBlank { "{}" }).jsonObject }.getOrNull()
+
+    /** Solo un mensaje escrito o dictado por la persona puede confirmar (no lo compartido desde otra app). */
+    private fun isHumanReply(req: AgentRequest): Boolean =
+        req.channel != "share" && req.hiddenContext == null && req.attachments.isEmpty()
+
+    private fun newCallId(): String = "call_" + UUID.randomUUID().toString().replace("-", "").take(24)
+
+    /**
+     * Ejecuta la herramienta salvo que [ToolPolicy] pida confirmación: entonces la guarda como pendiente
+     * (en el servidor, no en el modelo) y le devuelve al modelo que necesita el «sí» de la persona.
+     */
+    private suspend fun guarded(tool: Tool?, call: ToolCall, ctx: ToolContext, destructiveInStep: Int, pendingNow: MutableList<String>): ToolResult {
+        if (tool == null) return execute(tool, call, ctx)
+        val args = parseArgs(call) ?: return execute(tool, call, ctx)
+        // Camino rápido: el turno no leyó nada ajeno, así que lo pidió la persona.
+        if (!ctx.tainted && destructiveInStep <= 1) return execute(tool, call, ctx)
+        val facts = try {
+            builtin.facts(ctx, tool.name, args)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn("No pude revisar {} antes de ejecutarla: {}", tool.name, e.message)
+            null
+        }
+        // Si no se pudo revisar, lo seguro es pedir confirmación.
+        val decision = facts?.let { ToolPolicy.decide(it, ctx.tainted, destructiveInStep, ctx.taintReason) }
+            ?: Decision.NeedsConfirmation(ctx.taintReason ?: ToolPolicy.DEFAULT_TAINT_REASON)
+        if (decision !is Decision.NeedsConfirmation) return execute(tool, call, ctx)
+        val summary = ToolPolicy.describe(facts ?: ActionFacts(tool.name, args, ctx.userId))
+        confirmations.add(ctx.conversationId, ctx.userId, PendingAction(tool.name, args, summary))
+        pendingNow += summary
+        log.info("Acción {} pendiente de confirmación en {} ({})", tool.name, ctx.conversationId, decision.reason)
+        return ToolResult(
+            buildJsonObject {
+                put("needs_confirmation", true)
+                put("pendiente", summary)
+                put("motivo", decision.reason)
+                put("instruccion", "Necesita tu confirmación: $summary. Pídele al usuario que responda «sí» para hacerlo. Aún no se hizo.")
+            },
+            "Necesita tu confirmación: $summary",
+            ok = false,
+        )
+    }
+
     private suspend fun execute(tool: Tool?, call: ToolCall, ctx: ToolContext): ToolResult {
         if (tool == null) return ToolResult.error("Herramienta desconocida: ${call.function.name}")
-        val args = runCatching { KairoJson.parseToJsonElement(call.function.arguments.ifBlank { "{}" }).jsonObject }
-            .getOrElse { return ToolResult.error("Argumentos inválidos (JSON mal formado)") }
+        val args = parseArgs(call) ?: return ToolResult.error("Argumentos inválidos (JSON mal formado)")
         return try {
             tool.handler(ctx, args)
         } catch (e: CancellationException) {

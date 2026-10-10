@@ -73,7 +73,10 @@ class McpRegistry(private val db: Db, private val crypto: Crypto, private val cl
                     label = "Usando ${row.server.name}",
                 ) { args ->
                     val text = client.callTool(row.server.url, row.headers, t.name, args)
-                    ToolResult(buildJsonObject { put("result", JsonPrimitive(text)) }, "${row.server.name}: ${t.name}")
+                    ToolResult(
+                        buildJsonObject { put("result", JsonPrimitive(text)) }, "${row.server.name}: ${t.name}",
+                        untrusted = "resultado del servidor externo ${row.server.name}",
+                    )
                 }
             }
         }
