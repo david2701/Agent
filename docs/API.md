@@ -11,6 +11,8 @@ fechas en `YYYY-MM-DD`. Los campos nulos se envían como `null`. Errores: `{"err
 | POST | `/auth/refresh` | `{refreshToken}` (app) o cookie `kairo_rt` (web) | `AuthResponse` |
 | POST | `/auth/logout` | | `{ok}` |
 | POST | `/auth/password` | `{currentPassword, newPassword}` | `{ok}` |
+| POST | `/auth/pair-code` | (autenticado) | `{code, expiresIn: 300}` código de 6 dígitos para vincular un reloj |
+| POST | `/auth/pair` | `{code, deviceName, platform: "wear"}` | `AuthResponse` (un solo uso) |
 | GET/PATCH | `/me` | `{displayName?, timezone?}` | `{user}` |
 
 `AuthResponse = {user, accessToken, refreshToken|null, expiresIn: 3600, deviceId}`.

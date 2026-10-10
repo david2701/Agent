@@ -1,10 +1,10 @@
 package app.kairo.android
 
-import app.kairo.android.voice.AudioSpec
-import app.kairo.android.voice.EndOfSpeech
+import app.kairo.core.voice.AudioSpec
+import app.kairo.core.voice.EndOfSpeech
 import app.kairo.android.voice.WakeWordDetector
-import app.kairo.android.voice.levelOf
-import app.kairo.android.voice.pcmToWav
+import app.kairo.core.voice.levelOf
+import app.kairo.core.voice.pcmToWav
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

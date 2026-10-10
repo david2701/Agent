@@ -1,0 +1,13 @@
+# Agrega este bloque a tu Caddyfile y recarga Caddy (caddy reload).
+# Caddy obtiene el certificado HTTPS, reenvía WebSocket y transmite las respuestas
+# en streaming (text/event-stream) sin búfer. No uses "encode" aquí: Kairo ya comprime
+# sus respuestas y comprimir el streaming lo retrasaría.
+
+kairo.tudominio.com {
+
+    # Caddy en el host:
+    reverse_proxy 127.0.0.1:8080
+
+    # Caddy en Docker unido a la red "kairo" (docker network connect kairo <caddy>):
+    # reverse_proxy kairo:8080
+}

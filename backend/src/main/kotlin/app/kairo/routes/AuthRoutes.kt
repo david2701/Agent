@@ -32,6 +32,12 @@ data class AuthResponse(val user: User, val accessToken: String, val refreshToke
 data class ProfilePatch(val displayName: String? = null, val timezone: String? = null)
 
 @Serializable
+data class PairCodeResponse(val code: String, val expiresIn: Int = 300)
+
+@Serializable
+data class PairRequest(val code: String, val deviceName: String = "", val platform: String = "wear")
+
+@Serializable
 data class PasswordChange(val currentPassword: String, val newPassword: String)
 
 private const val COOKIE = "kairo_rt"
@@ -50,6 +56,16 @@ fun Route.authRoutes(s: Services) {
                     s.users.update(user.id, null, req.timezone) ?: user
                 } else user
                 call.respondTokens(finalUser, tokens, web = req.platform.lowercase() == "web", s.config.publicUrl.startsWith("https"))
+            }
+
+            post("/pair") {
+                val req = call.receiveBody<PairRequest>()
+                val (user, tokens) = try {
+                    s.auth.completePairing(req.code, req.deviceName, req.platform.lowercase().take(20))
+                } catch (e: AuthException) {
+                    throw ApiException(HttpStatusCode.Unauthorized, e.message ?: "Código inválido")
+                }
+                call.respondTokens(user, tokens, web = false, s.config.publicUrl.startsWith("https"))
             }
 
             post("/refresh") {
@@ -71,6 +87,9 @@ fun Route.authRoutes(s: Services) {
                 call.deviceId()?.let { s.users.revokeDevice(call.userId(), it) }
                 call.clearCookie(s.config.publicUrl.startsWith("https"))
                 call.respond(OkResponse())
+            }
+            post("/pair-code") {
+                call.respond(PairCodeResponse(s.auth.createPairCode(call.userId())))
             }
             post("/password") {
                 val req = call.receiveBody<PasswordChange>()

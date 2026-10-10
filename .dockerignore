@@ -1,0 +1,9 @@
+.git
+.env
+**/node_modules
+**/build
+**/.gradle
+**/.kotlin
+android
+docs/screenshots
+dashboard/dist

@@ -119,6 +119,22 @@ class KairoApi(private val session: SessionStore, private val ctx: ClientContext
         return auth.user
     }
 
+    /** Vincula este dispositivo (reloj) con un código generado en el teléfono o el dashboard. */
+    suspend fun pair(serverUrl: String, code: String, deviceName: String): User {
+        val base = normalizeServer(serverUrl)
+        val resp = http.request("$base/api/auth/pair") {
+            method = HttpMethod.Post
+            contentType(ContentType.Application.Json)
+            header("X-Kairo-Client", ctx.clientKind)
+            setBody(buildJsonObject { put("code", code.trim()); put("deviceName", deviceName); put("platform", ctx.clientKind) }.toString())
+        }
+        val auth: AuthResponse = decode(resp)
+        session.save(base, auth.user, auth.deviceId, auth.refreshToken ?: error("Sin refresh token"), auth.accessToken)
+        return auth.user
+    }
+
+    suspend fun pairCode(): String = send<PairCode>(HttpMethod.Post, "/api/auth/pair-code").code
+
     suspend fun logout() {
         runCatching { send<JsonObject>(HttpMethod.Post, "/api/auth/logout") }
         session.clear()
@@ -412,3 +428,6 @@ data class UserEnvelope(val user: User)
 
 @Serializable
 data class CreatedCount(val created: Int)
+
+@Serializable
+data class PairCode(val code: String, val expiresIn: Int = 300)

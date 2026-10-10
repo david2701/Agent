@@ -58,6 +58,28 @@ class AuthService(private val cfg: AppConfig, private val users: UsersRepo) {
         return found.user to TokenPair(access(found.user.id, deviceId), refresh, ACCESS_TTL, deviceId)
     }
 
+    /** Códigos de vinculación para dispositivos sin teclado (reloj): 6 dígitos, 5 minutos, un solo uso. */
+    private val pairCodes = java.util.concurrent.ConcurrentHashMap<String, Pair<UUID, Long>>()
+    private val random = java.security.SecureRandom()
+
+    fun createPairCode(userId: UUID): String {
+        val now = System.currentTimeMillis()
+        pairCodes.entries.removeIf { it.value.second < now }
+        var code: String
+        do { code = "%06d".format(random.nextInt(1_000_000)) } while (pairCodes.containsKey(code))
+        pairCodes[code] = userId to now + 5 * 60_000
+        return code
+    }
+
+    suspend fun completePairing(code: String, deviceName: String, platform: String): Pair<User, TokenPair> {
+        val entry = pairCodes.remove(code.trim()) ?: throw AuthException("Código inválido o vencido")
+        if (entry.second < System.currentTimeMillis()) throw AuthException("Código vencido")
+        val user = users.byId(entry.first) ?: throw AuthException("Usuario no encontrado")
+        val refresh = Crypto.randomToken(48)
+        val deviceId = users.createDevice(user.id, deviceName.ifBlank { platform }, platform, Crypto.sha256(refresh))
+        return user to TokenPair(access(user.id, deviceId), refresh, ACCESS_TTL, deviceId)
+    }
+
     suspend fun refresh(refreshToken: String): Pair<User, TokenPair> {
         val (deviceId, userId) = users.deviceByRefresh(Crypto.sha256(refreshToken)) ?: throw AuthException("Sesión expirada")
         val user = users.byId(userId) ?: throw AuthException("Sesión expirada")

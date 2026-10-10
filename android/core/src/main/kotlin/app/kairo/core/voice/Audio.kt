@@ -1,4 +1,4 @@
-package app.kairo.android.voice
+package app.kairo.core.voice
 
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer

@@ -81,6 +81,11 @@ class SettingsViewModel(graph: AppGraph) : ResourceViewModel<SettingsData>(graph
     init { refresh() }
 
     fun patch(block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = mutate { graph.api.updateSettings(obj(block)) }
+    val pairCode = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    fun newPairCode() = viewModelScope.launch {
+        runCatching { graph.api.pairCode() }.onSuccess { pairCode.value = it }.onFailure { say("No se pudo generar el código") }
+    }
+
     fun revoke(d: Device) = mutate("Sesión cerrada en ${d.name}") { graph.api.revokeDevice(d.id) }
     fun logout() = viewModelScope.launch {
         ListeningService.stop(graph.app)
@@ -220,7 +225,10 @@ fun SettingsScreen(graph: AppGraph, session: Session) {
                     Text(session.user.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(session.serverUrl, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(1.dp))
-                    OutlinedButton(onClick = { vm.logout() }) { Text("Cerrar sesión") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { vm.newPairCode() }) { Text("Vincular reloj") }
+                        OutlinedButton(onClick = { vm.logout() }) { Text("Cerrar sesión") }
+                    }
                 }
             }
 
@@ -249,6 +257,22 @@ fun SettingsScreen(graph: AppGraph, session: Session) {
                 )
             }
         }
+    }
+
+    val code by vm.pairCode.collectAsState()
+    code?.let { c ->
+        AlertDialog(
+            onDismissRequest = { vm.pairCode.value = null },
+            title = { Text("Vincular reloj") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Abre Kairo en tu reloj y escribe este código. Vence en 5 minutos.", style = MaterialTheme.typography.bodyMedium)
+                    Text(c.chunked(3).joinToString(" "), style = MaterialTheme.typography.displaySmall.copy(fontFamily = MonoStyle.fontFamily))
+                    Text(session.serverUrl, style = MonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.pairCode.value = null }) { Text("Listo") } },
+        )
     }
 
     if (pickTime && s != null) {

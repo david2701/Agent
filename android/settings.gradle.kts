@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Kairo"
-include(":core", ":app")
+include(":core", ":app", ":wear")

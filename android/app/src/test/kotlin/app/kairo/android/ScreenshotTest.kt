@@ -101,7 +101,7 @@ class ScreenshotTest {
     @Test fun homeFoldOpen() = app("home", true, FOLD_OPEN, "Tu día", "hoy-fold-abierto")
     @Test fun tasksPhone() = app("tasks", true, PHONE, "Por hacer", "tareas-telefono")
     @Test fun tasksFoldLandscape() = app("tasks", false, FOLD_LAND, "En curso", "tareas-fold-horizontal")
-    @Test fun notesFoldOpen() = app("notes", true, FOLD_OPEN, "Factura", "notas-fold-abierto")
+    @Test fun notesFoldOpen() = app("notes", true, FOLD_OPEN, "hace", "notas-fold-abierto")
     @Test fun chatPhone() = app("chat", true, PHONE, "Anota", "conversaciones-telefono")
     @Test fun remindersPhone() = app("reminders", false, PHONE, "Sonaron", "recordatorios-telefono-claro")
     @Test fun calendarFoldOpen() = app("calendar", true, FOLD_OPEN, "Octubre", "calendario-fold-abierto")

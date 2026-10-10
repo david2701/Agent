@@ -1,5 +1,6 @@
 package app.kairo.android.voice
 
+import app.kairo.core.voice.AudioSpec
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
