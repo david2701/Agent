@@ -21,6 +21,10 @@ public struct SharedSnapshot: Codable, Sendable, Hashable {
         public var name: String
         public var shared: Bool
         public var items: [Item]
+
+        public init(id: String, name: String, shared: Bool = false, items: [Item] = []) {
+            self.id = id; self.name = name; self.shared = shared; self.items = items
+        }
     }
 
     public var updatedAt: Date

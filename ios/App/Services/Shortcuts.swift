@@ -18,7 +18,7 @@ struct AskKairoIntent: AppIntent {
             return .result(value: "", dialog: "Abre Kairo e inicia sesión primero.")
         }
         let turn = try await AppModel.shared.api.ask(question, channel: "voice")
-        for a in turn.actions { if let e = a.entity { AppModel.shared.bump(e.type) } }
+        await MainActor.run { for a in turn.actions { if let e = a.entity { AppModel.shared.bump(e.type) } } }
         let reply = (turn.spoken?.isEmpty == false ? turn.spoken : nil) ?? turn.text
         return .result(value: turn.text, dialog: IntentDialog(stringLiteral: reply.isEmpty ? "Listo." : reply))
     }
