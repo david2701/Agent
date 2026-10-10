@@ -10,7 +10,10 @@ Notes, tasks, reminders, calendar, lists and memory, by voice or text, on your o
 <p align="center"><b>English</b> · <a href="README.es.md">Español</a></p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard/today-desktop-dark.png" alt="Kairo dashboard: Today" width="860">
+  <a href="docs/media/kairo-overview.mp4" title="Watch the 45-second overview (MP4)">
+    <img src="docs/media/kairo-overview-preview.webp" alt="Kairo overview video: talk to it, it acts, for the whole family, on every device, private by design" width="860">
+  </a>
+  <br><sub>Click the preview to watch the 45-second overview (MP4, 7 MB, no sound needed).</sub>
 </p>
 
 *Kairós* is the opportune moment: Kairo tells you right when you need it. The icon is an open ring (the cycle of time)

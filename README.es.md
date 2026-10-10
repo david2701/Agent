@@ -8,6 +8,13 @@
 
 <p align="center"><a href="README.md">English</a> · <b>Español</b></p>
 
+<p align="center">
+  <a href="docs/media/kairo-overview.mp4" title="Ver el resumen de 45 segundos (MP4)">
+    <img src="docs/media/kairo-overview-preview.webp" alt="Kairo overview video: talk to it, it acts, for the whole family, on every device, private by design" width="860">
+  </a>
+  <br><sub>Haz clic en la vista previa para ver el resumen de 45 segundos (MP4, 7 MB; en inglés).</sub>
+</p>
+
 ---
 
 *Kairós* es el momento oportuno: Kairo te avisa justo cuando lo necesitas. El ícono es un anillo
