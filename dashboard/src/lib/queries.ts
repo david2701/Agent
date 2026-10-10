@@ -5,14 +5,18 @@ import type {
   CalendarEvent,
   Conversation,
   Device,
+  FamilyInfo,
   GoogleCalendarInfo,
   GoogleStatus,
   KList,
   McpServer,
   Memory,
+  Invitation,
   Note,
+  NoticesResponse,
   Place,
   Project,
+  PushConfig,
   Recording,
   Reminder,
   SettingsResponse,
@@ -31,6 +35,7 @@ export const keys = {
   noteTags: ['notes', 'tags'] as const,
   note: (id: string) => ['notes', 'one', id] as const,
   tasks: ['tasks'] as const,
+  tasksMine: ['tasks', 'mine'] as const,
   projects: ['projects'] as const,
   reminders: ['reminders'] as const,
   places: ['places'] as const,
@@ -50,6 +55,10 @@ export const keys = {
   google: ['google'] as const,
   googleCalendars: ['google', 'calendars'] as const,
   mcp: ['mcp'] as const,
+  family: ['family'] as const,
+  invites: ['family', 'invites'] as const,
+  notices: ['notices'] as const,
+  push: ['push'] as const,
 }
 
 /** Qué cachés recargar cuando cambia una entidad (WebSocket o mutación propia). */
@@ -65,6 +74,9 @@ export function invalidateEntity(qc: QueryClient, entity: string) {
     memory: [keys.memories],
     recording: [keys.recordings, ['notes']],
     conversation: [keys.conversations],
+    // Alguien entró o salió de la familia: cambian nombres y dueños de lo compartido.
+    family: [keys.family, keys.notices, ['notes'], keys.tasks, keys.lists, ['events'], keys.places, keys.reminders, keys.today],
+    notice: [keys.notices],
   }
   for (const key of map[entity] ?? [keys.today]) void qc.invalidateQueries({ queryKey: key })
   void qc.invalidateQueries({ queryKey: keys.activity })
@@ -104,6 +116,14 @@ export const useNote = (id: string | undefined) =>
 
 export const useTasks = () =>
   useQuery({ queryKey: keys.tasks, queryFn: ({ signal }) => api.get<Task[]>('/tasks?includeDone=true', signal) })
+
+/** Tareas cuyo responsable soy yo (propias o de la familia). */
+export const useTasksAssignedToMe = (enabled: boolean) =>
+  useQuery({
+    queryKey: keys.tasksMine,
+    queryFn: ({ signal }) => api.get<Task[]>('/tasks?assignee=me&includeDone=true', signal),
+    enabled,
+  })
 
 export const useProjects = () =>
   useQuery({ queryKey: keys.projects, queryFn: ({ signal }) => api.get<Project[]>('/projects', signal) })
@@ -194,3 +214,27 @@ export const useGoogleCalendars = (enabled: boolean) =>
   })
 
 export const useMcpServers = () => useQuery({ queryKey: keys.mcp, queryFn: ({ signal }) => api.get<McpServer[]>('/mcp-servers', signal) })
+
+/** Hogar y miembros: cambia poco, se recarga con entity.changed "family". */
+export const useFamily = () =>
+  useQuery({ queryKey: keys.family, queryFn: ({ signal }) => api.get<FamilyInfo>('/family', signal), staleTime: 10 * 60_000 })
+
+export const useInvites = (enabled: boolean) =>
+  useQuery({
+    queryKey: keys.invites,
+    queryFn: ({ signal }) => api.get<Invitation[]>('/family/invites', signal),
+    enabled,
+    // Usar un código no avisa por WebSocket (salvo cuando entra alguien nuevo): se revisa cada minuto.
+    refetchInterval: 60_000,
+  })
+
+export const NOTICES_LIMIT = 50
+
+export const useNotices = () =>
+  useQuery({
+    queryKey: keys.notices,
+    queryFn: ({ signal }) => api.get<NoticesResponse>(`/notices${qs({ limit: NOTICES_LIMIT })}`, signal),
+    staleTime: 60_000,
+  })
+
+export const usePushConfig = () => useQuery({ queryKey: keys.push, queryFn: ({ signal }) => api.get<PushConfig>('/push', signal) })

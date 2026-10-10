@@ -1,4 +1,4 @@
-import type { AgentEvent, AuthResponse } from './types'
+import type { AgentEvent, AuthResponse, InvitePreview } from './types'
 
 /**
  * Cliente HTTP de Kairo.
@@ -142,6 +142,39 @@ export async function login(email: string, password: string): Promise<AuthRespon
     if (res.status === 401) throw new ApiError(401, err.message.includes('ontraseña') ? err.message : 'Correo o contraseña incorrectos.')
     throw err
   }
+  const session = (await res.json()) as AuthResponse
+  applySession(session)
+  return session
+}
+
+/** Qué abre un código de familia (público, sin sesión). null si no vale o ya venció. */
+export async function previewInvite(code: string, signal?: AbortSignal): Promise<InvitePreview | null> {
+  const res = await fetch(`${BASE}/auth/invite/${encodeURIComponent(code)}`, {
+    headers: { 'X-Kairo-Client': 'web' },
+    signal,
+  })
+  if (res.status === 404) return null
+  if (!res.ok) throw await readError(res)
+  return (await res.json()) as InvitePreview
+}
+
+/**
+ * Usa un código de familia: con una invitación crea la cuenta; con un código de acceso define una contraseña nueva.
+ * Igual que login: el refresh token llega en la cookie httpOnly y la sesión queda abierta en este navegador.
+ */
+export async function join(body: { code: string; password: string; email?: string; displayName?: string }): Promise<AuthResponse> {
+  const res = await fetch(`${BASE}/auth/join`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': 'web' },
+    body: JSON.stringify({
+      ...body,
+      deviceName: describeBrowser(),
+      platform: 'web',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+  })
+  if (!res.ok) throw await readError(res)
   const session = (await res.json()) as AuthResponse
   applySession(session)
   return session

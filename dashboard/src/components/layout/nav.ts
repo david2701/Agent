@@ -9,6 +9,7 @@ import {
   ListChecks,
   Notepad,
   SunHorizon,
+  UsersThree,
   Waveform,
   type Icon,
 } from '@phosphor-icons/react'
@@ -34,6 +35,7 @@ export const NAV_GROUPS: NavItem[][] = [
     { to: '/listas', label: 'Listas', icon: ListChecks, key: 'l' },
   ],
   [
+    { to: '/familia', label: 'Familia', icon: UsersThree, key: 'f' },
     { to: '/memoria', label: 'Memoria', icon: Brain, key: 'm' },
     { to: '/grabaciones', label: 'Grabaciones', icon: Waveform, key: 'g' },
     { to: '/actividad', label: 'Actividad', icon: ClockCounterClockwise, key: 'a' },

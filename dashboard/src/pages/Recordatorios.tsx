@@ -14,6 +14,7 @@ import { Chip, PageHeader, Panel, SectionHeader, Segmented } from '@/components/
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo } from '@/lib/family'
 import { fromLocalInput, toLocalInput } from '@/lib/format'
 import { useReminderActions } from '@/lib/mutations'
 import { invalidateEntity, usePlaces, useReminders } from '@/lib/queries'
@@ -203,7 +204,9 @@ function defaultDue() {
 function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | null; onClose: () => void }) {
   const qc = useQueryClient()
   const places = usePlaces()
+  const fam = useFamilyInfo()
   const editing = reminder && reminder !== 'new' ? reminder : null
+  const [forUser, setForUser] = useState('')
   const [text, setText] = useState('')
   const [kind, setKind] = useState<'time' | 'place'>('time')
   const [when, setWhen] = useState(toLocalInput(defaultDue()))
@@ -221,8 +224,14 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
     setPreset(rruleToPreset(r?.rrule ?? null))
     setPlaceId(r?.placeId ?? '')
     setTrigger(r?.placeTrigger ?? 'arrive')
+    setForUser('')
     setError(null)
   }, [reminder])
+
+  // Para otra persona solo sirven los lugares familiares (los personales no los ve).
+  const forOther = !editing && !!forUser && forUser !== fam.me
+  const forName = forOther ? fam.nameOf(forUser) : null
+  const usablePlaces = (places.data ?? []).filter((p) => !forOther || p.shared)
 
   const whenDate = when ? fromLocalInput(when) : null
 
@@ -237,6 +246,7 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
         return api.patch<Reminder>(`/reminders/${editing.id}`, body)
       }
       if (body.rrule === null) delete body.rrule
+      if (forOther) body.forUserId = forUser
       return api.post<Reminder>('/reminders', body)
     },
     onSuccess: (r) => {
@@ -245,7 +255,7 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
       if (editing) toast({ title: 'Recordatorio guardado', description: r.text })
       else
         toast({
-          title: 'Recordatorio creado',
+          title: forName ? `Recordatorio para ${forName}` : 'Recordatorio creado',
           description: r.text,
           tone: 'success',
           actions: [{ label: 'Deshacer', onClick: () => undoLatest(qc, 'reminder', r.id, 'created').catch((e) => toastError(e, 'No se pudo deshacer')) }],
@@ -256,10 +266,11 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!text.trim()) return setError('Escribe qué te recuerdo.')
+    if (!text.trim()) return setError(forOther ? `Escribe qué le recuerdo a ${forName ?? 'esa persona'}.` : 'Escribe qué te recuerdo.')
     if (kind === 'time' && (!whenDate || Number.isNaN(whenDate.getTime()))) return setError('Elige una fecha y hora.')
     if (kind === 'time' && preset === 'none' && whenDate!.getTime() < Date.now() - 60_000) return setError('Esa hora ya pasó.')
     if (kind === 'place' && !placeId) return setError('Elige un lugar.')
+    if (kind === 'place' && forOther && !usablePlaces.some((p) => p.id === placeId)) return setError('Ese lugar es personal: compártelo con la familia o elige otro.')
     setError(null)
     save.mutate()
   }
@@ -287,7 +298,21 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
       }
     >
       <form id="rem-form" onSubmit={submit} className="grid gap-4">
-        <Field label="¿Qué te recuerdo?">
+        {!editing && fam.hasOthers && (
+          <Field label="Para" hint={forOther ? `Suena en el teléfono de ${forName} y le llega un aviso.` : undefined}>
+            {(id, d) => (
+              <Select id={id} value={forOther ? forUser : ''} onChange={(e) => setForUser(e.target.value)} aria-describedby={d}>
+                <option value="">Yo</option>
+                {fam.others.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+        <Field label={forOther ? `¿Qué le recuerdo a ${forName ?? 'esa persona'}?` : '¿Qué te recuerdo?'}>
           {(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="Llamar a la EPS para la cita" />}
         </Field>
         <Segmented
@@ -326,9 +351,11 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
               )}
             </Field>
           </>
-        ) : (places.data ?? []).length === 0 ? (
+        ) : usablePlaces.length === 0 ? (
           <p className="rounded-control border border-dashed border-line px-3 py-4 text-base text-muted">
-            Aún no tienes lugares guardados. Agrega uno en la sección Lugares de esta página.
+            {forOther
+              ? `No hay lugares familiares. Comparte uno con la familia en la sección Lugares para recordarle algo a ${forName} al llegar o salir.`
+              : 'Aún no tienes lugares guardados. Agrega uno en la sección Lugares de esta página.'}
           </p>
         ) : (
           <>
@@ -336,7 +363,7 @@ function ReminderDialog({ reminder, onClose }: { reminder: Reminder | 'new' | nu
               {(id) => (
                 <Select id={id} value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
                   <option value="">Elige un lugar</option>
-                  {(places.data ?? []).map((p) => (
+                  {usablePlaces.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>

@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   DotsThree,
+  House,
   MagnifyingGlass,
   Notepad,
   NotePencil,
@@ -13,17 +14,20 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { NavLink, useBlocker, useNavigate, useParams } from 'react-router'
+import { FamilyIcon } from '@/components/family'
 import { Markdown } from '@/components/Markdown'
 import { AttachmentImage } from '@/components/chat/Thread'
 import { Button, IconButton } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
+import { Switch } from '@/components/ui/form'
 import { Menu } from '@/components/ui/menu'
 import { Chip, Segmented } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { sourcePhrase } from '@/lib/entities'
+import { useFamilyInfo } from '@/lib/family'
 import { compactWhen, longDate, plainText, relative, time } from '@/lib/format'
 import { invalidateEntity, keys, useNote, useNotes, useNoteSearch, useNoteTags } from '@/lib/queries'
 import type { Note } from '@/lib/types'
@@ -32,20 +36,32 @@ import { useDebounced } from '@/lib/useStored'
 
 const NEW = 'nueva'
 
+type Scope = 'all' | 'mine' | 'family'
+const SCOPES: { id: Scope; label: string }[] = [
+  { id: 'all', label: 'Todas' },
+  { id: 'mine', label: 'Mías' },
+  { id: 'family', label: 'Familiares' },
+]
+
 export default function Notas() {
   const { id } = useParams<{ id?: string }>()
   const [q, setQ] = useState('')
   const [tag, setTag] = useState<string | null>(null)
+  const [scope, setScope] = useState<Scope>('all')
+  const fam = useFamilyInfo()
   const dq = useDebounced(q.trim(), 300)
   const searching = dq.length > 1
   const notes = useNotes({ tag: tag ?? undefined })
   const search = useNoteSearch(dq)
   const tags = useNoteTags()
 
+  const showScopes = fam.hasOthers || scope !== 'all'
   const list = useMemo(() => {
-    if (searching) return (search.data ?? []).filter((n) => !tag || n.tags.includes(tag))
-    return notes.data ?? []
-  }, [searching, search.data, notes.data, tag])
+    const base = searching ? (search.data ?? []).filter((n) => !tag || n.tags.includes(tag)) : (notes.data ?? [])
+    if (scope === 'mine') return base.filter((n) => fam.isMine(n.ownerId))
+    if (scope === 'family') return base.filter((n) => n.shared)
+    return base
+  }, [searching, search.data, notes.data, tag, scope, fam])
 
   const pinned = searching ? [] : list.filter((n) => n.pinned)
   const rest = searching ? list : list.filter((n) => !n.pinned)
@@ -91,10 +107,20 @@ export default function Notas() {
             </p>
           )}
         </div>
+        {showScopes && (
+          <div className="mt-3 flex gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label="Filtrar por dueño">
+            {SCOPES.map((sc) => (
+              <Chip key={sc.id} selected={scope === sc.id} onClick={() => setScope(sc.id)}>
+                {sc.id === 'family' && <House className="size-3.5" />}
+                {sc.label}
+              </Chip>
+            ))}
+          </div>
+        )}
         {(tags.data?.length ?? 0) > 0 && (
-          <div className="mt-3 flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none" role="group" aria-label="Filtrar por etiqueta">
+          <div className={cn('flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none', showScopes ? 'mt-2' : 'mt-3')} role="group" aria-label="Filtrar por etiqueta">
             <Chip selected={!tag} onClick={() => setTag(null)}>
-              Todas
+              {showScopes ? 'Cualquier etiqueta' : 'Todas'}
             </Chip>
             {tags.data!.map((t) => (
               <Chip key={t} selected={tag === t} onClick={() => setTag(tag === t ? null : t)}>
@@ -120,8 +146,24 @@ export default function Notas() {
             <EmptyState
               compact
               icon={<Notepad />}
-              title={searching ? 'Nada parecido' : tag ? `Sin notas con #${tag}` : 'Aún no tienes notas'}
-              description={searching ? 'Prueba con otras palabras o quita el filtro.' : 'Escribe una aquí o dile a Kairo: “anota que…”.'}
+              title={
+                searching
+                  ? 'Nada parecido'
+                  : tag
+                    ? `Sin notas con #${tag}`
+                    : scope === 'family'
+                      ? 'Sin notas familiares'
+                      : scope === 'mine'
+                        ? 'Aún no tienes notas propias'
+                        : 'Aún no tienes notas'
+              }
+              description={
+                searching
+                  ? 'Prueba con otras palabras o quita el filtro.'
+                  : scope === 'family'
+                    ? 'Abre una nota y activa “Compartir con la familia” para que la vean todos.'
+                    : 'Escribe una aquí o dile a Kairo: “anota que…”.'
+              }
             />
           ) : (
             <>
@@ -174,6 +216,8 @@ function ListLabel({ children }: { children: string }) {
 
 function NoteItem({ note, active, showScore }: { note: Note; active: boolean; showScore?: boolean }) {
   const excerpt = plainText(note.content)
+  const fam = useFamilyInfo()
+  const by = note.shared && !fam.isMine(note.ownerId) ? fam.nameOf(note.ownerId) : null
   return (
     <li>
       <NavLink
@@ -189,8 +233,14 @@ function NoteItem({ note, active, showScore }: { note: Note; active: boolean; sh
           <span className="shrink-0 font-mono text-xs text-faint">{compactWhen(note.updatedAt)}</span>
         </span>
         {excerpt && <span className="mt-0.5 line-clamp-2 text-sm text-muted">{excerpt}</span>}
-        {(note.tags.length > 0 || (showScore && note.score !== null)) && (
-          <span className="mt-1.5 flex flex-wrap gap-x-2 text-xs text-faint">
+        {(note.tags.length > 0 || note.shared || (showScore && note.score !== null)) && (
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-faint">
+            {note.shared && (
+              <span className="inline-flex h-5 items-center gap-1 rounded-full bg-surface-2 px-2 font-medium text-muted">
+                <House className="size-3" aria-hidden />
+                {by ? `Familiar, de ${by}` : 'Familiar'}
+              </span>
+            )}
             {note.tags.slice(0, 4).map((t) => (
               <span key={t}>#{t}</span>
             ))}
@@ -206,12 +256,20 @@ interface Draft {
   content: string
   tags: string[]
   pinned: boolean
+  /** Solo se usa al crear: en una nota existente, compartir se guarda al instante. */
+  shared: boolean
 }
 
-const emptyDraft: Draft = { title: '', content: '', tags: [], pinned: false }
+const emptyDraft: Draft = { title: '', content: '', tags: [], pinned: false, shared: false }
 
 function sameDraft(a: Draft, b: Draft) {
-  return a.title === b.title && a.content === b.content && a.pinned === b.pinned && a.tags.join('\u0000') === b.tags.join('\u0000')
+  return (
+    a.title === b.title &&
+    a.content === b.content &&
+    a.pinned === b.pinned &&
+    a.shared === b.shared &&
+    a.tags.join('\u0000') === b.tags.join('\u0000')
+  )
 }
 
 function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
@@ -219,6 +277,7 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const note = useNote(isNew ? undefined : id)
+  const fam = useFamilyInfo()
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [base, setBase] = useState<Draft>(emptyDraft)
   const [mode, setMode] = useState<'edit' | 'preview'>(isNew ? 'edit' : 'preview')
@@ -230,7 +289,7 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
   // Carga inicial y cambios remotos cuando no hay edición en curso
   useEffect(() => {
     if (!note.data) return
-    const d: Draft = { title: note.data.title, content: note.data.content, tags: note.data.tags, pinned: note.data.pinned }
+    const d: Draft = { title: note.data.title, content: note.data.content, tags: note.data.tags, pinned: note.data.pinned, shared: note.data.shared }
     setBase(d)
     setDraft((cur) => (sameDraft(cur, base) ? d : cur))
   }, [note.data])
@@ -242,11 +301,11 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
 
   const save = useMutation({
     mutationFn: async (d: Draft) => {
-      if (isNew) return api.post<Note>('/notes', { title: d.title.trim(), content: d.content, tags: d.tags, pinned: d.pinned })
+      if (isNew) return api.post<Note>('/notes', { title: d.title.trim(), content: d.content, tags: d.tags, pinned: d.pinned, shared: d.shared })
       return api.patch<Note>(`/notes/${id}`, { title: d.title.trim(), content: d.content, tags: d.tags, pinned: d.pinned })
     },
     onSuccess: (n) => {
-      const d: Draft = { title: n.title, content: n.content, tags: n.tags, pinned: n.pinned }
+      const d: Draft = { title: n.title, content: n.content, tags: n.tags, pinned: n.pinned, shared: n.shared }
       setBase(d)
       setDraft(d)
       qc.setQueryData(keys.note(n.id), n)
@@ -316,6 +375,27 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
       toast({ title: n.pinned ? 'Nota fijada' : 'Nota sin fijar' })
     },
     onError: (e) => toastError(e, 'No se pudo cambiar'),
+  })
+
+  const toggleShared = useMutation({
+    mutationFn: (shared: boolean) => api.patch<Note>(`/notes/${id}`, { shared }),
+    onMutate: (shared) => {
+      setBase((b) => ({ ...b, shared }))
+      setDraft((d) => ({ ...d, shared }))
+    },
+    onSuccess: (n) => {
+      qc.setQueryData(keys.note(n.id), n)
+      invalidateEntity(qc, 'note')
+      toast({
+        title: n.shared ? 'Nota compartida con la familia' : 'La nota vuelve a ser personal',
+        description: n.shared ? 'Todos en la familia pueden verla y editarla.' : undefined,
+      })
+    },
+    onError: (e, shared) => {
+      setBase((b) => ({ ...b, shared: !shared }))
+      setDraft((d) => ({ ...d, shared: !shared }))
+      toastError(e, 'No se pudo cambiar')
+    },
   })
 
   const canSave = (draft.title.trim() || draft.content.trim()) && dirty && !save.isPending
@@ -415,6 +495,14 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
             </p>
           )}
 
+          <ShareRow
+            fam={fam}
+            note={n}
+            shared={draft.shared}
+            onChange={(v) => (isNew ? setDraft({ ...draft, shared: v }) : toggleShared.mutate(v))}
+            busy={toggleShared.isPending}
+          />
+
           <TagEditor tags={draft.tags} onChange={(tags) => setDraft({ ...draft, tags })} known={knownTags} />
 
           <div className="mt-6">
@@ -455,6 +543,43 @@ function NoteEditor({ id, knownTags }: { id: string; knownTags: string[] }) {
         description="Podrás deshacerlo desde el aviso o desde Actividad."
       />
       {dirty && <UnsavedGuard allowRef={allowNav} />}
+    </div>
+  )
+}
+
+/**
+ * "Compartir con la familia": solo quien creó la nota puede cambiarlo; los demás ven quién la compartió.
+ * Se oculta si no hay nadie más en el hogar (salvo que la nota ya sea familiar).
+ */
+function ShareRow({
+  fam,
+  note,
+  shared,
+  onChange,
+  busy,
+}: {
+  fam: ReturnType<typeof useFamilyInfo>
+  note: Note | undefined
+  shared: boolean
+  onChange: (v: boolean) => void
+  busy: boolean
+}) {
+  if (!fam.hasOthers && !shared) return null
+  const owner = note && !fam.isMine(note.ownerId)
+  if (owner)
+    return (
+      <p className="mt-3 flex items-center gap-1.5 text-sm text-muted">
+        <FamilyIcon className="text-muted" />
+        Compartida por {fam.nameOf(note.ownerId) ?? 'otra persona'}. Puedes editarla; solo quien la creó puede dejar de compartirla.
+      </p>
+    )
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <label className="flex items-center gap-2.5 text-sm text-fg">
+        <Switch checked={shared} onChange={onChange} disabled={busy} label="Compartir con la familia" />
+        Compartir con la familia
+      </label>
+      <span className="text-sm text-muted">{shared ? `La ven y editan todos en ${fam.household?.name ?? 'la familia'}.` : 'Solo tú la ves.'}</span>
     </div>
   )
 }

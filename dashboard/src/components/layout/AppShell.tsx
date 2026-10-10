@@ -1,6 +1,8 @@
 import {
+  BellSimple,
   CaretLineLeft,
   CaretLineRight,
+  Checks,
   DotsThreeOutline,
   MagnifyingGlass,
   Monitor,
@@ -11,8 +13,9 @@ import {
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { KairoMark } from '@/components/KairoMark'
+import { NoticesFeed } from '@/components/NoticesFeed'
 import { RecordingPill } from '@/components/RecordingPill'
-import { IconButton } from '@/components/ui/button'
+import { Button, IconButton } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/feedback'
 import { Menu } from '@/components/ui/menu'
@@ -21,15 +24,19 @@ import { Toaster } from '@/components/ui/toast'
 import { setClientLocation } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo } from '@/lib/family'
+import { useMarkNoticesRead } from '@/lib/mutations'
+import { useNotices } from '@/lib/queries'
 import { useRealtime, useRealtimeState } from '@/lib/realtime'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 import { ALL_NAV, MOBILE_PRIMARY, NAV_GROUPS, SETTINGS_ITEM, type NavItem } from './nav'
 
 interface ShellContextValue {
   openPalette: (prefill?: string) => void
+  openNotices: () => void
 }
 
-const ShellContext = createContext<ShellContextValue>({ openPalette: () => undefined })
+const ShellContext = createContext<ShellContextValue>({ openPalette: () => undefined, openNotices: () => undefined })
 export const useShell = () => useContext(ShellContext)
 
 const CommandPalette = lazy(() => import('./CommandPalette').then((m) => ({ default: m.CommandPalette })))
@@ -55,11 +62,13 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const [palette, setPalette] = useState<{ open: boolean; prefill: string }>({ open: false, prefill: '' })
   const [moreOpen, setMoreOpen] = useState(false)
+  const [noticesOpen, setNoticesOpen] = useState(false)
   const [paletteLoaded, setPaletteLoaded] = useState(false)
   const location = useLocation()
 
   const goHome = useCallback(() => navigate('/'), [navigate])
-  useRealtime(true, goHome)
+  const goTo = useCallback((to: string) => navigate(to), [navigate])
+  useRealtime(true, goHome, goTo)
 
   // Ubicación aproximada para clima y lugares, solo si ya fue concedida.
   useEffect(() => {
@@ -91,6 +100,7 @@ export function AppShell() {
 
   useEffect(() => {
     setMoreOpen(false)
+    setNoticesOpen(false)
   }, [location.pathname])
 
   const toggleCollapsed = () => {
@@ -108,7 +118,10 @@ export function AppShell() {
     if (palette.open) setPaletteLoaded(true)
   }, [palette.open])
 
-  const shell = useMemo<ShellContextValue>(() => ({ openPalette: (prefill = '') => setPalette({ open: true, prefill }) }), [])
+  const shell = useMemo<ShellContextValue>(
+    () => ({ openPalette: (prefill = '') => setPalette({ open: true, prefill }), openNotices: () => setNoticesOpen(true) }),
+    [],
+  )
 
   return (
     <ShellContext.Provider value={shell}>
@@ -119,9 +132,9 @@ export function AppShell() {
         Saltar al contenido
       </a>
       <div className="flex min-h-[100dvh]">
-        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onAsk={() => shell.openPalette()} />
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onAsk={() => shell.openPalette()} onNotices={shell.openNotices} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <MobileTopBar onAsk={() => shell.openPalette()} />
+          <MobileTopBar onAsk={() => shell.openPalette()} onNotices={shell.openNotices} />
           <main id="main" className="min-w-0 flex-1 pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0">
             <Suspense fallback={<PageFallback />}>
               <Outlet />
@@ -131,6 +144,7 @@ export function AppShell() {
       </div>
       <BottomNav onMore={() => setMoreOpen(true)} />
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+      <NoticesDialog open={noticesOpen} onClose={() => setNoticesOpen(false)} />
       {(paletteLoaded || palette.open) && (
         <Suspense fallback={null}>
           <CommandPalette
@@ -184,7 +198,79 @@ function NavEntry({ item, collapsed, onNavigate }: { item: NavItem; collapsed: b
   )
 }
 
-function Sidebar({ collapsed, onToggle, onAsk }: { collapsed: boolean; onToggle: () => void; onAsk: () => void }) {
+/** Indicador de avisos de la familia: campana con la cuenta sin leer; abre Novedades. */
+function NoticesBell({ onOpen, size = 'md' }: { onOpen: () => void; size?: 'sm' | 'md' }) {
+  const notices = useNotices()
+  const fam = useFamilyInfo()
+  const unread = notices.data?.unread ?? 0
+  // Sin nadie más en el hogar y sin avisos, la campana solo sería ruido.
+  if (!fam.hasOthers && unread === 0) return null
+  return (
+    <IconButton
+      label={unread > 0 ? `Novedades de la familia, ${unread} sin leer` : 'Novedades de la familia'}
+      size={size}
+      onClick={onOpen}
+      className="relative"
+      data-testid="notices-bell"
+    >
+      <BellSimple className={size === 'sm' ? 'size-4' : 'size-5'} />
+      {unread > 0 && (
+        <span
+          aria-hidden
+          className={cn(
+            'absolute -right-px flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-accent px-[3px] font-mono text-[9.5px] leading-none font-semibold text-on-accent ring-2 ring-bg tnum',
+            size === 'sm' ? 'top-0.5' : 'top-[3px]',
+          )}
+        >
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </IconButton>
+  )
+}
+
+function NoticesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate()
+  const notices = useNotices()
+  const markAll = useMarkNoticesRead()
+  const unread = notices.data?.unread ?? 0
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Novedades"
+      description={notices.data ? (unread > 0 ? `${unread} sin leer` : 'Estás al día con tu familia.') : undefined}
+      footer={
+        <>
+          {unread > 0 && (
+            <Button variant="ghost" className="mr-auto" icon={<Checks className="size-4" />} onClick={() => markAll.mutate(undefined)}>
+              Marcar todo como leído
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              onClose()
+              navigate('/familia#novedades')
+            }}
+          >
+            Abrir Familia
+          </Button>
+        </>
+      }
+    >
+      <NoticesFeed
+        notices={notices.data?.notices}
+        loading={notices.isLoading}
+        error={notices.error as Error | null}
+        onRetry={() => void notices.refetch()}
+        limit={20}
+        onNavigate={onClose}
+      />
+    </Dialog>
+  )
+}
+
+function Sidebar({ collapsed, onToggle, onAsk, onNotices }: { collapsed: boolean; onToggle: () => void; onAsk: () => void; onNotices: () => void }) {
   const live = useRealtimeState()
   return (
     <aside
@@ -200,9 +286,12 @@ function Sidebar({ collapsed, onToggle, onAsk }: { collapsed: boolean; onToggle:
           {!collapsed && <span className="text-md font-semibold tracking-tight">Kairo</span>}
         </NavLink>
         {!collapsed && (
-          <IconButton label="Contraer barra lateral" size="sm" onClick={onToggle}>
-            <CaretLineLeft className="size-4" />
-          </IconButton>
+          <div className="flex items-center gap-0.5">
+            <NoticesBell onOpen={onNotices} size="sm" />
+            <IconButton label="Contraer barra lateral" size="sm" onClick={onToggle}>
+              <CaretLineLeft className="size-4" />
+            </IconButton>
+          </div>
         )}
       </div>
 
@@ -215,6 +304,7 @@ function Sidebar({ collapsed, onToggle, onAsk }: { collapsed: boolean; onToggle:
             <IconButton label={`Preguntar o buscar (${MOD_KEY} K)`} onClick={onAsk}>
               <MagnifyingGlass className="size-[18px]" />
             </IconButton>
+            <NoticesBell onOpen={onNotices} />
           </>
         ) : (
           <button
@@ -298,16 +388,19 @@ function UserRow({ collapsed }: { collapsed: boolean }) {
   )
 }
 
-function MobileTopBar({ onAsk }: { onAsk: () => void }) {
+function MobileTopBar({ onAsk, onNotices }: { onAsk: () => void; onNotices: () => void }) {
   return (
     <div className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-bg px-4 md:hidden">
       <NavLink to="/" className="flex items-center gap-2" aria-label="Kairo, ir a Hoy">
         <KairoMark className="size-6" />
         <span className="text-md font-semibold tracking-tight">Kairo</span>
       </NavLink>
-      <IconButton label="Preguntar o buscar" onClick={onAsk}>
-        <MagnifyingGlass className="size-5" />
-      </IconButton>
+      <div className="flex items-center gap-1">
+        <NoticesBell onOpen={onNotices} />
+        <IconButton label="Preguntar o buscar" onClick={onAsk}>
+          <MagnifyingGlass className="size-5" />
+        </IconButton>
+      </div>
     </div>
   )
 }

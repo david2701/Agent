@@ -11,6 +11,8 @@ import { AuthProvider, useAuth } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/theme'
 
 const Login = lazy(() => import('@/pages/Login'))
+const Unirse = lazy(() => import('@/pages/Unirse'))
+const Familia = lazy(() => import('@/pages/Familia'))
 const Hoy = lazy(() => import('@/pages/Hoy'))
 const Chat = lazy(() => import('@/pages/Chat'))
 const Notas = lazy(() => import('@/pages/Notas'))
@@ -64,6 +66,13 @@ function PublicOnly({ children }: { children: ReactNode }) {
   return <Suspense fallback={<Splash />}>{children}</Suspense>
 }
 
+/** Pública con o sin sesión (unirse con un código funciona aunque haya otra cuenta abierta). */
+function Public({ children }: { children: ReactNode }) {
+  const { status } = useAuth()
+  if (status === 'loading') return <Splash />
+  return <Suspense fallback={<Splash />}>{children}</Suspense>
+}
+
 const router = createBrowserRouter([
   {
     path: '/login',
@@ -71,6 +80,14 @@ const router = createBrowserRouter([
       <PublicOnly>
         <Login />
       </PublicOnly>
+    ),
+  },
+  {
+    path: '/unirse',
+    element: (
+      <Public>
+        <Unirse />
+      </Public>
     ),
   },
   {
@@ -91,6 +108,7 @@ const router = createBrowserRouter([
       { path: 'memoria', element: <Memoria /> },
       { path: 'grabaciones/:id?', element: <Grabaciones /> },
       { path: 'actividad', element: <Actividad /> },
+      { path: 'familia', element: <Familia /> },
       { path: 'ajustes', element: <Ajustes /> },
       { path: '*', element: <NotFound /> },
     ],

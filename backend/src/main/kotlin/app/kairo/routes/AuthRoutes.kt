@@ -96,8 +96,9 @@ fun Route.authRoutes(s: Services) {
                 }
                 if (isNew) {
                     s.notifier.everyone(user.id, app.kairo.domain.NoticeKinds.MESSAGE, "${user.displayName} se unió a la familia", "Ya puede ver lo que compartes.", "family", user.id)
-                    s.bus.entityChanged(s.family.memberIds(user.id), "family", user.id, "updated")
                 }
+                // Nuevo miembro o código de acceso usado: la familia (y las invitaciones pendientes) cambió
+                s.bus.entityChanged(s.family.memberIds(user.id), "family", user.id, "updated")
                 call.respondTokens(user, tokens, web = platform == "web", s.config.publicUrl.startsWith("https"))
             }
         }

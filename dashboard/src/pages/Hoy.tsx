@@ -16,6 +16,7 @@ import {
   Play,
   Sparkle,
   Sun,
+  UserPlus,
   type Icon,
 } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -24,6 +25,8 @@ import { motion, useReducedMotion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Composer } from '@/components/chat/Composer'
+import { Avatar, FamilyIcon } from '@/components/family'
+import { NoticesFeed } from '@/components/NoticesFeed'
 import { ReminderRow, TaskRow } from '@/components/rows'
 import { Button, ButtonLink } from '@/components/ui/button'
 import { EmptyState, ErrorState, Skeleton, SkeletonRows } from '@/components/ui/feedback'
@@ -34,9 +37,10 @@ import { api } from '@/lib/api'
 import { speak, stopSpeaking, unlockAudio } from '@/lib/audio'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo } from '@/lib/family'
 import { capitalize, compactWhen, plainText, shortDate, time, toDate } from '@/lib/format'
 import { useReminderActions, useTaskActions, useToggleItem } from '@/lib/mutations'
-import { keys, useBriefing, useLists, useSettings, useToday } from '@/lib/queries'
+import { keys, useBriefing, useLists, useNotices, useSettings, useToday } from '@/lib/queries'
 import type { CalendarEvent, Task, Today, Weather } from '@/lib/types'
 
 const SUGGESTIONS = [
@@ -114,6 +118,7 @@ export default function Hoy() {
           </div>
           <div className="grid content-start gap-5 lg:gap-6">
             <BriefingPanel />
+            <FamilyPanel />
             {data?.weather && <WeatherPanel weather={data.weather} />}
             <RemindersPanel data={data} />
             <ListsPanel data={data} />
@@ -222,6 +227,7 @@ function AgendaRow({ e, now }: { e: CalendarEvent; now: Date }) {
         <p className="flex items-center gap-2 text-base font-medium text-fg">
           <span className="truncate">{e.title}</span>
           {ongoing && <span className="shrink-0 text-xs font-medium text-accent-strong">Ahora</span>}
+          {e.shared && <FamilyIcon label="Evento familiar" />}
           {e.source === 'google' && <GoogleLogo className="size-3.5 shrink-0 text-faint" aria-label="De Google Calendar" />}
         </p>
         {e.location && (
@@ -383,6 +389,79 @@ function BriefingPanel() {
           <Button className="mt-4" variant="primary" onClick={() => gen.mutate()} icon={<Sparkle className="size-4" />}>
             Resumen del día
           </Button>
+        </>
+      )}
+    </Panel>
+  )
+}
+
+/* ---------------------------------------------------------------- Familia */
+
+/**
+ * Lo último que pasó en la familia (avisos sin leer). Con una sola persona en el hogar se oculta y,
+ * si quien mira administra la familia, queda una línea para invitar.
+ */
+function FamilyPanel() {
+  const fam = useFamilyInfo()
+  const notices = useNotices()
+
+  if (fam.query.isLoading)
+    return (
+      <Panel className="p-5" aria-busy="true" aria-label="Cargando familia">
+        <Skeleton className="h-5 w-24" />
+        <SkeletonRows rows={2} className="mt-5" />
+      </Panel>
+    )
+  if (fam.query.isError) return null
+  if (!fam.hasOthers) {
+    if (!fam.isAdmin) return null
+    return (
+      <Link
+        to="/familia?invitar=1"
+        className="group flex items-center gap-3 rounded-card border border-dashed border-line px-5 py-3.5 text-base text-muted transition-colors hover:border-[color-mix(in_srgb,var(--text-faint)_50%,var(--border))] hover:text-fg"
+      >
+        <UserPlus className="size-[18px] shrink-0 text-faint group-hover:text-muted" />
+        <span className="min-w-0 flex-1">Invita a tu familia para compartir listas, eventos y tareas.</span>
+        <ArrowRight className="size-3.5 shrink-0" />
+      </Link>
+    )
+  }
+
+  const unread = (notices.data?.notices ?? []).filter((n) => !n.readAt)
+  const count = notices.data?.unread ?? unread.length
+  return (
+    <Panel className="p-5" aria-labelledby="family-title">
+      <SectionHeader
+        id="family-title"
+        title="Familia"
+        count={notices.data ? count : undefined}
+        action={
+          <span className="flex items-center gap-3">
+            <span className="flex -space-x-1.5" aria-hidden>
+              {fam.members.slice(0, 4).map((m) => (
+                <Avatar key={m.id} name={m.displayName} size="sm" className="ring-2 ring-surface" />
+              ))}
+            </span>
+            <Link to="/familia" className="flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+              Abrir <ArrowRight className="size-3.5" />
+            </Link>
+          </span>
+        }
+      />
+      {notices.isLoading ? (
+        <SkeletonRows rows={2} className="mt-5" />
+      ) : notices.isError ? (
+        <p className="mt-3 text-base text-muted">No pude cargar las novedades de la familia.</p>
+      ) : unread.length === 0 ? (
+        <p className="mt-2 text-base text-muted">Estás al día. Nada nuevo de la familia.</p>
+      ) : (
+        <>
+          <NoticesFeed notices={unread} loading={false} limit={3} className="mt-2" />
+          {count > 3 && (
+            <Link to="/familia#novedades" className="mt-1 inline-block text-sm text-muted hover:text-fg">
+              Ver {count - 3} más
+            </Link>
+          )}
         </>
       )}
     </Panel>

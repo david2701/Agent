@@ -1,4 +1,17 @@
-import { ArrowRight, ArrowUp, Bell, CalendarPlus, ChatCircleDots, CheckSquare, Moon, NotePencil, Sparkle, Sun } from '@phosphor-icons/react'
+import {
+  ArrowRight,
+  ArrowUp,
+  Bell,
+  CalendarPlus,
+  ChatCircleDots,
+  CheckSquare,
+  Moon,
+  NotePencil,
+  PaperPlaneTilt,
+  Sparkle,
+  Sun,
+  UserPlus,
+} from '@phosphor-icons/react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router'
@@ -7,6 +20,7 @@ import { KairoMark } from '@/components/KairoMark'
 import { Kbd } from '@/components/ui/misc'
 import { newTurn, useAgentRunner } from '@/lib/agent'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo } from '@/lib/family'
 import { useTheme } from '@/lib/theme'
 import { ALL_NAV } from './nav'
 
@@ -37,6 +51,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
   const [active, setActive] = useState(0)
   const [conversationId, setConversationId] = useState<string | undefined>()
   const runner = useAgentRunner()
+  const fam = useFamilyInfo()
 
   useEffect(() => {
     const d = ref.current
@@ -77,6 +92,12 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
       { id: 'new-task', label: 'Nueva tarea', icon: <CheckSquare className="size-[18px]" />, run: () => go('/tareas?nueva=1'), keywords: 'crear pendiente' },
       { id: 'new-reminder', label: 'Nuevo recordatorio', icon: <Bell className="size-[18px]" />, run: () => go('/recordatorios?nuevo=1'), keywords: 'crear aviso alarma' },
       { id: 'new-event', label: 'Nuevo evento', icon: <CalendarPlus className="size-[18px]" />, run: () => go('/calendario?nuevo=1'), keywords: 'crear cita reunion calendario' },
+      ...(fam.isAdmin
+        ? [{ id: 'invite', label: 'Invitar a la familia', icon: <UserPlus className="size-[18px]" />, run: () => go('/familia?invitar=1'), keywords: 'familia miembro codigo invitacion' }]
+        : []),
+      ...(fam.hasOthers
+        ? [{ id: 'notice', label: 'Enviar aviso a la familia', icon: <PaperPlaneTilt className="size-[18px]" />, run: () => go('/familia#aviso'), keywords: 'familia mensaje avisar' }]
+        : []),
       {
         id: 'theme',
         label: resolved === 'dark' ? 'Usar tema claro' : 'Usar tema oscuro',
@@ -88,7 +109,7 @@ export function CommandPalette({ open, onClose, prefill }: { open: boolean; onCl
       },
     ]
     return [...actions, ...pages]
-  }, [resolved])
+  }, [resolved, fam.isAdmin, fam.hasOthers])
 
   const q = normalize(query.trim())
   const filtered = q ? commands.filter((c) => normalize(`${c.label} ${c.keywords ?? ''}`).includes(q)) : commands

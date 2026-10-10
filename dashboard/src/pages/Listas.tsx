@@ -1,16 +1,18 @@
-import { ArrowLeft, Broom, DotsThree, ListChecks, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
+import { ArrowLeft, Broom, DotsThree, House, ListChecks, LockSimple, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router'
+import { FamilyIcon, FamilyTag } from '@/components/family'
 import { Button, IconButton } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
-import { Checkbox, Input } from '@/components/ui/form'
+import { Checkbox, Input, Switch } from '@/components/ui/form'
 import { Menu } from '@/components/ui/menu'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo } from '@/lib/family'
 import { useToggleItem } from '@/lib/mutations'
 import { invalidateEntity, keys, useLists } from '@/lib/queries'
 import type { KList, ListItem } from '@/lib/types'
@@ -22,7 +24,9 @@ export default function Listas() {
   const qc = useQueryClient()
   const lists = useLists()
   const [name, setName] = useState('')
+  const [shared, setShared] = useState(false)
   const [creating, setCreating] = useState(false)
+  const fam = useFamilyInfo()
 
   // En escritorio, abre la primera lista si no hay una elegida
   useEffect(() => {
@@ -30,9 +34,10 @@ export default function Listas() {
   }, [id, lists.data, navigate])
 
   const create = useMutation({
-    mutationFn: (n: string) => api.post<KList>('/lists', { name: n }),
+    mutationFn: (n: string) => api.post<KList>('/lists', shared ? { name: n, shared: true } : { name: n }),
     onSuccess: (l) => {
       setName('')
+      setShared(false)
       setCreating(false)
       invalidateEntity(qc, 'list')
       navigate(`/listas/${l.id}`)
@@ -54,19 +59,27 @@ export default function Listas() {
           </div>
           {creating && (
             <form
-              className="mt-4 flex gap-2"
+              className="mt-4 grid gap-2.5"
               onSubmit={(e) => {
                 e.preventDefault()
                 if (name.trim()) create.mutate(name.trim())
               }}
             >
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la lista" aria-label="Nombre de la lista" autoFocus />
-              <Button type="submit" loading={create.isPending} disabled={!name.trim()}>
-                Crear
-              </Button>
-              <IconButton label="Cancelar" onClick={() => setCreating(false)}>
-                <X className="size-4" />
-              </IconButton>
+              <div className="flex gap-2">
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la lista" aria-label="Nombre de la lista" autoFocus />
+                <Button type="submit" loading={create.isPending} disabled={!name.trim()}>
+                  Crear
+                </Button>
+                <IconButton label="Cancelar" onClick={() => setCreating(false)}>
+                  <X className="size-4" />
+                </IconButton>
+              </div>
+              {fam.hasOthers && (
+                <label className="flex items-center gap-2.5 px-0.5 text-sm text-muted">
+                  <Switch checked={shared} onChange={setShared} label="Compartir con la familia" />
+                  Compartir con la familia
+                </label>
+              )}
             </form>
           )}
           <div className="mt-4">
@@ -97,6 +110,7 @@ export default function Listas() {
                       >
                         <ListChecks className="size-[18px] shrink-0 text-faint" />
                         <span className="min-w-0 flex-1 truncate">{l.name}</span>
+                        {l.shared && <FamilyIcon label={fam.isMine(l.ownerId) ? 'Familiar' : `Familiar, de ${fam.nameOf(l.ownerId) ?? 'otra persona'}`} />}
                         <span className="font-mono text-sm text-faint tnum">{pending}</span>
                       </NavLink>
                     </li>
@@ -126,6 +140,8 @@ function ListDetail({ list }: { list: KList }) {
   const navigate = useNavigate()
   const toggle = useToggleItem()
   const reduce = useReducedMotion()
+  const fam = useFamilyInfo()
+  const isOwner = fam.isMine(list.ownerId)
   const [text, setText] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirm, setConfirm] = useState(false)
@@ -176,6 +192,18 @@ function ListDetail({ list }: { list: KList }) {
       setList(l)
     },
     onError: (e) => toastError(e, 'No se pudo renombrar'),
+  })
+  const share = useMutation({
+    mutationFn: (shared: boolean) => api.patch<KList>(`/lists/${list.id}`, { shared }),
+    onSuccess: (l) => {
+      setList(l)
+      invalidateEntity(qc, 'list')
+      toast({
+        title: l.shared ? 'Lista compartida con la familia' : 'La lista vuelve a ser personal',
+        description: l.shared ? 'Todos en la familia pueden verla y agregar cosas.' : undefined,
+      })
+    },
+    onError: (e) => toastError(e, 'No se pudo cambiar'),
   })
   const remove = useMutation({
     mutationFn: () => api.del(`/lists/${list.id}`),
@@ -235,13 +263,21 @@ function ListDetail({ list }: { list: KList }) {
           </form>
         ) : (
           <>
-            <h2 className="min-w-0 flex-1 truncate text-md font-semibold tracking-tight">{list.name}</h2>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h2 className="min-w-0 truncate text-md font-semibold tracking-tight">{list.name}</h2>
+              {list.shared && <FamilyTag by={isOwner ? null : fam.nameOf(list.ownerId)} />}
+            </div>
             <span className="font-mono text-sm text-faint tnum">
               {pending.length}/{list.items.length}
             </span>
             <Menu
               items={[
                 { label: 'Renombrar', icon: <PencilSimple className="size-4" />, onSelect: () => setRenaming(list.name) },
+                isOwner &&
+                  (fam.hasOthers || list.shared) &&
+                  (list.shared
+                    ? { label: 'Dejar de compartir', icon: <LockSimple className="size-4" />, onSelect: () => share.mutate(false) }
+                    : { label: 'Compartir con la familia', icon: <House className="size-4" />, onSelect: () => share.mutate(true) }),
                 checked.length > 0 && { label: 'Limpiar marcados', icon: <Broom className="size-4" />, onSelect: () => clear.mutate() },
                 { label: 'Eliminar lista', icon: <Trash className="size-4" />, tone: 'danger', onSelect: () => setConfirm(true) },
               ]}

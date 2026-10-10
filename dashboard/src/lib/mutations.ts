@@ -2,10 +2,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from './api'
 import { invalidateEntity, keys } from './queries'
-import type { KList, Reminder, Task } from './types'
+import type { KList, NoticesResponse, Reminder, Task } from './types'
 import { undoLatest } from './undo'
 
-export type TaskPatch = Partial<Pick<Task, 'title' | 'notes' | 'status' | 'priority' | 'dueDate' | 'dueAt' | 'projectId' | 'tags' | 'sort'>>
+export type TaskPatch = Partial<
+  Pick<Task, 'title' | 'notes' | 'status' | 'priority' | 'dueDate' | 'dueAt' | 'projectId' | 'tags' | 'sort' | 'shared' | 'assigneeId'>
+>
 
 export function useTaskActions() {
   const qc = useQueryClient()
@@ -133,6 +135,32 @@ export function useToggleItem() {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: keys.today })
+    },
+  })
+}
+
+/** Marca avisos de la familia como leídos (sin ids, todos) con actualización optimista. */
+export function useMarkNoticesRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids?: string[]) => api.post('/notices/read', ids ? { ids } : {}),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: keys.notices })
+      const prev = qc.getQueryData<NoticesResponse>(keys.notices)
+      if (prev) {
+        const now = new Date().toISOString()
+        const notices = prev.notices.map((n) => (!n.readAt && (!ids || ids.includes(n.id)) ? { ...n, readAt: now } : n))
+        const marked = prev.notices.filter((n) => !n.readAt && (!ids || ids.includes(n.id))).length
+        qc.setQueryData<NoticesResponse>(keys.notices, { notices, unread: ids ? Math.max(0, prev.unread - marked) : 0 })
+      }
+      return { prev }
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(keys.notices, ctx.prev)
+      toastError(e, 'No se pudieron marcar como leídos')
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.notices })
     },
   })
 }

@@ -14,38 +14,43 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckSquare, FolderSimple, Kanban, ListBullets, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
+import { CheckSquare, FolderSimple, Kanban, ListBullets, PencilSimple, Plus, Trash, UserCircle } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
-import { DueText, PriorityTag, TaskRow } from '@/components/rows'
+import { DueText, PriorityTag, TaskPeople, TaskRow } from '@/components/rows'
 import { Button, IconButton } from '@/components/ui/button'
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
-import { Field, Input, Select, Textarea } from '@/components/ui/form'
+import { Field, Input, Select, Switch, Textarea } from '@/components/ui/form'
 import { Chip, PageHeader, Segmented } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { PRIORITY_LABEL, STATUS_LABEL } from '@/lib/entities'
+import { useFamilyInfo } from '@/lib/family'
 import { isoDate } from '@/lib/format'
 import { useTaskActions, type TaskPatch } from '@/lib/mutations'
-import { invalidateEntity, keys, useProjects, useTasks } from '@/lib/queries'
+import { invalidateEntity, keys, useProjects, useTasks, useTasksAssignedToMe } from '@/lib/queries'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/lib/types'
 import { undoLatest } from '@/lib/undo'
 import { useStored } from '@/lib/useStored'
 
 const COLUMNS: TaskStatus[] = ['todo', 'doing', 'done']
-type Filter = 'all' | 'none' | string
+/** all, none (sin proyecto), mine (asignadas a mí) o el id de un proyecto */
+type Filter = 'all' | 'none' | 'mine' | string
 
 export default function Tareas() {
   const qc = useQueryClient()
   const [params, setParams] = useSearchParams()
   const tasks = useTasks()
   const projects = useProjects()
+  const fam = useFamilyInfo()
   const [view, setView] = useStored<'board' | 'list'>('kairo-tasks-view', 'board')
-  const [filter, setFilter] = useState<Filter>(() => params.get('proyecto') ?? 'all')
+  const [filter, setFilter] = useState<Filter>(() => params.get('proyecto') ?? (params.get('asignadas') ? 'mine' : 'all'))
+  const mine = useTasksAssignedToMe(filter === 'mine' || fam.hasOthers)
+  const isProject = filter !== 'all' && filter !== 'none' && filter !== 'mine'
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
   const [projectsOpen, setProjectsOpen] = useState(false)
   const { update, complete } = useTaskActions()
@@ -70,18 +75,30 @@ export default function Tareas() {
       params.delete('proyecto')
       setParams(params, { replace: true })
     }
+    if (params.get('asignadas')) {
+      setFilter('mine')
+      params.delete('asignadas')
+      setParams(params, { replace: true })
+    }
   }, [params, setParams, tasks.data])
 
   const visible = useMemo(() => {
     const all = tasks.data ?? []
+    if (filter === 'mine') return mine.data ?? []
     if (filter === 'all') return all
     if (filter === 'none') return all.filter((t) => !t.projectId)
     return all.filter((t) => t.projectId === filter)
-  }, [tasks.data, filter])
+  }, [tasks.data, mine.data, filter])
+  const source = filter === 'mine' ? mine : tasks
 
   const quickAdd = useMutation({
     mutationFn: (title: string) =>
-      api.post<Task>('/tasks', { title, status: 'todo', projectId: filter !== 'all' && filter !== 'none' ? filter : undefined }),
+      api.post<Task>('/tasks', {
+        title,
+        status: 'todo',
+        projectId: isProject ? filter : undefined,
+        assigneeId: filter === 'mine' && fam.me ? fam.me : undefined,
+      }),
     onSuccess: (t) => {
       invalidateEntity(qc, 'task')
       toast({
@@ -101,8 +118,9 @@ export default function Tareas() {
       c.all++
       c[t.projectId ?? 'none'] = (c[t.projectId ?? 'none'] ?? 0) + 1
     }
+    c.mine = (mine.data ?? []).filter((t) => t.status !== 'done').length
     return c
-  }, [tasks.data])
+  }, [tasks.data, mine.data])
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
@@ -131,6 +149,12 @@ export default function Tareas() {
           <Chip selected={filter === 'all'} onClick={() => setFilter('all')}>
             Todas <span className="font-mono text-xs opacity-70">{counts.all}</span>
           </Chip>
+          {(fam.hasOthers || filter === 'mine') && (
+            <Chip selected={filter === 'mine'} onClick={() => setFilter('mine')}>
+              <UserCircle className="size-3.5" />
+              Asignadas a mí <span className="font-mono text-xs opacity-70">{counts.mine}</span>
+            </Chip>
+          )}
           {(projects.data ?? []).map((p) => (
             <Chip key={p.id} selected={filter === p.id} onClick={() => setFilter(p.id)}>
               {p.name} <span className="font-mono text-xs opacity-70">{counts[p.id] ?? 0}</span>
@@ -145,12 +169,23 @@ export default function Tareas() {
         </Button>
       </div>
 
-      <QuickAdd onAdd={(t) => quickAdd.mutate(t)} loading={quickAdd.isPending} projectName={projects.data?.find((p) => p.id === filter)?.name} />
+      <QuickAdd
+        onAdd={(t) => quickAdd.mutate(t)}
+        loading={quickAdd.isPending}
+        projectName={projects.data?.find((p) => p.id === filter)?.name}
+        mine={filter === 'mine'}
+      />
 
-      {tasks.isLoading ? (
+      {source.isLoading ? (
         <BoardSkeleton />
-      ) : tasks.isError ? (
-        <ErrorState message={(tasks.error as Error).message} onRetry={() => void tasks.refetch()} />
+      ) : source.isError ? (
+        <ErrorState message={(source.error as Error).message} onRetry={() => void source.refetch()} />
+      ) : filter === 'mine' && visible.length === 0 ? (
+        <EmptyState
+          icon={<UserCircle />}
+          title="Nada asignado a ti"
+          description="Cuando alguien de la familia te asigne una tarea, aparece aquí y te llega un aviso."
+        />
       ) : (tasks.data ?? []).length === 0 ? (
         <EmptyState
           icon={<CheckSquare />}
@@ -170,7 +205,8 @@ export default function Tareas() {
       <TaskDialog
         task={editing}
         projects={projects.data ?? []}
-        defaultProjectId={filter !== 'all' && filter !== 'none' ? filter : null}
+        defaultProjectId={isProject ? filter : null}
+        defaultAssigneeId={filter === 'mine' ? fam.me : null}
         onClose={() => setEditing(null)}
       />
       <ProjectsDialog open={projectsOpen} onClose={() => setProjectsOpen(false)} projects={projects.data ?? []} tasks={tasks.data ?? []} />
@@ -178,7 +214,7 @@ export default function Tareas() {
   )
 }
 
-function QuickAdd({ onAdd, loading, projectName }: { onAdd: (t: string) => void; loading: boolean; projectName?: string }) {
+function QuickAdd({ onAdd, loading, projectName, mine }: { onAdd: (t: string) => void; loading: boolean; projectName?: string; mine?: boolean }) {
   const [value, setValue] = useState('')
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -193,7 +229,7 @@ function QuickAdd({ onAdd, loading, projectName }: { onAdd: (t: string) => void;
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={projectName ? `Agregar tarea en ${projectName}` : 'Agregar una tarea y pulsar Enter'}
+        placeholder={projectName ? `Agregar tarea en ${projectName}` : mine ? 'Agregar una tarea a tu cargo' : 'Agregar una tarea y pulsar Enter'}
         aria-label="Agregar tarea rápida"
         className="h-11 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-faint"
       />
@@ -427,11 +463,12 @@ function CardBody({ task, overlay, reduce }: { task: Task; overlay?: boolean; re
       )}
     >
       <p className={cn('line-clamp-3 text-base leading-snug', done ? 'text-faint line-through' : 'text-fg')}>{task.title}</p>
-      {(task.priority !== 'medium' || task.dueDate || task.dueAt || task.projectName) && (
+      {(task.priority !== 'medium' || task.dueDate || task.dueAt || task.projectName || task.shared || task.assigneeId) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
           <PriorityTag priority={task.priority} />
           <DueText task={task} />
           {task.projectName && <span className="truncate text-faint">{task.projectName}</span>}
+          <TaskPeople task={task} className="ml-auto" />
         </div>
       )}
     </div>
@@ -479,16 +516,21 @@ function TaskDialog({
   task,
   projects,
   defaultProjectId,
+  defaultAssigneeId,
   onClose,
 }: {
   task: Task | 'new' | null
   projects: Project[]
   defaultProjectId: string | null
+  defaultAssigneeId: string | null
   onClose: () => void
 }) {
   const qc = useQueryClient()
+  const fam = useFamilyInfo()
   const { remove } = useTaskActions()
   const editing = task && task !== 'new' ? task : null
+  const [shared, setShared] = useState(false)
+  const [assigneeId, setAssigneeId] = useState('')
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
@@ -514,8 +556,18 @@ function TaskDialog({
     setProjectId(t ? (t.projectId ?? '') : (defaultProjectId ?? ''))
     setNewProject('')
     setTags(t?.tags.join(', ') ?? '')
+    setShared(t?.shared ?? false)
+    setAssigneeId(t ? (t.assigneeId ?? '') : (defaultAssigneeId ?? ''))
     setError(null)
-  }, [task, defaultProjectId])
+  }, [task, defaultProjectId, defaultAssigneeId])
+
+  // Asignarla a otra persona la vuelve familiar (lo hace el servidor); solo quien la creó puede dejar de compartirla.
+  const owner = editing?.ownerId ?? fam.me
+  const isOwner = fam.isMine(editing?.ownerId)
+  const assignedToOther = !!assigneeId && assigneeId !== owner
+  const effectiveShared = shared || assignedToOther
+  const showFamily = fam.hasOthers || !!editing?.shared || !!editing?.assigneeId
+  const ownerName = !isOwner ? fam.nameOf(editing?.ownerId) : null
 
   const save = useMutation({
     mutationFn: async () => {
@@ -531,6 +583,13 @@ function TaskDialog({
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+      }
+      if (editing) {
+        if (isOwner && shared !== editing.shared && !assignedToOther) body.shared = shared
+        if ((assigneeId || null) !== editing.assigneeId) body.assigneeId = assigneeId || null
+      } else {
+        if (effectiveShared) body.shared = true
+        if (assigneeId) body.assigneeId = assigneeId
       }
       if (projectId === '__new') {
         if (editing) {
@@ -640,6 +699,40 @@ function TaskDialog({
           <Field label="Nombre del proyecto nuevo">
             {(id) => <Input id={id} value={newProject} onChange={(e) => setNewProject(e.target.value)} placeholder="Viaje a Cartagena" />}
           </Field>
+        )}
+        {showFamily && (
+          <div className="grid gap-1.5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Responsable">
+                {(id) => (
+                  <Select id={id} value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+                    <option value="">Sin asignar</option>
+                    {fam.members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id === fam.me ? `${m.displayName} (tú)` : m.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <div className="grid content-start gap-1.5">
+                <span className="text-sm font-medium">Familiar</span>
+                <label className="flex h-10 items-center justify-between gap-3 rounded-control border border-line px-3">
+                  <span className="truncate text-base text-muted">{effectiveShared ? 'La ve toda la familia' : 'Solo tú la ves'}</span>
+                  <Switch checked={effectiveShared} onChange={setShared} disabled={!isOwner || assignedToOther} label="Tarea familiar" />
+                </label>
+              </div>
+            </div>
+            <p className="text-sm text-muted">
+              {!isOwner && editing?.shared
+                ? `Compartida por ${ownerName ?? 'otra persona'}. Solo quien la creó puede dejar de compartirla.`
+                : assignedToOther
+                  ? 'Al asignarla a otra persona queda como familiar y le llega un aviso.'
+                  : effectiveShared
+                    ? 'Todos en la familia la ven y pueden editarla.'
+                    : 'Es personal: nadie más la ve.'}
+            </p>
+          </div>
         )}
         <Field label="Notas" optional>
           {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />}

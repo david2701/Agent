@@ -1,7 +1,6 @@
 import {
   ArrowsClockwise,
   Browser,
-  Copy,
   DeviceMobile,
   DownloadSimple,
   GoogleLogo,
@@ -19,6 +18,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { useLocation, useSearchParams } from 'react-router'
 import { PlacesManager } from '@/components/PlacesManager'
 import { Button, IconButton } from '@/components/ui/button'
+import { CopyField } from '@/components/ui/copy'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton, SkeletonRows } from '@/components/ui/feedback'
 import { Field, FormError, Input, Select, Switch, Textarea } from '@/components/ui/form'
@@ -36,6 +36,7 @@ import {
   useGoogleCalendars,
   useMcpServers,
   useModels,
+  usePushConfig,
   useSettings,
   useVoices,
 } from '@/lib/queries'
@@ -436,6 +437,7 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
   const [topic, setTopic] = useState(s?.ntfyTopic ?? '')
   useEffect(() => setTopic(s?.ntfyTopic ?? ''), [s?.ntfyTopic])
 
+  const push = usePushConfig()
   const ask = async () => setPerm(await requestNotifications())
   const testNotif = () => {
     try {
@@ -446,7 +448,7 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
   }
 
   return (
-    <Section id="notificaciones" title="Notificaciones" description="Kairo te avisa en este navegador cuando suena un recordatorio, aunque estés en otra pestaña.">
+    <Section id="notificaciones" title="Notificaciones" description="Kairo te avisa en este navegador cuando suena un recordatorio o llega un aviso de tu familia, aunque estés en otra pestaña.">
       <Row
         label="Avisos del navegador"
         description={
@@ -473,6 +475,20 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
         ) : null}
       </Row>
       <Row
+        label="Avisos en el teléfono"
+        description="Kairo envía sus propios avisos cifrados a la app del teléfono con UnifiedPush, por ejemplo a través de un ntfy autoalojado. No pasa por Firebase ni por los servidores de Google."
+      >
+        {push.isLoading ? (
+          <Skeleton className="h-5 w-36" />
+        ) : push.isError ? (
+          <span className="text-sm text-muted">No pude consultarlo</span>
+        ) : (
+          <span className="text-sm whitespace-nowrap text-muted">
+            Teléfonos con push: <span className="font-mono text-fg tnum">{push.data?.registeredDevices ?? 0}</span>
+          </span>
+        )}
+      </Row>
+      <Row
         label="Tema de ntfy"
         htmlFor="ntfy"
         description={ntfy ? 'Recibe los avisos también en la app ntfy con este tema.' : 'El servidor no tiene ntfy configurado.'}
@@ -492,31 +508,6 @@ function NotificationsSection({ s, ntfy }: { s?: UserSettings; ntfy: boolean }) 
 }
 
 /* ---------------------------------------------------------------- Google */
-
-function CopyField({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <div className="flex items-center gap-2 rounded-control border border-line bg-bg py-1 pr-1 pl-3">
-      <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg">{value}</code>
-      <Button
-        size="sm"
-        variant="quiet"
-        icon={<Copy className="size-4" />}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(value)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1800)
-          } catch {
-            toast({ title: 'No se pudo copiar', tone: 'danger' })
-          }
-        }}
-      >
-        {copied ? 'Copiada' : 'Copiar'}
-      </Button>
-    </div>
-  )
-}
 
 function GoogleSection() {
   const qc = useQueryClient()
@@ -546,6 +537,14 @@ function GoogleSection() {
       toast({ title: 'Calendario elegido' })
     },
     onError: (e) => toastError(e, 'No se pudo cambiar el calendario'),
+  })
+  const pickFamily = useMutation({
+    mutationFn: (calendarId: string | null) => api.post('/integrations/google/family-calendar', { calendarId }),
+    onSuccess: (_r, calendarId) => {
+      void qc.invalidateQueries({ queryKey: keys.google })
+      toast({ title: calendarId ? 'Calendario familiar elegido' : 'Los eventos familiares van a tu calendario de siempre' })
+    },
+    onError: (e) => toastError(e, 'No se pudo cambiar el calendario familiar'),
   })
   const disconnect = useMutation({
     mutationFn: () => api.del('/integrations/google'),
@@ -603,6 +602,34 @@ function GoogleSection() {
             ) : (
               <Select id="gcal" value={st.calendarId ?? 'primary'} onChange={(e) => pick.mutate(e.target.value)} className="sm:w-64">
                 {!(calendars.data ?? []).some((c) => c.id === (st.calendarId ?? 'primary')) && <option value={st.calendarId ?? 'primary'}>{st.calendarId ?? 'primary'}</option>}
+                {(calendars.data ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.summary}
+                    {c.primary ? ' (principal)' : ''}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Row>
+          <Row
+            label="Calendario para eventos familiares"
+            htmlFor="gcal-family"
+            description="Elige un calendario de Google que compartas con tu familia. Ahí se guardan los eventos familiares que creas."
+          >
+            {calendars.isLoading ? (
+              <Skeleton className="h-10 w-56 rounded-control" />
+            ) : (
+              <Select
+                id="gcal-family"
+                value={st.familyCalendarId ?? ''}
+                onChange={(e) => pickFamily.mutate(e.target.value || null)}
+                disabled={pickFamily.isPending}
+                className="sm:w-64"
+              >
+                <option value="">El mismo de siempre</option>
+                {st.familyCalendarId && !(calendars.data ?? []).some((c) => c.id === st.familyCalendarId) && (
+                  <option value={st.familyCalendarId}>{st.familyCalendarId}</option>
+                )}
                 {(calendars.data ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.summary}

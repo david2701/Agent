@@ -1,4 +1,4 @@
-import { CalendarBlank, CaretLeft, CaretRight, GoogleLogo, MapPin, Plus, Trash } from '@phosphor-icons/react'
+import { CalendarBlank, CaretLeft, CaretRight, GoogleLogo, House, MapPin, Plus, Trash } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   addDays,
@@ -19,6 +19,7 @@ import {
 import { es } from 'date-fns/locale'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
+import { FamilyIcon } from '@/components/family'
 import { Button, IconButton } from '@/components/ui/button'
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
@@ -27,6 +28,7 @@ import { Segmented } from '@/components/ui/misc'
 import { toast, toastError } from '@/components/ui/toast'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { useFamilyInfo, type FamilyView } from '@/lib/family'
 import { capitalize, isoDate, time, toDate } from '@/lib/format'
 import { invalidateEntity, useEvents } from '@/lib/queries'
 import type { CalendarEvent } from '@/lib/types'
@@ -87,6 +89,8 @@ export default function Calendario() {
         : `Desde el ${format(cursor, "d 'de' MMMM", { locale: es })}`
 
   const list = events.data ?? []
+  const fam = useFamilyInfo()
+  const hasFamilyEvents = fam.hasOthers && list.some((e) => e.shared)
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-9">
@@ -127,7 +131,14 @@ export default function Calendario() {
         </div>
       </header>
 
-      <div className="mt-6">
+      {hasFamilyEvents && (
+        <p className="mt-3 flex items-center gap-1.5 text-sm text-muted">
+          <House className="size-3.5 shrink-0 text-faint" aria-hidden />
+          Familiar: lo ven todos en la familia. El resto es solo tuyo.
+        </p>
+      )}
+
+      <div className={hasFamilyEvents ? 'mt-4' : 'mt-6'}>
         {events.isError ? (
           <ErrorState message={(events.error as Error).message} onRetry={() => void events.refetch()} />
         ) : view === 'month' ? (
@@ -182,8 +193,18 @@ function eventsOn(day: Date, events: CalendarEvent[]) {
 }
 
 function SourceMark({ e }: { e: CalendarEvent }) {
-  if (e.source !== 'google') return null
-  return <GoogleLogo className="size-3 shrink-0 text-faint" aria-label="De Google Calendar" />
+  return (
+    <>
+      {e.shared && <FamilyIcon className="size-3" label="Evento familiar" />}
+      {e.source === 'google' && <GoogleLogo className="size-3 shrink-0 text-faint" aria-label="De Google Calendar" />}
+    </>
+  )
+}
+
+/** "Agendado por Valentina" / "Agendado por ti" */
+function scheduledBy(e: CalendarEvent, fam: FamilyView) {
+  if (fam.isMine(e.ownerId)) return 'Agendado por ti'
+  return `Agendado por ${fam.nameOf(e.ownerId) ?? 'otra persona'}`
 }
 
 /* ---------------------------------------------------------------- Mes */
@@ -287,7 +308,10 @@ function MonthView({
                 {/* Móvil: marcas por evento */}
                 <div className="pointer-events-none relative mt-1 grid gap-0.5 md:hidden" aria-hidden>
                   {list.slice(0, 3).map((e) => (
-                    <span key={e.id + e.startAt} className={cn('h-1 rounded-full', e.allDay ? 'bg-muted' : 'bg-faint')} />
+                    <span
+                      key={e.id + e.startAt}
+                      className={cn('h-1 rounded-full', e.shared ? 'border border-muted' : e.allDay ? 'bg-muted' : 'bg-faint')}
+                    />
                   ))}
                 </div>
               </div>
@@ -319,6 +343,7 @@ function MonthView({
 }
 
 function EventRow({ e, onOpen }: { e: CalendarEvent; onOpen: (e: CalendarEvent) => void }) {
+  const fam = useFamilyInfo()
   return (
     <button type="button" onClick={() => onOpen(e)} className="-mx-2 flex w-[calc(100%+1rem)] gap-4 rounded-control px-2 py-3 text-left transition-colors hover:bg-surface-2">
       <span className="w-14 shrink-0 text-right font-mono tnum">
@@ -336,10 +361,20 @@ function EventRow({ e, onOpen }: { e: CalendarEvent; onOpen: (e: CalendarEvent) 
           <span className="truncate">{e.title}</span>
           <SourceMark e={e} />
         </span>
-        {e.location && (
-          <span className="mt-0.5 flex items-center gap-1 text-sm text-muted">
-            <MapPin className="size-3.5 shrink-0" />
-            <span className="truncate">{e.location}</span>
+        {(e.location || e.shared) && (
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted">
+            {e.location && (
+              <span className="flex min-w-0 items-center gap-1">
+                <MapPin className="size-3.5 shrink-0" />
+                <span className="truncate">{e.location}</span>
+              </span>
+            )}
+            {e.shared && (
+              <span className="flex items-center gap-1">
+                <House className="size-3.5 shrink-0" aria-hidden />
+                {scheduledBy(e, fam)}
+              </span>
+            )}
           </span>
         )}
       </span>
@@ -491,7 +526,10 @@ function WeekView({
                       key={p.e.id + p.e.startAt}
                       type="button"
                       onClick={() => onOpen(p.e)}
-                      className="absolute overflow-hidden rounded-[8px] border border-line bg-surface-2 px-1.5 py-1 text-left transition-colors hover:border-faint"
+                      className={cn(
+                        'absolute overflow-hidden rounded-[8px] border px-1.5 py-1 text-left transition-colors hover:border-faint',
+                        p.e.shared ? 'border-[color-mix(in_srgb,var(--text-faint)_70%,var(--border))] bg-surface' : 'border-line bg-surface-2',
+                      )}
                       style={{
                         top: p.top + 1,
                         height: p.height,
@@ -601,7 +639,10 @@ function hhmm(d: Date) {
 
 function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => void }) {
   const qc = useQueryClient()
+  const fam = useFamilyInfo()
   const editing = draft && 'id' in draft ? draft : null
+  const [shared, setShared] = useState(false)
+  const isOwner = fam.isMine(editing?.ownerId)
   const [title, setTitle] = useState('')
   const [allDay, setAllDay] = useState(false)
   const [startDate, setStartDate] = useState('')
@@ -630,6 +671,7 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
       setLocation(draft.location)
       setDescription(draft.description)
       setReminder(draft.reminderMinutes[0] !== undefined ? String(draft.reminderMinutes[0]) : '')
+      setShared(draft.shared)
     } else {
       const s = draft.start
       const e = new Date(s.getTime() + 60 * 60_000)
@@ -642,6 +684,7 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
       setLocation('')
       setDescription('')
       setReminder('15')
+      setShared(false)
     }
   }, [draft])
 
@@ -656,7 +699,7 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
         startAt = new Date(`${startDate}T${startTime}`)
         endAt = new Date(`${endDate || startDate}T${endTime}`)
       }
-      const body = {
+      const body: Record<string, unknown> = {
         title: title.trim(),
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -665,6 +708,8 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
         description,
         reminderMinutes: reminder ? [Number(reminder)] : [],
       }
+      // Solo quien lo creó puede cambiar si es familiar (el servidor responde 400 a los demás).
+      if (editing ? isOwner && shared !== editing.shared : shared) body.shared = shared
       return editing ? api.patch<CalendarEvent>(`/events/${editing.id}`, body) : api.post<CalendarEvent>('/events', body)
     },
     onSuccess: (e) => {
@@ -714,9 +759,18 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
       onClose={onClose}
       title={editing ? 'Editar evento' : 'Nuevo evento'}
       description={
-        editing?.source === 'google' ? (
-          <span className="inline-flex items-center gap-1.5">
-            <GoogleLogo className="size-3.5" /> Sincronizado con Google Calendar
+        editing?.source === 'google' || editing?.shared ? (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {editing.shared && (
+              <span className="inline-flex items-center gap-1.5">
+                <House className="size-3.5" /> Evento familiar. {scheduledBy(editing, fam)}
+              </span>
+            )}
+            {editing.source === 'google' && (
+              <span className="inline-flex items-center gap-1.5">
+                <GoogleLogo className="size-3.5" /> Sincronizado con Google Calendar
+              </span>
+            )}
           </span>
         ) : undefined
       }
@@ -744,6 +798,24 @@ function EventDialog({ draft, onClose }: { draft: Draft | null; onClose: () => v
           <span className="text-base">Todo el día</span>
           <Switch checked={allDay} onChange={setAllDay} label="Todo el día" />
         </label>
+        {(fam.hasOthers || editing?.shared) && (
+          <label className="flex items-center justify-between gap-3 rounded-control border border-line px-3 py-2.5">
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 text-base">
+                <House className="size-4 text-faint" aria-hidden />
+                Evento familiar
+              </span>
+              <span className="mt-0.5 block text-sm text-muted">
+                {!isOwner
+                  ? `${scheduledBy(editing!, fam)}. Solo quien lo creó puede dejar de compartirlo.`
+                  : shared
+                    ? 'Lo ven todos en la familia. Si lo mueves o cancelas, les llega un aviso.'
+                    : 'Solo tú lo ves.'}
+              </span>
+            </span>
+            <Switch checked={shared} onChange={setShared} disabled={!isOwner} label="Evento familiar" />
+          </label>
+        )}
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
           <Field label="Empieza">
             {(id) => (

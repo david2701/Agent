@@ -1,11 +1,13 @@
 import { Crosshair, MapPin, Plus, Trash } from '@phosphor-icons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
+import { FamilyIcon } from '@/components/family'
 import { Button, IconButton } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/feedback'
-import { Field, Input, Select } from '@/components/ui/form'
+import { Field, Input, Select, Switch } from '@/components/ui/form'
 import { toast, toastError } from '@/components/ui/toast'
 import { api, setClientLocation } from '@/lib/api'
+import { useFamilyInfo } from '@/lib/family'
 import { invalidateEntity, usePlaces } from '@/lib/queries'
 import type { Place } from '@/lib/types'
 import { undoLatest } from '@/lib/undo'
@@ -14,7 +16,20 @@ import { undoLatest } from '@/lib/undo'
 export function PlacesManager() {
   const qc = useQueryClient()
   const places = usePlaces()
+  const fam = useFamilyInfo()
   const [adding, setAdding] = useState(false)
+
+  const share = useMutation({
+    mutationFn: ({ p, shared }: { p: Place; shared: boolean }) => api.patch<Place>(`/places/${p.id}`, { shared }),
+    onSuccess: (p) => {
+      invalidateEntity(qc, 'place')
+      toast({
+        title: p.shared ? 'Lugar compartido con la familia' : 'El lugar vuelve a ser personal',
+        description: p.shared ? `${p.name}: sirve para recordatorios de cualquiera en la familia.` : p.name,
+      })
+    },
+    onError: (e) => toastError(e, 'No se pudo cambiar el lugar'),
+  })
 
   const remove = useMutation({
     mutationFn: (p: Place) => api.del(`/places/${p.id}`).then(() => p),
@@ -29,29 +44,52 @@ export function PlacesManager() {
     onError: (e) => toastError(e, 'No se pudo eliminar el lugar'),
   })
 
+  const list = places.data ?? []
+
   return (
     <div>
       {places.isLoading ? (
         <SkeletonRows rows={2} />
-      ) : (places.data ?? []).length === 0 && !adding ? (
+      ) : list.length === 0 && !adding ? (
         <p className="text-base text-muted">Guarda lugares como Casa u Oficina para que Kairo te avise al llegar o al salir.</p>
       ) : (
-        <ul className="divide-y divide-line">
-          {(places.data ?? []).map((p) => (
-            <li key={p.id} className="flex items-center gap-3 py-2.5">
-              <MapPin className="size-[18px] shrink-0 text-faint" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-base text-fg">{p.name}</p>
-                <p className="truncate font-mono text-xs text-faint">
-                  {p.latitude.toFixed(4)}, {p.longitude.toFixed(4)} · {p.radiusM} m
-                </p>
-              </div>
-              <IconButton label={`Eliminar ${p.name}`} size="sm" tone="danger" onClick={() => remove.mutate(p)}>
-                <Trash className="size-4" />
-              </IconButton>
-            </li>
-          ))}
-        </ul>
+        <>
+          {list.length > 0 && fam.hasOthers && (
+            <p className="mb-1 text-sm text-muted">Comparte un lugar con la familia para que también sirva en sus recordatorios.</p>
+          )}
+          <ul className="divide-y divide-line">
+            {list.map((p) => {
+              const mine = fam.isMine(p.ownerId)
+              const pending = share.isPending && share.variables?.p.id === p.id
+              return (
+                <li key={p.id} className="flex items-center gap-3 py-2.5">
+                  <MapPin className="size-[18px] shrink-0 text-faint" />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-base text-fg">
+                      <span className="truncate">{p.name}</span>
+                      {p.shared && <FamilyIcon label="Familiar" />}
+                    </p>
+                    <p className="truncate font-mono text-xs text-faint">
+                      {p.latitude.toFixed(4)}, {p.longitude.toFixed(4)} · {p.radiusM} m
+                    </p>
+                    {p.shared && !mine && <p className="truncate text-xs text-muted">Compartido por {fam.nameOf(p.ownerId) ?? 'otra persona'}</p>}
+                  </div>
+                  {mine && (fam.hasOthers || p.shared) && (
+                    <Switch
+                      checked={pending && share.variables ? share.variables.shared : p.shared}
+                      disabled={pending}
+                      onChange={(shared) => share.mutate({ p, shared })}
+                      label={p.shared ? `Dejar de compartir ${p.name}` : `Compartir ${p.name} con la familia`}
+                    />
+                  )}
+                  <IconButton label={`Eliminar ${p.name}`} size="sm" tone="danger" onClick={() => remove.mutate(p)}>
+                    <Trash className="size-4" />
+                  </IconButton>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
       {adding ? (
         <PlaceForm onDone={() => setAdding(false)} />
@@ -66,6 +104,8 @@ export function PlacesManager() {
 
 function PlaceForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient()
+  const fam = useFamilyInfo()
+  const [shared, setShared] = useState(false)
   const [name, setName] = useState('')
   const [lat, setLat] = useState('')
   const [lon, setLon] = useState('')
@@ -75,7 +115,13 @@ function PlaceForm({ onDone }: { onDone: () => void }) {
 
   const save = useMutation({
     mutationFn: () =>
-      api.post<Place>('/places', { name: name.trim(), latitude: Number(lat), longitude: Number(lon), radiusM: Number(radius) }),
+      api.post<Place>('/places', {
+        name: name.trim(),
+        latitude: Number(lat),
+        longitude: Number(lon),
+        radiusM: Number(radius),
+        ...(shared ? { shared: true } : {}),
+      }),
     onSuccess: (p) => {
       invalidateEntity(qc, 'place')
       toast({ title: 'Lugar guardado', description: p.name, tone: 'success' })
@@ -143,6 +189,12 @@ function PlaceForm({ onDone }: { onDone: () => void }) {
           Usar mi ubicación
         </Button>
       </div>
+      {fam.hasOthers && (
+        <label className="flex items-center gap-2.5 text-sm text-muted">
+          <Switch checked={shared} onChange={setShared} label="Compartir con la familia" />
+          Compartir con la familia
+        </label>
+      )}
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

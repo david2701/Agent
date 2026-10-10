@@ -1,12 +1,17 @@
 export type ISODate = string // YYYY-MM-DD
 export type ISOInstant = string // 2026-10-11T14:00:00Z
 
+export type FamilyRole = 'admin' | 'member'
+
 export interface User {
   id: string
   email: string
   displayName: string
   timezone: string
   createdAt: ISOInstant
+  householdId?: string | null
+  role?: FamilyRole
+  color?: string | null
 }
 
 export interface AuthResponse {
@@ -34,6 +39,9 @@ export interface Note {
   createdAt: ISOInstant
   updatedAt: ISOInstant
   score: number | null
+  /** Familiar: la ven y editan todos los miembros del hogar. */
+  shared: boolean
+  ownerId: string | null
 }
 
 export type TaskStatus = 'todo' | 'doing' | 'done'
@@ -55,6 +63,10 @@ export interface Task {
   completedAt: ISOInstant | null
   createdAt: ISOInstant
   updatedAt: ISOInstant
+  shared: boolean
+  ownerId: string | null
+  /** Responsable (otro miembro la vuelve familiar). */
+  assigneeId: string | null
 }
 
 export interface Project {
@@ -83,6 +95,10 @@ export interface Reminder {
   source: string
   createdAt: ISOInstant
   updatedAt: ISOInstant
+  /** Para quién suena. */
+  ownerId: string | null
+  /** Quién lo programó (otro miembro, o null si fue el propio dueño). */
+  createdBy: string | null
 }
 
 export interface Place {
@@ -93,6 +109,8 @@ export interface Place {
   radiusM: number
   address: string | null
   createdAt: ISOInstant
+  shared: boolean
+  ownerId: string | null
 }
 
 export interface ListItem {
@@ -110,6 +128,8 @@ export interface KList {
   items: ListItem[]
   createdAt: ISOInstant
   updatedAt: ISOInstant
+  shared: boolean
+  ownerId: string | null
 }
 
 export interface CalendarEvent {
@@ -128,6 +148,8 @@ export interface CalendarEvent {
   googleEventId: string | null
   createdAt: ISOInstant
   updatedAt: ISOInstant
+  shared: boolean
+  ownerId: string | null
 }
 
 export type MemoryCategory = 'perfil' | 'preferencias' | 'personas' | 'salud' | 'trabajo' | 'hogar' | 'general'
@@ -293,6 +315,7 @@ export interface GoogleStatus {
   available: boolean
   connected: boolean
   calendarId: string | null
+  familyCalendarId: string | null
   lastSyncAt: string | null
   lastError: string | null
   redirectUri: string
@@ -311,6 +334,77 @@ export interface McpServer {
   enabled: boolean
   hasHeaders: boolean
   createdAt: ISOInstant
+}
+
+/* Familia */
+export interface Household {
+  id: string
+  name: string
+  createdAt: ISOInstant
+}
+
+export interface Member {
+  id: string
+  displayName: string
+  email: string
+  role: FamilyRole
+  joinedAt: ISOInstant
+}
+
+export interface FamilyInfo {
+  household: Household
+  members: Member[]
+  me: string
+  isAdmin: boolean
+}
+
+export interface Invitation {
+  id: string
+  /** invite: nuevo miembro · reset: contraseña nueva para un miembro existente */
+  kind: 'invite' | 'reset'
+  name: string
+  role: FamilyRole
+  targetUserId: string | null
+  createdAt: ISOInstant
+  expiresAt: ISOInstant
+  usedAt: ISOInstant | null
+}
+
+export interface InviteCreated {
+  invitation: Invitation
+  code: string
+  link: string
+}
+
+export interface InvitePreview {
+  kind: 'invite' | 'reset'
+  householdName: string
+  name: string
+  email: string | null
+}
+
+export type NoticeKind = 'shared' | 'updated' | 'assigned' | 'reminder' | 'message'
+
+export interface Notice {
+  id: string
+  kind: NoticeKind | string
+  title: string
+  body: string
+  actorId: string | null
+  entityType: string | null
+  entityId: string | null
+  createdAt: ISOInstant
+  readAt: ISOInstant | null
+}
+
+export interface NoticesResponse {
+  notices: Notice[]
+  unread: number
+}
+
+export interface PushConfig {
+  vapidPublicKey: string
+  registeredDevices: number
 }
 
 /* Eventos del agente (SSE) */
@@ -333,7 +427,8 @@ export type AgentEvent =
 /* WebSocket */
 export type ServerEvent =
   | { type: 'entity.changed'; data: { entity: string; id?: string; op: string } }
-  | { type: 'reminder.fire'; data: { id: string; text: string; fireAt: string; recurring: boolean } }
+  | { type: 'reminder.fire'; data: { id: string; text: string; fireAt: string; recurring: boolean; createdBy?: string | null } }
+  | { type: 'family.notice'; data: Omit<Notice, 'readAt' | 'actorId' | 'entityType' | 'entityId'> & { actorId?: string; entityType?: string; entityId?: string } }
   | { type: 'briefing.ready'; data: { text: string; date: string } }
   | { type: 'recording.updated'; data: { id: string } }
   | { type: 'ping' | 'pong'; data: Record<string, never> }

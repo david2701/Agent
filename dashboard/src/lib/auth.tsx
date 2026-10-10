@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as client from './api'
 import type { User } from './types'
 
@@ -21,9 +21,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading')
   const [user, setUserState] = useState<User | null>(null)
   const [deviceId, setDeviceId] = useState<string | null>(null)
+  const lastUser = useRef<string | null>(null)
 
   useEffect(() => {
     const off = client.onSessionChange((session) => {
+      // Otra cuenta en el mismo navegador (por ejemplo, al unirse con un código): nada de la anterior debe quedar en caché.
+      if (session && lastUser.current && lastUser.current !== session.user.id) qc.clear()
+      lastUser.current = session?.user.id ?? null
       if (session) {
         setUserState(session.user)
         setDeviceId(session.deviceId)

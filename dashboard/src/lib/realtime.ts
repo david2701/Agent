@@ -1,10 +1,12 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { BellRinging } from '@phosphor-icons/react'
+import { BellRinging, UsersThree } from '@phosphor-icons/react'
 import { createElement, useEffect, useSyncExternalStore } from 'react'
 import { toast } from '@/components/ui/toast'
 import { api, getAccessToken, refreshSession } from './api'
+import { entityHref } from './entities'
+import { firstName } from './family'
 import { invalidateEntity, keys } from './queries'
-import type { ServerEvent } from './types'
+import type { FamilyInfo, NoticesResponse, ServerEvent } from './types'
 
 /* Estado de la conexión en tiempo real (para un aviso discreto si se cae). */
 type ConnState = 'connecting' | 'open' | 'offline'
@@ -49,9 +51,30 @@ function alreadyAsked() {
   }
 }
 
+/** Notificación del sistema solo si la pestaña no está a la vista (si está, basta el aviso en pantalla). */
+function systemNotification(body: string, tag: string, onClick?: () => void, title = 'Kairo') {
+  if (!notificationsSupported() || Notification.permission !== 'granted' || document.visibilityState === 'visible') return
+  try {
+    const n = new Notification(title, { body, tag, icon: '/favicon.svg' })
+    n.onclick = () => {
+      window.focus()
+      onClick?.()
+      n.close()
+    }
+  } catch {
+    /* algunos navegadores solo permiten notificaciones desde un service worker */
+  }
+}
+
+function memberName(qc: QueryClient, id: string | null | undefined) {
+  if (!id) return null
+  const m = qc.getQueryData<FamilyInfo>(keys.family)?.members.find((x) => x.id === id)
+  return m ? firstName(m.displayName) : null
+}
+
 const seenFires = new Set<string>()
 
-function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireAt: string; recurring: boolean }) {
+function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireAt: string; recurring: boolean; createdBy?: string | null }) {
   const key = `${data.id}|${data.fireAt}`
   if (seenFires.has(key)) return
   seenFires.add(key)
@@ -83,30 +106,69 @@ function onReminderFire(qc: QueryClient, data: { id: string; text: string; fireA
       },
     })
   }
+  const from = data.createdBy ? memberName(qc, data.createdBy) : null
   toast({
     id: `rem-${key}`,
     title: data.text,
-    description: data.recurring ? 'Recordatorio que se repite' : 'Recordatorio',
+    description: [data.recurring ? 'Recordatorio que se repite' : 'Recordatorio', from && `de ${from}`].filter(Boolean).join(' '),
     actions,
     duration: 0,
     icon: createElement(BellRinging, { className: 'size-5 text-accent-strong' }),
   })
 
-  if (notificationsSupported() && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-    try {
-      const n = new Notification('Kairo', { body: data.text, tag: key, icon: '/favicon.svg' })
-      n.onclick = () => {
-        window.focus()
-        n.close()
-      }
-    } catch {
-      /* algunos navegadores solo permiten notificaciones desde un service worker */
-    }
+  systemNotification(data.text, key)
+}
+
+type NoticeEvent = Extract<ServerEvent, { type: 'family.notice' }>['data']
+const seenNotices = new Set<string>()
+
+/** Aviso de la familia: tarjeta en pantalla, notificación si la pestaña está oculta y recarga de Novedades. */
+function onFamilyNotice(qc: QueryClient, data: NoticeEvent, navigate?: (to: string) => void) {
+  if (seenNotices.has(data.id)) return
+  seenNotices.add(data.id)
+  // Cuenta optimista mientras llega la lista nueva (el indicador de la barra responde al instante).
+  const cached = qc.getQueryData<NoticesResponse>(keys.notices)
+  if (cached && !cached.notices.some((n) => n.id === data.id)) {
+    qc.setQueryData<NoticesResponse>(keys.notices, {
+      unread: cached.unread + 1,
+      notices: [
+        {
+          id: data.id,
+          kind: data.kind,
+          title: data.title,
+          body: data.body,
+          actorId: data.actorId ?? null,
+          entityType: data.entityType ?? null,
+          entityId: data.entityId ?? null,
+          createdAt: data.createdAt,
+          readAt: null,
+        },
+        ...cached.notices,
+      ],
+    })
   }
+  void qc.invalidateQueries({ queryKey: keys.notices })
+
+  const href = data.entityType && data.entityId ? (data.entityType === 'family' ? '/familia' : entityHref(data.entityType, data.entityId)) : '/familia'
+  const open = () => {
+    void api
+      .post('/notices/read', { ids: [data.id] })
+      .then(() => qc.invalidateQueries({ queryKey: keys.notices }))
+      .catch(() => undefined)
+    if (href) navigate?.(href)
+  }
+  toast({
+    id: `notice-${data.id}`,
+    title: data.title,
+    description: data.body || undefined,
+    actions: navigate && href ? [{ label: 'Ver', onClick: open }] : undefined,
+    icon: createElement(UsersThree, { className: 'size-5 text-muted' }),
+  })
+  systemNotification(data.body || data.title, `notice-${data.id}`, open, data.body ? data.title : 'Kairo')
 }
 
 /** WebSocket /api/ws con reconexión exponencial. */
-export function useRealtime(enabled: boolean, onBriefing?: () => void) {
+export function useRealtime(enabled: boolean, onBriefing?: () => void, onNavigate?: (to: string) => void) {
   const qc = useQueryClient()
 
   useEffect(() => {
@@ -124,6 +186,9 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void) {
           break
         case 'reminder.fire':
           onReminderFire(qc, msg.data)
+          break
+        case 'family.notice':
+          onFamilyNotice(qc, msg.data, onNavigate)
           break
         case 'briefing.ready':
           qc.setQueryData(keys.briefing, msg.data)
@@ -202,5 +267,5 @@ export function useRealtime(enabled: boolean, onBriefing?: () => void) {
       ws?.close()
       ws = null
     }
-  }, [enabled, qc, onBriefing])
+  }, [enabled, qc, onBriefing, onNavigate])
 }

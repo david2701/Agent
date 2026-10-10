@@ -34,19 +34,30 @@ src/
     api.ts             fetch con token en memoria, refresh único entre pestañas, lector SSE
     auth.tsx theme.tsx sesión y tema (sistema, claro, oscuro)
     queries.ts         claves e hooks de TanStack Query, invalidación por entidad
-    realtime.ts        WebSocket /api/ws con reconexión, avisos de recordatorios y notificaciones
+    family.ts          familia en caché (GET /family): nombres por id, iniciales, códigos XXXX-XXXX
+    realtime.ts        WebSocket /api/ws con reconexión, avisos de recordatorios y de la familia, notificaciones
     agent.ts voice.ts  turnos del agente (texto y voz), grabación con corte por silencio
     audio.ts           MediaRecorder, nivel del micrófono, reproducción de /voice/speak
     recordingSession.ts  grabaciones largas por segmentos de 5 min
     undo.ts            deshacer buscando la actividad correspondiente
   components/
-    ui/                botones, formularios, diálogo nativo, menú, avisos, estados vacíos y de carga
+    ui/                botones, formularios, diálogo nativo, menú, avisos, copiar, estados vacíos y de carga
+    family.tsx         avatar con iniciales y marcas de "familiar"
+    NoticesFeed.tsx    Novedades de la familia (página Familia, campana de la barra y tarjeta de Hoy)
     layout/            barra lateral, navegación móvil, paleta de comandos (Ctrl/Cmd + K)
     chat/              hilo, tarjetas de acción, compositor
     VoiceOrb.tsx       orbe de voz (anillo + punto ámbar) que reacciona al audio
-  pages/               Hoy, Chat, Notas, Tareas, Recordatorios, Calendario, Listas, Memoria,
-                       Grabaciones, Actividad, Ajustes, Login, 404
+  pages/               Hoy, Chat, Notas, Tareas, Recordatorios, Calendario, Listas, Familia, Memoria,
+                       Grabaciones, Actividad, Ajustes, Login, Unirse (/unirse?codigo=, pública), 404
 ```
+
+## Familia
+
+Varias personas comparten un servidor: lo personal es privado y lo que se marca como familiar (notas, tareas,
+listas, eventos y lugares) lo ven y editan todos. `/familia` muestra los miembros, las invitaciones (solo
+administradores), el envío de avisos y las Novedades; la campana de la barra abre las mismas Novedades.
+Quien recibe un código entra por `/unirse?codigo=XXXX-XXXX` (o desde "¿Tienes un código de invitación?" en el
+inicio de sesión): una invitación crea su cuenta y un código de acceso le define una contraseña nueva.
 
 ## Notas
 
